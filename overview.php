@@ -96,7 +96,7 @@ $currentPage = 'overview';
 
 require __DIR__ . '/includes/header.php';
 ?>
-<section class="rounded-xl border border-slate-700 bg-slate-800 p-5">
+<section class="section-card p-5">
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-xl font-semibold">หน้ารวมทุกร้าน</h1>
@@ -110,9 +110,9 @@ require __DIR__ . '/includes/header.php';
                 name="month"
                 type="month"
                 value="<?= e($selectedMonth) ?>"
-                class="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:border-cyan-400 focus:outline-none"
+                class="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm"
             >
-            <button type="submit" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-600">แสดงผล</button>
+            <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
         </form>
     </div>
 
@@ -134,7 +134,7 @@ require __DIR__ . '/includes/header.php';
         <div class="mt-5 overflow-x-auto">
             <table class="min-w-full text-sm">
                 <thead>
-                <tr class="border-b border-slate-700 text-left text-slate-400">
+                <tr class="border-b border-white/[0.08] text-left text-slate-400">
                     <th class="px-3 py-2">ร้าน</th>
                     <th class="px-3 py-2">ยอดขาย</th>
                     <th class="px-3 py-2">ค่าแอด</th>
@@ -152,7 +152,7 @@ require __DIR__ . '/includes/header.php';
                     $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                     $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                     ?>
-                    <tr class="border-b border-slate-700/70">
+                    <tr class="border-b border-white/[0.06]">
                         <td class="px-3 py-2 text-slate-100"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
                         <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($rowRevenue)) ?></td>
                         <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($rowAdCost)) ?></td>
@@ -170,7 +170,7 @@ require __DIR__ . '/includes/header.php';
                 $totalRoas = isset($totals['roas']) && $totals['roas'] !== null ? (float)$totals['roas'] : null;
                 $totalProfitMargin = isset($totals['profit_margin']) && $totals['profit_margin'] !== null ? (float)$totals['profit_margin'] : null;
                 ?>
-                <tr class="border-t border-slate-600 bg-slate-900/60 font-semibold">
+                <tr class="border-t border-white/[0.10] bg-white/[0.03] font-semibold">
                     <td class="px-3 py-2 text-slate-100">รวมทุกร้าน</td>
                     <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
                     <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
@@ -182,7 +182,7 @@ require __DIR__ . '/includes/header.php';
             </table>
         </div>
 
-        <section class="mt-6 rounded-xl border border-slate-700 bg-slate-900/40 p-5">
+        <section class="section-card mt-6 p-5">
             <div class="mb-3 flex items-center justify-between gap-2">
                 <h2 class="text-lg font-semibold">กราฟแท่งเปรียบเทียบระหว่างร้าน</h2>
                 <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
@@ -192,7 +192,7 @@ require __DIR__ . '/includes/header.php';
             </div>
         </section>
 
-        <section class="mt-6 rounded-xl border border-slate-700 bg-slate-900/40 p-5">
+        <section class="section-card mt-6 p-5">
             <div class="mb-3 flex items-center justify-between gap-2">
                 <h2 class="text-lg font-semibold">กราฟเส้นแนวโน้มทุกร้าน (6 เดือนย้อนหลัง)</h2>
                 <span class="text-xs text-slate-400">เส้นแต่ละร้าน = ยอดขายรายเดือน</span>
@@ -241,14 +241,14 @@ require __DIR__ . '/includes/header.php';
                             scales: {
                                 x: {
                                     ticks: { color: '#94a3b8' },
-                                    grid: { color: 'rgba(51, 65, 85, 0.4)' }
+                                    grid: { color: 'rgba(255, 255, 255, 0.06)' }
                                 },
                                 y: {
                                     ticks: {
                                         color: '#94a3b8',
                                         callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
                                     },
-                                    grid: { color: 'rgba(51, 65, 85, 0.4)' }
+                                    grid: { color: 'rgba(255, 255, 255, 0.06)' }
                                 }
                             },
                             plugins: {
@@ -297,14 +297,14 @@ require __DIR__ . '/includes/header.php';
                             scales: {
                                 x: {
                                     ticks: { color: '#94a3b8' },
-                                    grid: { color: 'rgba(51, 65, 85, 0.4)' }
+                                    grid: { color: 'rgba(255, 255, 255, 0.06)' }
                                 },
                                 y: {
                                     ticks: {
                                         color: '#94a3b8',
                                         callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
                                     },
-                                    grid: { color: 'rgba(51, 65, 85, 0.4)' }
+                                    grid: { color: 'rgba(255, 255, 255, 0.06)' }
                                 }
                             },
                             plugins: {

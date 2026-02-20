@@ -8,21 +8,33 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
 ?>
 </main>
 
-<nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-700 bg-slate-950/95 px-2 py-2 backdrop-blur">
-    <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-1 text-center text-[11px] text-slate-300 sm:text-xs">
-        <a href="<?= e(app_url('/dashboard.php')) ?>" class="rounded-lg px-2 py-2 <?= $currentPage === 'dashboard' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800' ?>">📈 แดชบอร์ด</a>
-        <a href="<?= e(app_url('/add-record.php')) ?>" class="rounded-lg px-2 py-2 <?= $currentPage === 'add-record' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800' ?>">➕ บันทึก</a>
-        <a href="<?= e(app_url('/history.php')) ?>" class="rounded-lg px-2 py-2 <?= $currentPage === 'history' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800' ?>">📋 ประวัติ</a>
-        <a href="<?= e(app_url('/annual.php')) ?>" class="rounded-lg px-2 py-2 <?= $currentPage === 'annual' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800' ?>">📅 รายปี</a>
-        <?php if ($shopCount >= 2): ?>
-            <a href="<?= e(app_url('/overview.php')) ?>" class="rounded-lg px-2 py-2 <?= $currentPage === 'overview' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800' ?>">🏪 รวมร้าน</a>
-        <?php endif; ?>
+<nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#07071a]/88 px-2 py-2 backdrop-blur-md">
+    <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-1 text-center text-[11px] text-slate-400 sm:text-xs">
+        <?php
+        $navLinks = [
+            ['href' => '/dashboard.php', 'page' => 'dashboard',   'icon' => '📈', 'label' => 'แดชบอร์ด'],
+            ['href' => '/add-record.php','page' => 'add-record',   'icon' => '➕', 'label' => 'บันทึก'],
+            ['href' => '/history.php',   'page' => 'history',      'icon' => '📋', 'label' => 'ประวัติ'],
+            ['href' => '/annual.php',    'page' => 'annual',       'icon' => '📅', 'label' => 'รายปี'],
+        ];
+        if ($shopCount >= 2) {
+            $navLinks[] = ['href' => '/overview.php', 'page' => 'overview', 'icon' => '🏪', 'label' => 'รวมร้าน'];
+        }
+        foreach ($navLinks as $link):
+            $isActive = $currentPage === $link['page'];
+        ?>
+            <a href="<?= e(app_url($link['href'])) ?>"
+               class="flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 transition-all duration-150 <?= $isActive ? 'nav-active' : 'hover:bg-white/[0.06] hover:text-slate-200' ?>">
+                <span class="text-base leading-none"><?= $link['icon'] ?></span>
+                <span class="mt-0.5"><?= $link['label'] ?></span>
+            </a>
+        <?php endforeach; ?>
     </div>
 </nav>
 
-<div id="global-loading" class="fixed inset-0 z-[60] hidden items-center justify-center bg-slate-950/65">
-    <div class="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 shadow-xl">
-        <span class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-slate-500 border-t-cyan-400"></span>
+<div id="global-loading" class="modal-bg fixed inset-0 z-[60] hidden items-center justify-center">
+    <div class="section-card flex items-center gap-3 px-5 py-4 text-sm text-slate-200 shadow-2xl">
+        <span class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-indigo-500/40 border-t-indigo-400"></span>
         <span>กำลังประมวลผล...</span>
     </div>
 </div>

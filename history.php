@@ -43,7 +43,7 @@ $currentPage = 'history';
 
 require __DIR__ . '/includes/header.php';
 ?>
-<section class="rounded-xl border border-slate-700 bg-slate-800 p-5">
+<section class="section-card p-5">
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-xl font-semibold">ประวัติรายการ</h1>
@@ -58,12 +58,12 @@ require __DIR__ . '/includes/header.php';
                     name="month"
                     type="month"
                     value="<?= e($selectedMonth) ?>"
-                    class="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:border-cyan-400 focus:outline-none"
+                    class="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm"
                 >
-                <button type="submit" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-600">แสดงผล</button>
+                <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
             </form>
 
-            <a href="<?= e(app_url('/api/export.php?month=' . rawurlencode($selectedMonth))) ?>" data-loading-link="true" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400">
+            <a href="<?= e(app_url('/api/export.php?month=' . rawurlencode($selectedMonth))) ?>" data-loading-link="true" class="btn-teal px-4 py-2 text-sm">
                 📥 Export CSV
             </a>
         </div>
@@ -72,7 +72,7 @@ require __DIR__ . '/includes/header.php';
     <div class="mt-5 overflow-x-auto">
         <table class="min-w-full text-sm">
             <thead>
-            <tr class="border-b border-slate-700 text-left text-slate-400">
+            <tr class="border-b border-white/[0.08] text-left text-slate-400">
                 <th class="px-3 py-2">วันที่</th>
                 <th class="px-3 py-2">รายได้</th>
                 <th class="px-3 py-2">ค่าแอด</th>
@@ -102,7 +102,7 @@ require __DIR__ . '/includes/header.php';
                         : null;
                     $note = (string)($record['note'] ?? '');
                     ?>
-                    <tr class="border-b border-slate-700/70">
+                    <tr class="border-b border-white/[0.06]">
                         <td class="px-3 py-2 text-slate-200"><?= e(formatThaiDate($recordDate)) ?></td>
                         <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($revenue)) ?></td>
                         <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($adCost)) ?></td>
@@ -125,7 +125,7 @@ require __DIR__ . '/includes/header.php';
                             <div class="inline-flex items-center gap-2">
                                 <button
                                     type="button"
-                                    class="rounded-md bg-slate-700 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-600"
+                                    class="btn-ghost rounded-lg px-2 py-1 text-xs"
                                     data-edit-button
                                     data-record-id="<?= e((string)$recordId) ?>"
                                     data-record-date="<?= e($recordDate) ?>"
@@ -141,7 +141,7 @@ require __DIR__ . '/includes/header.php';
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
                                     <input type="hidden" name="record_id" value="<?= e((string)$recordId) ?>">
-                                    <button type="submit" class="rounded-md bg-red-500/90 px-2 py-1 text-xs font-medium text-white hover:bg-red-500">
+                                    <button type="submit" class="btn-danger rounded-lg px-2 py-1 text-xs">
                                         🗑️ ลบ
                                     </button>
                                 </form>
@@ -153,7 +153,7 @@ require __DIR__ . '/includes/header.php';
             </tbody>
 
             <tfoot>
-            <tr class="border-t border-slate-600 bg-slate-900/60 font-semibold">
+            <tr class="border-t border-white/[0.10] bg-white/[0.03] font-semibold">
                 <td class="px-3 py-2 text-slate-200">รวม</td>
                 <td class="px-3 py-2 text-orange-400"><?= e(formatMoney((float)$totals['total_revenue'])) ?></td>
                 <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney((float)$totals['total_ad_cost'])) ?></td>
@@ -169,11 +169,11 @@ require __DIR__ . '/includes/header.php';
     </div>
 </section>
 
-<div id="edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 p-4">
-    <div class="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-800 p-5 shadow-xl">
-        <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-lg font-semibold">แก้ไขรายการ</h2>
-            <button type="button" id="close-edit-modal" class="rounded-md px-2 py-1 text-sm text-slate-300 hover:bg-slate-700">ปิด</button>
+<div id="edit-modal" class="modal-bg fixed inset-0 z-50 hidden items-center justify-center p-4">
+    <div class="section-card w-full max-w-lg p-6 shadow-2xl shadow-black/60">
+        <div class="mb-5 flex items-center justify-between">
+            <h2 class="text-lg font-bold">✏️ แก้ไขรายการ</h2>
+            <button type="button" id="close-edit-modal" class="btn-ghost rounded-lg px-3 py-1 text-sm">ปิด ✕</button>
         </div>
 
         <form action="<?= e(app_url('/api/records.php')) ?>" method="post" class="grid gap-4 md:grid-cols-2">
@@ -184,27 +184,27 @@ require __DIR__ . '/includes/header.php';
 
             <div>
                 <label for="edit-record-date" class="mb-1 block text-sm text-slate-300">วันที่</label>
-                <input id="edit-record-date" name="record_date" type="date" required class="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 focus:border-cyan-400 focus:outline-none">
+                <input id="edit-record-date" name="record_date" type="date" required class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none">
             </div>
 
             <div>
                 <label for="edit-revenue" class="mb-1 block text-sm text-slate-300">รายได้ (฿)</label>
-                <input id="edit-revenue" name="revenue" type="number" min="0" step="0.01" required class="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 focus:border-cyan-400 focus:outline-none">
+                <input id="edit-revenue" name="revenue" type="number" min="0" step="0.01" required class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none">
             </div>
 
             <div>
                 <label for="edit-ad-cost" class="mb-1 block text-sm text-slate-300">ค่าแอด (฿)</label>
-                <input id="edit-ad-cost" name="ad_cost" type="number" min="0" step="0.01" required class="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 focus:border-cyan-400 focus:outline-none">
+                <input id="edit-ad-cost" name="ad_cost" type="number" min="0" step="0.01" required class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none">
             </div>
 
             <div class="md:col-span-2">
                 <label for="edit-note" class="mb-1 block text-sm text-slate-300">โน้ต</label>
-                <textarea id="edit-note" name="note" rows="3" maxlength="255" class="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 focus:border-cyan-400 focus:outline-none"></textarea>
+                <textarea id="edit-note" name="note" rows="3" maxlength="255" class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"></textarea>
             </div>
 
             <div class="md:col-span-2 flex items-center justify-end gap-2">
-                <button type="button" id="cancel-edit-modal" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-600">ยกเลิก</button>
-                <button type="submit" class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-orange-400">บันทึกการแก้ไข</button>
+                <button type="button" id="cancel-edit-modal" class="btn-ghost px-4 py-2 text-sm">ยกเลิก</button>
+                <button type="submit" class="btn-orange px-4 py-2 text-sm">💾 บันทึกการแก้ไข</button>
             </div>
         </form>
     </div>

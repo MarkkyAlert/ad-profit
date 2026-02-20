@@ -23,7 +23,7 @@ $currentPage = 'add-record';
 
 require __DIR__ . '/includes/header.php';
 ?>
-<section class="rounded-xl border border-slate-700 bg-slate-800 p-5">
+<section class="section-card p-5">
     <h1 class="text-xl font-semibold">บันทึกข้อมูลรายวัน</h1>
     <p class="mt-2 text-sm text-slate-300">กรอกวันซ้ำจะอัปเดตทับอัตโนมัติ</p>
 
@@ -39,7 +39,7 @@ require __DIR__ . '/includes/header.php';
                 type="date"
                 value="<?= e(date('Y-m-d')) ?>"
                 required
-                class="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 focus:border-cyan-400 focus:outline-none"
+                class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"
             >
         </div>
 
@@ -52,7 +52,7 @@ require __DIR__ . '/includes/header.php';
                 min="0"
                 step="0.01"
                 required
-                class="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 focus:border-cyan-400 focus:outline-none"
+                class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"
             >
         </div>
 
@@ -65,7 +65,7 @@ require __DIR__ . '/includes/header.php';
                 min="0"
                 step="0.01"
                 required
-                class="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 focus:border-cyan-400 focus:outline-none"
+                class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"
             >
         </div>
 
@@ -76,20 +76,20 @@ require __DIR__ . '/includes/header.php';
                 name="note"
                 rows="3"
                 maxlength="255"
-                class="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 focus:border-cyan-400 focus:outline-none"
+                class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"
                 placeholder="เช่น แอดชุดใหม่เริ่มวิ่ง"
             ></textarea>
         </div>
 
         <div class="md:col-span-2">
-            <button type="submit" class="rounded-lg bg-orange-500 px-5 py-2.5 font-semibold text-slate-950 transition hover:bg-orange-400">
-                บันทึกข้อมูล
+            <button type="submit" class="btn-orange px-6 py-2.5 text-base">
+                ✓ บันทึกข้อมูล
             </button>
         </div>
     </form>
 </section>
 
-<section class="mt-6 rounded-xl border border-slate-700 bg-slate-800 p-5">
+<section class="section-card mt-6 p-5">
     <div class="mb-3 flex items-center justify-between">
         <h2 class="text-lg font-semibold">รายการล่าสุด 7 วัน</h2>
         <a href="<?= e(app_url('/history.php')) ?>" class="text-sm text-cyan-400 hover:text-cyan-300">ดูประวัติทั้งหมด</a>
@@ -121,7 +121,7 @@ require __DIR__ . '/includes/header.php';
                     $roas = $adCost > 0 ? round($revenue / $adCost, 2) : null;
                     $note = (string)($record['note'] ?? '');
                     ?>
-                    <tr class="border-b border-slate-700/70">
+                    <tr class="border-b border-white/[0.06]">
                         <td class="px-3 py-2 text-slate-200"><?= e(formatThaiDate((string)($record['record_date'] ?? ''))) ?></td>
                         <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($revenue)) ?></td>
                         <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($adCost)) ?></td>
