@@ -1,0 +1,64 @@
+<?php
+
+declare(strict_types=1);
+
+class GoalRepository
+{
+    private PDO $db;
+
+    public function __construct(PDO $db)
+    {
+        $this->db = $db;
+    }
+
+    public function upsert(int $shopId, string $goalMonth, ?float $targetRevenue, ?float $targetProfit): bool
+    {
+        $sql = 'INSERT INTO monthly_goals (shop_id, goal_month, target_revenue, target_profit)
+                VALUES (:shop_id, :goal_month, :target_revenue, :target_profit)
+                ON DUPLICATE KEY UPDATE
+                    target_revenue = VALUES(target_revenue),
+                    target_profit = VALUES(target_profit),
+                    updated_at = CURRENT_TIMESTAMP';
+
+        $stmt = $this->db->prepare($sql);
+
+        return $stmt->execute([
+            ':shop_id' => $shopId,
+            ':goal_month' => $goalMonth,
+            ':target_revenue' => $targetRevenue,
+            ':target_profit' => $targetProfit,
+        ]);
+    }
+
+    public function findByShopAndMonth(int $shopId, string $goalMonth): ?array
+    {
+        $sql = 'SELECT id, shop_id, goal_month, target_revenue, target_profit, created_at, updated_at
+                FROM monthly_goals
+                WHERE shop_id = :shop_id AND goal_month = :goal_month
+                LIMIT 1';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':shop_id' => $shopId,
+            ':goal_month' => $goalMonth,
+        ]);
+        $goal = $stmt->fetch();
+
+        return $goal ?: null;
+    }
+
+    public function deleteByShopAndMonth(int $shopId, string $goalMonth): bool
+    {
+        $sql = 'DELETE FROM monthly_goals
+                WHERE shop_id = :shop_id AND goal_month = :goal_month';
+
+        $stmt = $this->db->prepare($sql);
+
+        $stmt->execute([
+            ':shop_id' => $shopId,
+            ':goal_month' => $goalMonth,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+}

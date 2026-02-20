@@ -1,0 +1,336 @@
+<?php
+
+declare(strict_types=1);
+
+class RecordService
+{
+    private RecordRepository $recordRepository;
+    private ShopRepository $shopRepository;
+    private ?PDO $db;
+
+    public function __construct(RecordRepository $recordRepository, ShopRepository $shopRepository, ?PDO $db = null)
+    {
+        $this->recordRepository = $recordRepository;
+        $this->shopRepository = $shopRepository;
+        $this->db = $db;
+    }
+
+    public function upsertRecord(
+        int $userId,
+        int $shopId,
+        string $recordDate,
+        float $revenue,
+        float $adCost,
+        ?string $note
+    ): array {
+        if (!$this->canAccessShop($userId, $shopId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note);
+        if (($validation['success'] ?? false) !== true) {
+            return $validation;
+        }
+
+        $payload = $validation['data'];
+
+        try {
+            $this->recordRepository->upsert(
+                $shopId,
+                (string)$payload['record_date'],
+                (float)$payload['revenue'],
+                (float)$payload['ad_cost'],
+                $payload['note']
+            );
+        } catch (Throwable $exception) {
+            error_log('[record] upsertRecord failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถบันทึกข้อมูลได้',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'บันทึกข้อมูลเรียบร้อยแล้ว',
+        ];
+    }
+
+    public function updateRecord(
+        int $userId,
+        int $shopId,
+        int $recordId,
+        string $recordDate,
+        float $revenue,
+        float $adCost,
+        ?string $note
+    ): array {
+        if (!$this->canAccessShop($userId, $shopId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        if ($recordId <= 0) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบรายการที่ต้องการแก้ไข',
+            ];
+        }
+
+        $existingRecord = $this->recordRepository->findByIdAndShopId($recordId, $shopId);
+        if ($existingRecord === null) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบรายการที่ต้องการแก้ไข',
+            ];
+        }
+
+        $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note);
+        if (($validation['success'] ?? false) !== true) {
+            return $validation;
+        }
+
+        $payload = $validation['data'];
+
+        try {
+            $this->beginTransactionIfAvailable();
+
+            $this->recordRepository->upsert(
+                $shopId,
+                (string)$payload['record_date'],
+                (float)$payload['revenue'],
+                (float)$payload['ad_cost'],
+                $payload['note']
+            );
+
+            $oldDate = (string)($existingRecord['record_date'] ?? '');
+            $newDate = (string)$payload['record_date'];
+
+            if ($oldDate !== $newDate) {
+                $this->recordRepository->deleteByIdAndShopId($recordId, $shopId);
+            }
+
+            $this->commitTransactionIfAvailable();
+        } catch (Throwable $exception) {
+            $this->rollBackTransactionIfAvailable();
+            error_log('[record] updateRecord failed: ' . $exception->getMessage());
+
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถแก้ไขรายการได้',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'แก้ไขรายการเรียบร้อยแล้ว',
+        ];
+    }
+
+    public function getRecentRecords(int $userId, int $shopId, int $limit = 7): array
+    {
+        if (!$this->canAccessShop($userId, $shopId)) {
+            return [];
+        }
+
+        return $this->recordRepository->getRecentByShopId($shopId, $limit);
+    }
+
+    public function getMonthlyRecords(int $userId, int $shopId, string $month): array
+    {
+        if (!$this->canAccessShop($userId, $shopId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+            return [
+                'success' => false,
+                'error' => 'รูปแบบเดือนต้องเป็น YYYY-MM',
+            ];
+        }
+
+        $startDate = $month . '-01';
+        $dateObject = DateTime::createFromFormat('Y-m-d', $startDate);
+        if (!$dateObject || $dateObject->format('Y-m-d') !== $startDate) {
+            return [
+                'success' => false,
+                'error' => 'รูปแบบเดือนต้องเป็น YYYY-MM',
+            ];
+        }
+
+        $endDate = $dateObject->format('Y-m-t');
+        $records = $this->recordRepository->getByDateRange($shopId, $startDate, $endDate);
+
+        $mappedRecords = [];
+        $previousRevenue = null;
+        $totalRevenue = 0.0;
+        $totalAdCost = 0.0;
+        $roasTotal = 0.0;
+        $roasCount = 0;
+
+        foreach ($records as $record) {
+            $revenue = (float)($record['revenue'] ?? 0);
+            $adCost = (float)($record['ad_cost'] ?? 0);
+            $profit = $revenue - $adCost;
+            $roas = $adCost > 0 ? round($revenue / $adCost, 2) : null;
+
+            $compareRevenuePercent = null;
+            if ($previousRevenue !== null && $previousRevenue > 0) {
+                $compareRevenuePercent = round((($revenue - $previousRevenue) / $previousRevenue) * 100, 1);
+            }
+
+            $mappedRecords[] = [
+                'id' => (int)($record['id'] ?? 0),
+                'record_date' => (string)($record['record_date'] ?? ''),
+                'revenue' => $revenue,
+                'ad_cost' => $adCost,
+                'profit' => $profit,
+                'roas' => $roas,
+                'compare_revenue_percent' => $compareRevenuePercent,
+                'note' => (string)($record['note'] ?? ''),
+            ];
+
+            $previousRevenue = $revenue;
+            $totalRevenue += $revenue;
+            $totalAdCost += $adCost;
+
+            if ($roas !== null) {
+                $roasTotal += $roas;
+                $roasCount++;
+            }
+        }
+
+        $totalProfit = $totalRevenue - $totalAdCost;
+
+        return [
+            'success' => true,
+            'data' => [
+                'month' => $month,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'records' => $mappedRecords,
+                'totals' => [
+                    'total_revenue' => $totalRevenue,
+                    'total_ad_cost' => $totalAdCost,
+                    'total_profit' => $totalProfit,
+                    'avg_roas' => $roasCount > 0 ? round($roasTotal / $roasCount, 2) : null,
+                ],
+            ],
+        ];
+    }
+
+    public function deleteRecord(int $userId, int $shopId, int $recordId): array
+    {
+        if (!$this->canAccessShop($userId, $shopId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        if ($recordId <= 0) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบรายการที่ต้องการลบ',
+            ];
+        }
+
+        $existingRecord = $this->recordRepository->findByIdAndShopId($recordId, $shopId);
+        if ($existingRecord === null) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบรายการที่ต้องการลบ',
+            ];
+        }
+
+        try {
+            $this->recordRepository->deleteByIdAndShopId($recordId, $shopId);
+        } catch (Throwable $exception) {
+            error_log('[record] deleteRecord failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถลบรายการได้',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'ลบรายการเรียบร้อยแล้ว',
+        ];
+    }
+
+    private function canAccessShop(int $userId, int $shopId): bool
+    {
+        return $this->shopRepository->findByIdAndUserId($shopId, $userId) !== null;
+    }
+
+    private function validateRecordPayload(string $recordDate, float $revenue, float $adCost, ?string $note): array
+    {
+        $dateObject = DateTime::createFromFormat('Y-m-d', $recordDate);
+        if (!$dateObject || $dateObject->format('Y-m-d') !== $recordDate) {
+            return [
+                'success' => false,
+                'error' => 'รูปแบบวันที่ไม่ถูกต้อง',
+            ];
+        }
+
+        if ($revenue < 0 || $adCost < 0) {
+            return [
+                'success' => false,
+                'error' => 'รายได้และค่าแอดต้องไม่ติดลบ',
+            ];
+        }
+
+        $normalizedNote = $note === null ? null : trim($note);
+        if ($normalizedNote !== null && $normalizedNote !== '') {
+            $length = function_exists('mb_strlen') ? mb_strlen($normalizedNote) : strlen($normalizedNote);
+            if ($length > 255) {
+                return [
+                    'success' => false,
+                    'error' => 'โน้ตยาวเกิน 255 ตัวอักษร',
+                ];
+            }
+        } else {
+            $normalizedNote = null;
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'record_date' => $recordDate,
+                'revenue' => $revenue,
+                'ad_cost' => $adCost,
+                'note' => $normalizedNote,
+            ],
+        ];
+    }
+
+    private function beginTransactionIfAvailable(): void
+    {
+        if ($this->db instanceof PDO && !$this->db->inTransaction()) {
+            $this->db->beginTransaction();
+        }
+    }
+
+    private function commitTransactionIfAvailable(): void
+    {
+        if ($this->db instanceof PDO && $this->db->inTransaction()) {
+            $this->db->commit();
+        }
+    }
+
+    private function rollBackTransactionIfAvailable(): void
+    {
+        if ($this->db instanceof PDO && $this->db->inTransaction()) {
+            $this->db->rollBack();
+        }
+    }
+}
