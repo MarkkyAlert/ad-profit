@@ -99,34 +99,33 @@ require __DIR__ . '/includes/header.php';
 <section class="section-card p-5">
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
-            <h1 class="text-xl font-semibold">หน้ารวมทุกร้าน</h1>
-            <p class="mt-2 text-sm text-slate-300">ตารางและกราฟเปรียบเทียบทุกร้านตามเดือนที่เลือก</p>
+            <h1 class="text-xl font-semibold text-slate-100">หน้ารวมทุกร้าน</h1>
+            <p class="mt-2 text-sm text-slate-500">ตารางและกราฟเปรียบเทียบทุกร้านตามเดือนที่เลือก</p>
         </div>
 
         <form method="get" action="<?= e(app_url('/overview.php')) ?>" class="flex flex-wrap items-center gap-2">
-            <label for="overview-month" class="text-sm text-slate-300">เลือกเดือน</label>
+            <label for="overview-month" class="text-sm text-slate-400">เลือกเดือน</label>
             <input
                 id="overview-month"
                 name="month"
                 type="month"
                 value="<?= e($selectedMonth) ?>"
-                class="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm"
-            >
+                class="rounded-xl px-3 py-2 text-sm transition-all">
             <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
         </form>
     </div>
 
     <?php if ($overviewError !== null): ?>
-        <div class="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+        <div class="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-400">
             <?= e($overviewError) ?>
         </div>
     <?php endif; ?>
 
     <?php if (!$canView): ?>
-        <p class="mt-4 text-sm text-slate-300">ต้องมีอย่างน้อย 2 ร้านถึงจะเห็นข้อมูลเปรียบเทียบ</p>
+        <p class="mt-4 text-sm text-slate-500">ต้องมีอย่างน้อย 2 ร้านถึงจะเห็นข้อมูลเปรียบเทียบ</p>
     <?php else: ?>
         <?php if (!$hasOverviewData): ?>
-            <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+            <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
                 เดือนนี้ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
             </div>
         <?php endif; ?>
@@ -134,57 +133,57 @@ require __DIR__ . '/includes/header.php';
         <div class="mt-5 overflow-x-auto">
             <table class="min-w-full text-sm">
                 <thead>
-                <tr class="border-b border-white/[0.08] text-left text-slate-400">
-                    <th class="px-3 py-2">ร้าน</th>
-                    <th class="px-3 py-2">ยอดขาย</th>
-                    <th class="px-3 py-2">ค่าแอด</th>
-                    <th class="px-3 py-2">กำไร</th>
-                    <th class="px-3 py-2">ROAS</th>
-                    <th class="px-3 py-2">อัตรากำไร</th>
-                </tr>
+                    <tr class="border-b border-white/10 text-left text-slate-400">
+                        <th class="px-3 py-2">ร้าน</th>
+                        <th class="px-3 py-2">ยอดขาย</th>
+                        <th class="px-3 py-2">ค่าแอด</th>
+                        <th class="px-3 py-2">กำไร</th>
+                        <th class="px-3 py-2">ROAS</th>
+                        <th class="px-3 py-2">อัตรากำไร</th>
+                    </tr>
                 </thead>
                 <tbody>
-                <?php foreach ($comparisonRows as $row): ?>
-                    <?php
-                    $rowRevenue = (float)($row['total_revenue'] ?? 0);
-                    $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                    $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
-                    $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
-                    $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
-                    ?>
-                    <tr class="border-b border-white/[0.06]">
-                        <td class="px-3 py-2 text-slate-100"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
-                        <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($rowRevenue)) ?></td>
-                        <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($rowAdCost)) ?></td>
-                        <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($rowProfit)) ?></td>
-                        <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($rowRoas)) ?></td>
-                        <td class="px-3 py-2 text-slate-200"><?= e(formatPercent($rowProfitMargin)) ?></td>
-                    </tr>
-                <?php endforeach; ?>
+                    <?php foreach ($comparisonRows as $row): ?>
+                        <?php
+                        $rowRevenue = (float)($row['total_revenue'] ?? 0);
+                        $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
+                        $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                        $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
+                        $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                        ?>
+                        <tr class="border-b border-white/[0.06] table-row-hover">
+                            <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
+                            <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
+                            <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
+                            <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                            <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
+                            <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
                 </tbody>
                 <tfoot>
-                <?php
-                $totalRevenue = (float)($totals['total_revenue'] ?? 0);
-                $totalAdCost = (float)($totals['total_ad_cost'] ?? 0);
-                $totalProfit = (float)($totals['profit'] ?? ($totalRevenue - $totalAdCost));
-                $totalRoas = isset($totals['roas']) && $totals['roas'] !== null ? (float)$totals['roas'] : null;
-                $totalProfitMargin = isset($totals['profit_margin']) && $totals['profit_margin'] !== null ? (float)$totals['profit_margin'] : null;
-                ?>
-                <tr class="border-t border-white/[0.10] bg-white/[0.03] font-semibold">
-                    <td class="px-3 py-2 text-slate-100">รวมทุกร้าน</td>
-                    <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
-                    <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
-                    <td class="px-3 py-2 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
-                    <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
-                    <td class="px-3 py-2 text-slate-100"><?= e(formatPercent($totalProfitMargin)) ?></td>
-                </tr>
+                    <?php
+                    $totalRevenue = (float)($totals['total_revenue'] ?? 0);
+                    $totalAdCost = (float)($totals['total_ad_cost'] ?? 0);
+                    $totalProfit = (float)($totals['profit'] ?? ($totalRevenue - $totalAdCost));
+                    $totalRoas = isset($totals['roas']) && $totals['roas'] !== null ? (float)$totals['roas'] : null;
+                    $totalProfitMargin = isset($totals['profit_margin']) && $totals['profit_margin'] !== null ? (float)$totals['profit_margin'] : null;
+                    ?>
+                    <tr class="border-t border-white/10 bg-white/[0.03] font-semibold">
+                        <td class="px-3 py-3 text-slate-200">รวมทุกร้าน</td>
+                        <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
+                        <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
+                        <td class="px-3 py-3 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
+                        <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
+                        <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
+                    </tr>
                 </tfoot>
             </table>
         </div>
 
         <section class="section-card mt-6 p-5">
             <div class="mb-3 flex items-center justify-between gap-2">
-                <h2 class="text-lg font-semibold">กราฟแท่งเปรียบเทียบระหว่างร้าน</h2>
+                <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งเปรียบเทียบระหว่างร้าน</h2>
                 <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
             </div>
             <div class="h-80">
@@ -194,7 +193,7 @@ require __DIR__ . '/includes/header.php';
 
         <section class="section-card mt-6 p-5">
             <div class="mb-3 flex items-center justify-between gap-2">
-                <h2 class="text-lg font-semibold">กราฟเส้นแนวโน้มทุกร้าน (6 เดือนย้อนหลัง)</h2>
+                <h2 class="text-lg font-semibold text-slate-100">กราฟเส้นแนวโน้มทุกร้าน (6 เดือนย้อนหลัง)</h2>
                 <span class="text-xs text-slate-400">เส้นแต่ละร้าน = ยอดขายรายเดือน</span>
             </div>
             <div class="h-80">
@@ -203,7 +202,7 @@ require __DIR__ . '/includes/header.php';
         </section>
 
         <script>
-            (function () {
+            (function() {
                 const barPayload = <?= json_encode($barPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
                 const trendPayload = <?= json_encode($trendPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
@@ -213,8 +212,7 @@ require __DIR__ . '/includes/header.php';
                         type: 'bar',
                         data: {
                             labels: barPayload.labels,
-                            datasets: [
-                                {
+                            datasets: [{
                                     label: 'ยอดขาย',
                                     data: barPayload.revenue,
                                     backgroundColor: '#f97316'
@@ -240,20 +238,28 @@ require __DIR__ . '/includes/header.php';
                             },
                             scales: {
                                 x: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                                    ticks: {
+                                        color: '#94a3b8'
+                                    },
+                                    grid: {
+                                        color: 'rgba(255, 255, 255, 0.06)'
+                                    }
                                 },
                                 y: {
                                     ticks: {
                                         color: '#94a3b8',
                                         callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
                                     },
-                                    grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                                    grid: {
+                                        color: 'rgba(255, 255, 255, 0.06)'
+                                    }
                                 }
                             },
                             plugins: {
                                 legend: {
-                                    labels: { color: '#e2e8f0' }
+                                    labels: {
+                                        color: '#cbd5e1'
+                                    }
                                 },
                                 tooltip: {
                                     callbacks: {
@@ -296,20 +302,28 @@ require __DIR__ . '/includes/header.php';
                             },
                             scales: {
                                 x: {
-                                    ticks: { color: '#94a3b8' },
-                                    grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                                    ticks: {
+                                        color: '#94a3b8'
+                                    },
+                                    grid: {
+                                        color: 'rgba(255, 255, 255, 0.06)'
+                                    }
                                 },
                                 y: {
                                     ticks: {
                                         color: '#94a3b8',
                                         callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
                                     },
-                                    grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                                    grid: {
+                                        color: 'rgba(255, 255, 255, 0.06)'
+                                    }
                                 }
                             },
                             plugins: {
                                 legend: {
-                                    labels: { color: '#e2e8f0' }
+                                    labels: {
+                                        color: '#cbd5e1'
+                                    }
                                 },
                                 tooltip: {
                                     callbacks: {

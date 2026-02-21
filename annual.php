@@ -149,13 +149,13 @@ require __DIR__ . '/includes/header.php';
 <section class="section-card p-5">
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
-            <h1 class="text-xl font-semibold">สรุปประจำปี</h1>
-            <p class="mt-2 text-sm text-slate-300">ภาพรวมรายปีของร้านที่เลือก พร้อมตาราง 12 เดือนและกราฟเปรียบเทียบ</p>
+            <h1 class="text-xl font-semibold text-slate-100">สรุปประจำปี</h1>
+            <p class="mt-2 text-sm text-slate-500">ภาพรวมรายปีของร้านที่เลือก พร้อมตาราง 12 เดือนและกราฟเปรียบเทียบ</p>
         </div>
 
         <form method="get" action="<?= e(app_url('/annual.php')) ?>" class="flex flex-wrap items-center gap-2">
-            <label for="annual-year" class="text-sm text-slate-300">เลือกปี (พ.ศ.)</label>
-            <select id="annual-year" name="year" class="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm">
+            <label for="annual-year" class="text-sm text-slate-400">เลือกปี (พ.ศ.)</label>
+            <select id="annual-year" name="year" class="rounded-xl px-3 py-2 text-sm transition-all">
                 <?php foreach ($availableYears as $year): ?>
                     <option value="<?= e((string)$year) ?>" <?= $year === $selectedYear ? 'selected' : '' ?>>
                         <?= e((string)($year + 543)) ?>
@@ -167,13 +167,13 @@ require __DIR__ . '/includes/header.php';
     </div>
 
     <?php if ($annualError !== null): ?>
-        <div class="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+        <div class="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-400">
             <?= e($annualError) ?>
         </div>
     <?php endif; ?>
 
     <?php if (!$hasAnnualData): ?>
-        <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+        <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
             ปีนี้ยังไม่มีข้อมูลยอดขาย ลองเริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
         </div>
     <?php endif; ?>
@@ -207,47 +207,47 @@ require __DIR__ . '/includes/header.php';
 </section>
 
 <section class="section-card mt-6 p-5">
-    <h2 class="mb-3 text-lg font-semibold">ตารางเทียบรายเดือน (12 เดือน)</h2>
+    <h2 class="mb-3 text-lg font-semibold text-slate-100">ตารางเทียบรายเดือน (12 เดือน)</h2>
     <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
             <thead>
-            <tr class="border-b border-white/[0.08] text-left text-slate-400">
-                <th class="px-3 py-2">เดือน</th>
-                <th class="px-3 py-2">ยอดขาย</th>
-                <th class="px-3 py-2">ค่าแอด</th>
-                <th class="px-3 py-2">กำไร</th>
-                <th class="px-3 py-2">ROAS</th>
-                <th class="px-3 py-2">อัตรากำไร</th>
-            </tr>
+                <tr class="border-b border-white/10 text-left text-slate-400">
+                    <th class="px-3 py-2">เดือน</th>
+                    <th class="px-3 py-2">ยอดขาย</th>
+                    <th class="px-3 py-2">ค่าแอด</th>
+                    <th class="px-3 py-2">กำไร</th>
+                    <th class="px-3 py-2">ROAS</th>
+                    <th class="px-3 py-2">อัตรากำไร</th>
+                </tr>
             </thead>
             <tbody>
-            <?php foreach ($months as $row): ?>
-                <?php
-                $rowRevenue = (float)($row['total_revenue'] ?? 0);
-                $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
-                $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
-                $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
-                ?>
-                <tr class="border-b border-white/[0.06]">
-                    <td class="px-3 py-2 text-slate-100"><?= e($monthLabel($row)) ?></td>
-                    <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($rowRevenue)) ?></td>
-                    <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($rowAdCost)) ?></td>
-                    <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($rowProfit)) ?></td>
-                    <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($rowRoas)) ?></td>
-                    <td class="px-3 py-2 text-slate-200"><?= e(formatPercent($rowProfitMargin)) ?></td>
-                </tr>
-            <?php endforeach; ?>
+                <?php foreach ($months as $row): ?>
+                    <?php
+                    $rowRevenue = (float)($row['total_revenue'] ?? 0);
+                    $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
+                    $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                    $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
+                    $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                    ?>
+                    <tr class="border-b border-white/[0.06] table-row-hover">
+                        <td class="px-3 py-2 text-slate-300 font-medium"><?= e($monthLabel($row)) ?></td>
+                        <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
+                        <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
+                        <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                        <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
+                        <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                    </tr>
+                <?php endforeach; ?>
             </tbody>
             <tfoot>
-            <tr class="border-t border-white/[0.10] bg-white/[0.03] font-semibold">
-                <td class="px-3 py-2 text-slate-100">รวมทั้งปี</td>
-                <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
-                <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
-                <td class="px-3 py-2 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
-                <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
-                <td class="px-3 py-2 text-slate-100"><?= e(formatPercent($totalProfitMargin)) ?></td>
-            </tr>
+                <tr class="border-t border-white/10 bg-white/[0.03] font-semibold">
+                    <td class="px-3 py-3 text-slate-200">รวมทั้งปี</td>
+                    <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
+                    <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
+                    <td class="px-3 py-3 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
+                    <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
+                    <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
+                </tr>
             </tfoot>
         </table>
     </div>
@@ -255,7 +255,7 @@ require __DIR__ . '/includes/header.php';
 
 <section class="section-card mt-6 p-5">
     <div class="mb-3 flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold">กราฟแท่งรายเดือน (12 เดือน)</h2>
+        <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (12 เดือน)</h2>
         <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
     </div>
     <div class="h-80">
@@ -264,7 +264,7 @@ require __DIR__ . '/includes/header.php';
 </section>
 
 <script>
-    (function () {
+    (function() {
         const chartPayload = <?= json_encode($chartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
         const chartCanvas = document.getElementById('annual-bar-chart');
 
@@ -276,8 +276,7 @@ require __DIR__ . '/includes/header.php';
             type: 'bar',
             data: {
                 labels: chartPayload.labels,
-                datasets: [
-                    {
+                datasets: [{
                         label: 'ยอดขาย',
                         data: chartPayload.revenue,
                         backgroundColor: '#f97316'
@@ -303,20 +302,28 @@ require __DIR__ . '/includes/header.php';
                 },
                 scales: {
                     x: {
-                        ticks: { color: '#94a3b8' },
-                        grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                        ticks: {
+                            color: '#94a3b8'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.06)'
+                        }
                     },
                     y: {
                         ticks: {
                             color: '#94a3b8',
                             callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
                         },
-                        grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.06)'
+                        }
                     }
                 },
                 plugins: {
                     legend: {
-                        labels: { color: '#e2e8f0' }
+                        labels: {
+                            color: '#cbd5e1'
+                        }
                     },
                     tooltip: {
                         callbacks: {

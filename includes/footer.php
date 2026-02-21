@@ -8,12 +8,12 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
 ?>
 </main>
 
-<nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#07071a]/88 px-2 py-2 backdrop-blur-md">
+<nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#0d1526]/95 px-2 py-2 backdrop-blur-md">
     <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-1 text-center text-[11px] text-slate-400 sm:text-xs">
         <?php
         $navLinks = [
             ['href' => '/dashboard.php', 'page' => 'dashboard',   'icon' => '📈', 'label' => 'แดชบอร์ด'],
-            ['href' => '/add-record.php','page' => 'add-record',   'icon' => '➕', 'label' => 'บันทึก'],
+            ['href' => '/add-record.php', 'page' => 'add-record',   'icon' => '➕', 'label' => 'บันทึก'],
             ['href' => '/history.php',   'page' => 'history',      'icon' => '📋', 'label' => 'ประวัติ'],
             ['href' => '/annual.php',    'page' => 'annual',       'icon' => '📅', 'label' => 'รายปี'],
         ];
@@ -24,7 +24,7 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
             $isActive = $currentPage === $link['page'];
         ?>
             <a href="<?= e(app_url($link['href'])) ?>"
-               class="flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 transition-all duration-150 <?= $isActive ? 'nav-active' : 'hover:bg-white/[0.06] hover:text-slate-200' ?>">
+                class="flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 transition-all duration-150 <?= $isActive ? 'nav-active' : 'hover:bg-white/5 hover:text-slate-300' ?>">
                 <span class="text-base leading-none"><?= $link['icon'] ?></span>
                 <span class="mt-0.5"><?= $link['label'] ?></span>
             </a>
@@ -33,14 +33,14 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
 </nav>
 
 <div id="global-loading" class="modal-bg fixed inset-0 z-[60] hidden items-center justify-center">
-    <div class="section-card flex items-center gap-3 px-5 py-4 text-sm text-slate-200 shadow-2xl">
-        <span class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-indigo-500/40 border-t-indigo-400"></span>
+    <div class="section-card flex items-center gap-3 px-5 py-4 text-sm text-slate-300 shadow-2xl shadow-black/50">
+        <span class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-indigo-500/40 border-t-indigo-500"></span>
         <span>กำลังประมวลผล...</span>
     </div>
 </div>
 
 <script>
-    (function () {
+    (function() {
         const toast = document.getElementById('app-toast');
         if (toast) {
             setTimeout(() => {
@@ -108,4 +108,5 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
     })();
 </script>
 </body>
+
 </html>

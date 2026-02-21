@@ -24,8 +24,8 @@ $currentPage = 'add-record';
 require __DIR__ . '/includes/header.php';
 ?>
 <section class="section-card p-5">
-    <h1 class="text-xl font-semibold">บันทึกข้อมูลรายวัน</h1>
-    <p class="mt-2 text-sm text-slate-300">กรอกวันซ้ำจะอัปเดตทับอัตโนมัติ</p>
+    <h1 class="text-xl font-semibold text-slate-100">บันทึกข้อมูลรายวัน</h1>
+    <p class="mt-2 text-sm text-slate-500">กรอกวันซ้ำจะอัปเดตทับอัตโนมัติ</p>
 
     <form action="<?= e(app_url('/api/records.php')) ?>" method="post" class="mt-5 grid gap-4 md:grid-cols-2">
         <?= csrf_field() ?>
@@ -39,8 +39,7 @@ require __DIR__ . '/includes/header.php';
                 type="date"
                 value="<?= e(date('Y-m-d')) ?>"
                 required
-                class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"
-            >
+                class="w-full rounded-xl px-4 py-2.5 transition-all">
         </div>
 
         <div>
@@ -52,8 +51,7 @@ require __DIR__ . '/includes/header.php';
                 min="0"
                 step="0.01"
                 required
-                class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"
-            >
+                class="w-full rounded-xl px-4 py-2.5 transition-all">
         </div>
 
         <div>
@@ -65,8 +63,7 @@ require __DIR__ . '/includes/header.php';
                 min="0"
                 step="0.01"
                 required
-                class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"
-            >
+                class="w-full rounded-xl px-4 py-2.5 transition-all">
         </div>
 
         <div class="md:col-span-2">
@@ -76,13 +73,12 @@ require __DIR__ . '/includes/header.php';
                 name="note"
                 rows="3"
                 maxlength="255"
-                class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 focus:outline-none"
-                placeholder="เช่น แอดชุดใหม่เริ่มวิ่ง"
-            ></textarea>
+                class="w-full rounded-xl px-4 py-2.5 transition-all"
+                placeholder="เช่น แอดชุดใหม่เริ่มวิ่ง"></textarea>
         </div>
 
         <div class="md:col-span-2">
-            <button type="submit" class="btn-orange px-6 py-2.5 text-base">
+            <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">
                 ✓ บันทึกข้อมูล
             </button>
         </div>
@@ -91,46 +87,46 @@ require __DIR__ . '/includes/header.php';
 
 <section class="section-card mt-6 p-5">
     <div class="mb-3 flex items-center justify-between">
-        <h2 class="text-lg font-semibold">รายการล่าสุด 7 วัน</h2>
-        <a href="<?= e(app_url('/history.php')) ?>" class="text-sm text-cyan-400 hover:text-cyan-300">ดูประวัติทั้งหมด</a>
+        <h2 class="text-lg font-semibold text-slate-100">รายการล่าสุด 7 วัน</h2>
+        <a href="<?= e(app_url('/history.php')) ?>" class="text-sm text-indigo-400 hover:text-indigo-300 font-medium">ดูประวัติทั้งหมด</a>
     </div>
 
     <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
             <thead>
-            <tr class="border-b border-slate-700 text-left text-slate-400">
-                <th class="px-3 py-2">วันที่</th>
-                <th class="px-3 py-2">รายได้</th>
-                <th class="px-3 py-2">ค่าแอด</th>
-                <th class="px-3 py-2">กำไร</th>
-                <th class="px-3 py-2">ROAS</th>
-                <th class="px-3 py-2">โน้ต</th>
-            </tr>
+                <tr class="border-b border-white/10 text-left text-slate-400">
+                    <th class="px-3 py-2">วันที่</th>
+                    <th class="px-3 py-2">รายได้</th>
+                    <th class="px-3 py-2">ค่าแอด</th>
+                    <th class="px-3 py-2">กำไร</th>
+                    <th class="px-3 py-2">ROAS</th>
+                    <th class="px-3 py-2">โน้ต</th>
+                </tr>
             </thead>
             <tbody>
-            <?php if (empty($recentRecords)): ?>
-                <tr>
-                    <td colspan="6" class="px-3 py-4 text-center text-slate-400">ยังไม่มีข้อมูลในร้านนี้</td>
-                </tr>
-            <?php else: ?>
-                <?php foreach ($recentRecords as $record): ?>
-                    <?php
-                    $revenue = (float)($record['revenue'] ?? 0);
-                    $adCost = (float)($record['ad_cost'] ?? 0);
-                    $profit = $revenue - $adCost;
-                    $roas = $adCost > 0 ? round($revenue / $adCost, 2) : null;
-                    $note = (string)($record['note'] ?? '');
-                    ?>
-                    <tr class="border-b border-white/[0.06]">
-                        <td class="px-3 py-2 text-slate-200"><?= e(formatThaiDate((string)($record['record_date'] ?? ''))) ?></td>
-                        <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($revenue)) ?></td>
-                        <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($adCost)) ?></td>
-                        <td class="px-3 py-2 <?= $profit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($profit)) ?></td>
-                        <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($roas)) ?></td>
-                        <td class="px-3 py-2 text-slate-300"><?= $note !== '' ? e($note) : '-' ?></td>
+                <?php if (empty($recentRecords)): ?>
+                    <tr>
+                        <td colspan="6" class="px-3 py-4 text-center text-slate-400">ยังไม่มีข้อมูลในร้านนี้</td>
                     </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
+                <?php else: ?>
+                    <?php foreach ($recentRecords as $record): ?>
+                        <?php
+                        $revenue = (float)($record['revenue'] ?? 0);
+                        $adCost = (float)($record['ad_cost'] ?? 0);
+                        $profit = $revenue - $adCost;
+                        $roas = $adCost > 0 ? round($revenue / $adCost, 2) : null;
+                        $note = (string)($record['note'] ?? '');
+                        ?>
+                        <tr class="border-b border-white/[0.06]">
+                            <td class="px-3 py-2 text-slate-300 font-medium"><?= e(formatThaiDate((string)($record['record_date'] ?? ''))) ?></td>
+                            <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($revenue)) ?></td>
+                            <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($adCost)) ?></td>
+                            <td class="px-3 py-2 <?= $profit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($profit)) ?></td>
+                            <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($roas)) ?></td>
+                            <td class="px-3 py-2 text-slate-400"><?= $note !== '' ? e($note) : '-' ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>

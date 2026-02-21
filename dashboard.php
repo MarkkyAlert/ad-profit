@@ -237,13 +237,13 @@ require __DIR__ . '/includes/header.php';
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-100">แดชบอร์ด</h1>
-            <p class="mt-1 text-sm text-slate-400">ช่วงข้อมูล: <?= e(formatThaiDate($rangeStart)) ?> - <?= e(formatThaiDate($rangeEnd)) ?></p>
+            <p class="mt-1 text-sm text-slate-500">ช่วงข้อมูล: <?= e(formatThaiDate($rangeStart)) ?> - <?= e(formatThaiDate($rangeEnd)) ?></p>
         </div>
 
         <form id="dashboard-range-form" method="get" action="<?= e(app_url('/dashboard.php')) ?>" class="flex flex-wrap items-end gap-3">
             <div>
-                <label for="range-type" class="mb-1 block text-xs text-slate-300">ช่วงเวลา</label>
-                <select id="range-type" name="range" class="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-slate-100">
+                <label for="range-type" class="mb-1 block text-xs text-slate-400">ช่วงเวลา</label>
+                <select id="range-type" name="range" class="rounded-xl px-3 py-2 text-sm transition-all">
                     <option value="week_this" <?= $selectedRange === 'week_this' ? 'selected' : '' ?>>สัปดาห์นี้</option>
                     <option value="week_last" <?= $selectedRange === 'week_last' ? 'selected' : '' ?>>สัปดาห์ก่อน</option>
                     <option value="month_this" <?= $selectedRange === 'month_this' ? 'selected' : '' ?>>เดือนนี้</option>
@@ -254,12 +254,12 @@ require __DIR__ . '/includes/header.php';
 
             <div id="custom-range-fields" class="flex flex-wrap items-end gap-3 <?= $selectedRange === 'custom' ? '' : 'hidden' ?>">
                 <div>
-                    <label for="custom-start-date" class="mb-1 block text-xs text-slate-300">เริ่มต้น</label>
-                    <input id="custom-start-date" name="start_date" type="date" value="<?= e($customStart) ?>" class="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm">
+                    <label for="custom-start-date" class="mb-1 block text-xs text-slate-400">เริ่มต้น</label>
+                    <input id="custom-start-date" name="start_date" type="date" value="<?= e($customStart) ?>" class="rounded-xl px-3 py-2 text-sm transition-all">
                 </div>
                 <div>
-                    <label for="custom-end-date" class="mb-1 block text-xs text-slate-300">สิ้นสุด</label>
-                    <input id="custom-end-date" name="end_date" type="date" value="<?= e($customEnd) ?>" class="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm">
+                    <label for="custom-end-date" class="mb-1 block text-xs text-slate-400">สิ้นสุด</label>
+                    <input id="custom-end-date" name="end_date" type="date" value="<?= e($customEnd) ?>" class="rounded-xl px-3 py-2 text-sm transition-all">
                 </div>
             </div>
 
@@ -268,13 +268,13 @@ require __DIR__ . '/includes/header.php';
     </div>
 
     <?php if ($dashboardError !== null): ?>
-        <div class="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+        <div class="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-400">
             <?= e($dashboardError) ?>
         </div>
     <?php endif; ?>
 
     <?php if ($daysCount === 0): ?>
-        <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+        <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
             ยังไม่มีข้อมูลในช่วงเวลานี้ ลองไปที่หน้า "➕ บันทึก" เพื่อเริ่มบันทึกยอดขายและค่าแอด
         </div>
     <?php endif; ?>
@@ -312,9 +312,9 @@ require __DIR__ . '/includes/header.php';
 </section>
 
 <?php if ($comparisonEnabled): ?>
-    <section class="section-card mt-4 p-4 text-sm text-slate-300">
-        เทียบผลของ <span class="font-semibold text-slate-100"><?= e(formatThaiMonth($selectedMonth)) ?></span>
-        กับ <span class="font-semibold text-slate-100"><?= e(formatThaiMonth($previousMonth)) ?></span>
+    <section class="section-card mt-4 p-4 text-sm text-slate-400">
+        เทียบผลของ <span class="font-semibold text-slate-200"><?= e(formatThaiMonth($selectedMonth)) ?></span>
+        กับ <span class="font-semibold text-slate-200"><?= e(formatThaiMonth($previousMonth)) ?></span>
     </section>
 <?php endif; ?>
 
@@ -343,26 +343,25 @@ require __DIR__ . '/includes/header.php';
 <section class="section-card mt-6 p-5">
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-            <h2 class="text-lg font-semibold">🎯 เป้าหมายรายเดือน</h2>
-            <p class="mt-1 text-sm text-slate-400">เดือนเป้าหมาย: <?= e(formatThaiMonth($goalMonth)) ?></p>
+            <h2 class="text-lg font-semibold text-slate-100">🎯 เป้าหมายรายเดือน</h2>
+            <p class="mt-1 text-sm text-slate-500">เดือนเป้าหมาย: <?= e(formatThaiMonth($goalMonth)) ?></p>
         </div>
 
         <button
             type="button"
             data-open-goal-modal
-            class="btn-teal px-4 py-2 text-sm"
-        >
+            class="btn-teal px-4 py-2 text-sm">
             <?= $goalHasGoal ? 'แก้ไขเป้าหมาย' : '🎯 ตั้งเป้าเดือนนี้' ?>
         </button>
     </div>
 
     <?php if (!$goalHasGoal): ?>
-        <div class="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.03] p-4 text-sm text-slate-400">
+        <div class="mt-4 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
             ยังไม่ได้ตั้งเป้าหมายสำหรับเดือนนี้
         </div>
     <?php else: ?>
         <?php if ($goalAchieved): ?>
-            <div class="mt-4 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2 text-sm font-medium text-green-300">
+            <div class="mt-4 rounded-lg border border-green-500/30 bg-green-950/40 px-3 py-2 text-sm font-medium text-green-400">
                 🎉 ถึงเป้าแล้ว!
             </div>
         <?php endif; ?>
@@ -371,15 +370,15 @@ require __DIR__ . '/includes/header.php';
             <?php if ($goalTargetRevenue !== null): ?>
                 <article class="stat-card s-revenue">
                     <div class="flex items-center justify-between gap-2">
-                        <p class="text-sm text-slate-300">เป้ารายได้</p>
+                        <p class="text-sm text-slate-400">เป้ารายได้</p>
                         <p class="text-sm font-semibold text-orange-400"><?= e(formatPercent($goalProgressRevenue)) ?></p>
                     </div>
                     <p class="mt-1 text-xs text-slate-400">ทำได้ <?= e(formatMoney($goalActualRevenue)) ?> / เป้า <?= e(formatMoney($goalTargetRevenue)) ?></p>
-                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
                         <div class="progress-orange h-full rounded-full transition-all duration-500" style="width: <?= e(number_format($goalRevenueProgressWidth, 1, '.', '')) ?>%"></div>
                     </div>
                     <?php if ($goalRevenueReached): ?>
-                        <p class="mt-2 text-xs font-medium text-green-300">🎉 เป้ารายได้สำเร็จแล้ว</p>
+                        <p class="mt-2 text-xs font-medium text-green-400">🎉 เป้ารายได้สำเร็จแล้ว</p>
                     <?php endif; ?>
                 </article>
             <?php endif; ?>
@@ -387,15 +386,15 @@ require __DIR__ . '/includes/header.php';
             <?php if ($goalTargetProfit !== null): ?>
                 <article class="stat-card s-profit">
                     <div class="flex items-center justify-between gap-2">
-                        <p class="text-sm text-slate-300">เป้ากำไร</p>
+                        <p class="text-sm text-slate-400">เป้ากำไร</p>
                         <p class="text-sm font-semibold text-green-400"><?= e(formatPercent($goalProgressProfit)) ?></p>
                     </div>
                     <p class="mt-1 text-xs text-slate-400">ทำได้ <?= e(formatMoney($goalActualProfit)) ?> / เป้า <?= e(formatMoney($goalTargetProfit)) ?></p>
-                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
                         <div class="progress-green h-full rounded-full transition-all duration-500" style="width: <?= e(number_format($goalProfitProgressWidth, 1, '.', '')) ?>%"></div>
                     </div>
                     <?php if ($goalProfitReached): ?>
-                        <p class="mt-2 text-xs font-medium text-green-300">🎉 เป้ากำไรสำเร็จแล้ว</p>
+                        <p class="mt-2 text-xs font-medium text-green-400">🎉 เป้ากำไรสำเร็จแล้ว</p>
                     <?php endif; ?>
                 </article>
             <?php endif; ?>
@@ -415,9 +414,9 @@ require __DIR__ . '/includes/header.php';
 </section>
 
 <div id="goal-modal" class="modal-bg fixed inset-0 z-50 hidden items-center justify-center p-4">
-    <div class="section-card w-full max-w-lg p-6 shadow-2xl shadow-black/60">
+    <div class="section-card w-full max-w-lg p-6 shadow-2xl shadow-black/50">
         <div class="mb-5 flex items-center justify-between">
-            <h2 class="text-lg font-bold"><?= $goalHasGoal ? '✏️ แก้ไขเป้าหมายรายเดือน' : '🎯 ตั้งเป้าหมายรายเดือน' ?></h2>
+            <h2 class="text-lg font-bold text-slate-100"><?= $goalHasGoal ? '✏️ แก้ไขเป้าหมายรายเดือน' : '🎯 ตั้งเป้าหมายรายเดือน' ?></h2>
             <button type="button" id="close-goal-modal" class="btn-ghost rounded-lg px-3 py-1 text-sm">ปิด ✕</button>
         </div>
 
@@ -436,9 +435,8 @@ require __DIR__ . '/includes/header.php';
                     min="0"
                     step="0.01"
                     value="<?= e($goalTargetRevenue !== null ? number_format($goalTargetRevenue, 2, '.', '') : '') ?>"
-                    class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm placeholder-slate-500"
-                    placeholder="เว้นว่างได้"
-                >
+                    class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
+                    placeholder="เว้นว่างได้">
             </div>
 
             <div>
@@ -450,9 +448,8 @@ require __DIR__ . '/includes/header.php';
                     min="0"
                     step="0.01"
                     value="<?= e($goalTargetProfit !== null ? number_format($goalTargetProfit, 2, '.', '') : '') ?>"
-                    class="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm placeholder-slate-500"
-                    placeholder="เว้นว่างได้"
-                >
+                    class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
+                    placeholder="เว้นว่างได้">
             </div>
 
             <div class="md:col-span-2 flex items-center justify-end gap-2">
@@ -465,7 +462,7 @@ require __DIR__ . '/includes/header.php';
 
 <section class="section-card mt-6 p-5">
     <div class="mb-3 flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold">กราฟแท่งรายวัน (รายได้ vs ค่าแอด)</h2>
+        <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งรายวัน (รายได้ vs ค่าแอด)</h2>
         <span class="text-xs text-slate-400">เฉพาะวันที่มีข้อมูล</span>
     </div>
     <?php if (!$hasDailyData): ?>
@@ -478,7 +475,7 @@ require __DIR__ . '/includes/header.php';
 
 <section class="section-card mt-6 p-5">
     <div class="mb-3 flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold">แนวโน้มย้อนหลัง 6 เดือน</h2>
+        <h2 class="text-lg font-semibold text-slate-100">แนวโน้มย้อนหลัง 6 เดือน</h2>
         <span class="text-xs text-slate-400">แสดงรายเดือนเสมอ</span>
     </div>
     <?php if (!$hasSixMonthData): ?>
@@ -490,7 +487,7 @@ require __DIR__ . '/includes/header.php';
 </section>
 
 <script>
-    (function () {
+    (function() {
         const rangeForm = document.getElementById('dashboard-range-form');
         const rangeSelect = document.getElementById('range-type');
         const customFields = document.getElementById('custom-range-fields');
@@ -594,8 +591,7 @@ require __DIR__ . '/includes/header.php';
                 type: 'bar',
                 data: {
                     labels: dailyPayload.labels,
-                    datasets: [
-                        {
+                    datasets: [{
                             label: 'รายได้',
                             data: dailyPayload.revenue,
                             backgroundColor: '#f97316',
@@ -616,20 +612,28 @@ require __DIR__ . '/includes/header.php';
                     },
                     scales: {
                         x: {
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                            ticks: {
+                                color: '#94a3b8'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.06)'
+                            }
                         },
                         y: {
                             ticks: {
                                 color: '#94a3b8',
                                 callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
                             },
-                            grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.06)'
+                            }
                         }
                     },
                     plugins: {
                         legend: {
-                            labels: { color: '#e2e8f0' }
+                            labels: {
+                                color: '#e2e8f0'
+                            }
                         },
                         tooltip: {
                             callbacks: {
@@ -662,8 +666,7 @@ require __DIR__ . '/includes/header.php';
                 type: 'line',
                 data: {
                     labels: sixMonthPayload.labels,
-                    datasets: [
-                        {
+                    datasets: [{
                             label: 'ยอดขาย',
                             data: sixMonthPayload.revenue,
                             borderColor: '#f97316',
@@ -698,20 +701,28 @@ require __DIR__ . '/includes/header.php';
                     },
                     scales: {
                         x: {
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                            ticks: {
+                                color: '#94a3b8'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.06)'
+                            }
                         },
                         y: {
                             ticks: {
                                 color: '#94a3b8',
                                 callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
                             },
-                            grid: { color: 'rgba(255, 255, 255, 0.06)' }
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.06)'
+                            }
                         }
                     },
                     plugins: {
                         legend: {
-                            labels: { color: '#e2e8f0' }
+                            labels: {
+                                color: '#e2e8f0'
+                            }
                         },
                         tooltip: {
                             callbacks: {
