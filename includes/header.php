@@ -49,7 +49,7 @@ $flashError = get_flash('error');
     <style>
         body {
             font-family: 'Sarabun', sans-serif;
-            background-color: #0b1120;
+            background-color: rgb(8, 16, 40);
             min-height: 100vh
         }
 
@@ -69,21 +69,21 @@ $flashError = get_flash('error');
         }
 
         .section-card {
-            background: #0f172a;
+            background-color: rgb(11, 23, 57);
             border: 1px solid #1e293b;
             border-radius: 14px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25)
+            box-shadow: rgba(1, 5, 17, 0.3) 0px 8px 28px 0px
         }
 
         .stat-card {
             position: relative;
             overflow: hidden;
             border-radius: 14px;
-            background: #0f172a;
+            background-color: rgb(11, 23, 57);
             border: 1px solid #1e293b;
             padding: 20px;
             transition: transform .2s, box-shadow .2s;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25)
+            box-shadow: rgba(1, 5, 17, 0.3) 0px 8px 28px 0px
         }
 
         .stat-card::before {
@@ -101,7 +101,7 @@ $flashError = get_flash('error');
         }
 
         .s-revenue {
-            background: #0f172a
+            background-color: rgb(11, 23, 57)
         }
 
         .s-revenue::before {
@@ -109,7 +109,7 @@ $flashError = get_flash('error');
         }
 
         .s-adcost {
-            background: #0f172a
+            background-color: rgb(11, 23, 57)
         }
 
         .s-adcost::before {
@@ -117,7 +117,7 @@ $flashError = get_flash('error');
         }
 
         .s-profit {
-            background: #0f172a
+            background-color: rgb(11, 23, 57)
         }
 
         .s-profit::before {
@@ -125,7 +125,7 @@ $flashError = get_flash('error');
         }
 
         .s-roas {
-            background: #0f172a
+            background-color: rgb(11, 23, 57)
         }
 
         .s-roas::before {
@@ -133,7 +133,7 @@ $flashError = get_flash('error');
         }
 
         .s-neutral {
-            background: #0f172a
+            background-color: rgb(11, 23, 57)
         }
 
         .s-neutral::before {
@@ -141,7 +141,7 @@ $flashError = get_flash('error');
         }
 
         .s-best {
-            background: #0f172a
+            background-color: rgb(11, 23, 57)
         }
 
         .s-best::before {
@@ -149,7 +149,7 @@ $flashError = get_flash('error');
         }
 
         .s-worst {
-            background: #0f172a
+            background-color: rgb(11, 23, 57)
         }
 
         .s-worst::before {

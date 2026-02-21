@@ -44,14 +44,14 @@ $flashError = get_flash('error');
         }
 
         .bg-animated {
-            background-color: #0b1120
+            background-color: rgb(8, 16, 40)
         }
 
         .glass-card {
-            background: #0f172a;
+            background-color: rgb(11, 23, 57);
             border: 1px solid #1e293b;
             border-radius: 14px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25)
+            box-shadow: rgba(1, 5, 17, 0.3) 0px 8px 28px 0px
         }
 
         .text-gradient {
