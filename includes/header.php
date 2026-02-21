@@ -49,37 +49,8 @@ $flashError = get_flash('error');
     <style>
         body {
             font-family: 'Sarabun', sans-serif;
-            background-color: #0a0e27;
+            background-color: #0b1120;
             min-height: 100vh
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            top: 50%;
-            left: 0;
-            transform: translateY(-50%);
-            width: 400px;
-            height: 400px;
-            background: rgba(59, 130, 246, 0.3);
-            border-radius: 50%;
-            filter: blur(120px);
-            pointer-events: none;
-            z-index: -1
-        }
-
-        body::after {
-            content: '';
-            position: fixed;
-            bottom: 0;
-            right: 0;
-            width: 500px;
-            height: 500px;
-            background: rgba(139, 92, 246, 0.25);
-            border-radius: 50%;
-            filter: blur(150px);
-            pointer-events: none;
-            z-index: -1
         }
 
         .glass {
@@ -98,26 +69,21 @@ $flashError = get_flash('error');
         }
 
         .section-card {
-            background: #111c3a;
-            border: 1px solid #1e2a4a;
+            background: #0f172a;
+            border: 1px solid #1e293b;
             border-radius: 14px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            transition: background .15s ease
-        }
-
-        .section-card:hover {
-            background: #162044
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25)
         }
 
         .stat-card {
             position: relative;
             overflow: hidden;
             border-radius: 14px;
-            background: #111c3a;
-            border: 1px solid #1e2a4a;
+            background: #0f172a;
+            border: 1px solid #1e293b;
             padding: 20px;
-            transition: transform .2s, box-shadow .2s, background .15s ease;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3)
+            transition: transform .2s, box-shadow .2s;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25)
         }
 
         .stat-card::before {
@@ -130,13 +96,12 @@ $flashError = get_flash('error');
         }
 
         .stat-card:hover {
-            transform: translateY(-3px);
-            background: #162044;
-            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4)
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35)
         }
 
         .s-revenue {
-            background: #111c3a
+            background: #0f172a
         }
 
         .s-revenue::before {
@@ -144,7 +109,7 @@ $flashError = get_flash('error');
         }
 
         .s-adcost {
-            background: #111c3a
+            background: #0f172a
         }
 
         .s-adcost::before {
@@ -152,7 +117,7 @@ $flashError = get_flash('error');
         }
 
         .s-profit {
-            background: #111c3a
+            background: #0f172a
         }
 
         .s-profit::before {
@@ -160,7 +125,7 @@ $flashError = get_flash('error');
         }
 
         .s-roas {
-            background: #111c3a
+            background: #0f172a
         }
 
         .s-roas::before {
@@ -168,7 +133,7 @@ $flashError = get_flash('error');
         }
 
         .s-neutral {
-            background: #111c3a
+            background: #0f172a
         }
 
         .s-neutral::before {
@@ -176,7 +141,7 @@ $flashError = get_flash('error');
         }
 
         .s-best {
-            background: #111c3a
+            background: #0f172a
         }
 
         .s-best::before {
@@ -184,7 +149,7 @@ $flashError = get_flash('error');
         }
 
         .s-worst {
-            background: #111c3a
+            background: #0f172a
         }
 
         .s-worst::before {
