@@ -44,17 +44,48 @@ $flashError = get_flash('error');
         }
 
         .bg-animated {
-            background: #060b18;
-            background-image: radial-gradient(ellipse 65% 55% at 10% 40%, rgba(99, 102, 241, .12) 0%, transparent 70%), radial-gradient(ellipse 50% 45% at 90% 20%, rgba(139, 92, 246, .10) 0%, transparent 70%), radial-gradient(ellipse 40% 35% at 50% 90%, rgba(6, 182, 212, .06) 0%, transparent 70%)
+            background-color: #0a0e27;
+            position: relative
+        }
+
+        .bg-animated::before {
+            content: '';
+            position: fixed;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            width: 400px;
+            height: 400px;
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            filter: blur(120px);
+            pointer-events: none;
+            z-index: 0
+        }
+
+        .bg-animated::after {
+            content: '';
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            width: 500px;
+            height: 500px;
+            background: rgba(139, 92, 246, 0.25);
+            border-radius: 50%;
+            filter: blur(150px);
+            pointer-events: none;
+            z-index: 0
         }
 
         .glass-card {
-            background: #0d1526;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px)
+            background: rgba(17, 28, 58, 0.85);
+            border: 1px solid #1e2a4a;
+            border-radius: 14px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            position: relative;
+            z-index: 1
         }
 
         .text-gradient {

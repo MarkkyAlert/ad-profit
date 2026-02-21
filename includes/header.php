@@ -49,9 +49,37 @@ $flashError = get_flash('error');
     <style>
         body {
             font-family: 'Sarabun', sans-serif;
-            background-color: #060b18;
-            background-image: radial-gradient(ellipse 70% 55% at 5% 45%, rgba(99, 102, 241, .10) 0%, transparent 70%), radial-gradient(ellipse 55% 45% at 92% 15%, rgba(139, 92, 246, .08) 0%, transparent 70%), radial-gradient(ellipse 40% 35% at 55% 95%, rgba(6, 182, 212, .05) 0%, transparent 70%);
+            background-color: #0a0e27;
             min-height: 100vh
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            width: 400px;
+            height: 400px;
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            filter: blur(120px);
+            pointer-events: none;
+            z-index: -1
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            width: 500px;
+            height: 500px;
+            background: rgba(139, 92, 246, 0.25);
+            border-radius: 50%;
+            filter: blur(150px);
+            pointer-events: none;
+            z-index: -1
         }
 
         .glass {
@@ -70,21 +98,26 @@ $flashError = get_flash('error');
         }
 
         .section-card {
-            background: #0d1526;
-            border: 1px solid rgba(255, 255, 255, 0.07);
-            border-radius: 20px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.04) inset
+            background: #111c3a;
+            border: 1px solid #1e2a4a;
+            border-radius: 14px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: background .15s ease
+        }
+
+        .section-card:hover {
+            background: #162044
         }
 
         .stat-card {
             position: relative;
             overflow: hidden;
-            border-radius: 16px;
-            background: #0d1526;
-            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 14px;
+            background: #111c3a;
+            border: 1px solid #1e2a4a;
             padding: 20px;
-            transition: transform .2s, box-shadow .2s;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.04) inset
+            transition: transform .2s, box-shadow .2s, background .15s ease;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3)
         }
 
         .stat-card::before {
@@ -98,11 +131,12 @@ $flashError = get_flash('error');
 
         .stat-card:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.06) inset
+            background: #162044;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4)
         }
 
         .s-revenue {
-            background: linear-gradient(145deg, #130e07 0%, #0d1526 55%)
+            background: #111c3a
         }
 
         .s-revenue::before {
@@ -110,7 +144,7 @@ $flashError = get_flash('error');
         }
 
         .s-adcost {
-            background: linear-gradient(145deg, #071318 0%, #0d1526 55%)
+            background: #111c3a
         }
 
         .s-adcost::before {
@@ -118,7 +152,7 @@ $flashError = get_flash('error');
         }
 
         .s-profit {
-            background: linear-gradient(145deg, #071310 0%, #0d1526 55%)
+            background: #111c3a
         }
 
         .s-profit::before {
@@ -126,7 +160,7 @@ $flashError = get_flash('error');
         }
 
         .s-roas {
-            background: linear-gradient(145deg, #0f0a18 0%, #0d1526 55%)
+            background: #111c3a
         }
 
         .s-roas::before {
@@ -134,7 +168,7 @@ $flashError = get_flash('error');
         }
 
         .s-neutral {
-            background: linear-gradient(145deg, #0a0c1e 0%, #0d1526 55%)
+            background: #111c3a
         }
 
         .s-neutral::before {
@@ -142,7 +176,7 @@ $flashError = get_flash('error');
         }
 
         .s-best {
-            background: linear-gradient(145deg, #071310 0%, #0d1526 55%)
+            background: #111c3a
         }
 
         .s-best::before {
@@ -150,7 +184,7 @@ $flashError = get_flash('error');
         }
 
         .s-worst {
-            background: linear-gradient(145deg, #140808 0%, #0d1526 55%)
+            background: #111c3a
         }
 
         .s-worst::before {
