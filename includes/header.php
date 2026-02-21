@@ -50,7 +50,29 @@ $flashError = get_flash('error');
         body {
             font-family: 'Sarabun', sans-serif;
             background-color: rgb(8, 16, 40);
-            min-height: 100vh
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% center }
+            100% { background-position: 200% center }
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1 }
+            50% { opacity: 0.7 }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) }
+            50% { transform: translateY(-8px) }
+        }
+
+        @keyframes border-glow {
+            0%, 100% { border-color: rgba(99, 102, 241, 0.3) }
+            50% { border-color: rgba(139, 92, 246, 0.5) }
         }
 
         .glass {
@@ -70,20 +92,51 @@ $flashError = get_flash('error');
 
         .section-card {
             background-color: rgb(11, 23, 57);
-            border: 1px solid #1e293b;
-            border-radius: 14px;
-            box-shadow: rgba(1, 5, 17, 0.3) 0px 8px 28px 0px
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 16px;
+            box-shadow: rgba(1, 5, 17, 0.4) 0px 8px 32px 0px,
+                        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)
+        }
+
+        .section-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), transparent, rgba(139, 92, 246, 0.2));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease
+        }
+
+        .section-card:hover {
+            transform: translateY(-2px);
+            box-shadow: rgba(1, 5, 17, 0.5) 0px 12px 40px 0px,
+                        0 0 30px rgba(99, 102, 241, 0.1);
+            border-color: rgba(99, 102, 241, 0.3)
+        }
+
+        .section-card:hover::before {
+            opacity: 1
         }
 
         .stat-card {
             position: relative;
             overflow: hidden;
-            border-radius: 14px;
-            background-color: rgb(11, 23, 57);
-            border: 1px solid #1e293b;
+            border-radius: 16px;
+            background: linear-gradient(145deg, rgb(14, 28, 65) 0%, rgb(11, 23, 57) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             padding: 20px;
-            transition: transform .2s, box-shadow .2s;
-            box-shadow: rgba(1, 5, 17, 0.3) 0px 8px 28px 0px
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: rgba(1, 5, 17, 0.4) 0px 8px 32px 0px,
+                        inset 0 1px 0 rgba(255, 255, 255, 0.05)
         }
 
         .stat-card::before {
@@ -92,68 +145,122 @@ $flashError = get_flash('error');
             top: 0;
             left: 0;
             right: 0;
-            height: 3px
+            height: 3px;
+            background-size: 200% 100%;
+            animation: shimmer 3s ease-in-out infinite
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.03) 0%, transparent 70%);
+            pointer-events: none
         }
 
         .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35)
+            transform: translateY(-6px) scale(1.02);
+            box-shadow: rgba(1, 5, 17, 0.5) 0px 20px 50px 0px,
+                        0 0 40px var(--card-glow, rgba(99, 102, 241, 0.15));
+            border-color: rgba(255, 255, 255, 0.15)
+        }
+
+        .stat-card:hover::before {
+            animation: shimmer 1.5s ease-in-out infinite
         }
 
         .s-revenue {
-            background-color: rgb(11, 23, 57)
+            --card-glow: rgba(249, 115, 22, 0.2)
         }
 
         .s-revenue::before {
-            background: linear-gradient(90deg, #f97316, #fb923c, #fbbf24)
+            background: linear-gradient(90deg, #f97316, #fb923c, #fbbf24, #f97316);
+            background-size: 200% 100%
+        }
+
+        .s-revenue:hover {
+            border-color: rgba(249, 115, 22, 0.3)
         }
 
         .s-adcost {
-            background-color: rgb(11, 23, 57)
+            --card-glow: rgba(6, 182, 212, 0.2)
         }
 
         .s-adcost::before {
-            background: linear-gradient(90deg, #06b6d4, #22d3ee, #67e8f9)
+            background: linear-gradient(90deg, #06b6d4, #22d3ee, #67e8f9, #06b6d4);
+            background-size: 200% 100%
+        }
+
+        .s-adcost:hover {
+            border-color: rgba(6, 182, 212, 0.3)
         }
 
         .s-profit {
-            background-color: rgb(11, 23, 57)
+            --card-glow: rgba(16, 185, 129, 0.2)
         }
 
         .s-profit::before {
-            background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7)
+            background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7, #10b981);
+            background-size: 200% 100%
+        }
+
+        .s-profit:hover {
+            border-color: rgba(16, 185, 129, 0.3)
         }
 
         .s-roas {
-            background-color: rgb(11, 23, 57)
+            --card-glow: rgba(139, 92, 246, 0.2)
         }
 
         .s-roas::before {
-            background: linear-gradient(90deg, #8b5cf6, #a78bfa, #c4b5fd)
+            background: linear-gradient(90deg, #8b5cf6, #a78bfa, #c4b5fd, #8b5cf6);
+            background-size: 200% 100%
+        }
+
+        .s-roas:hover {
+            border-color: rgba(139, 92, 246, 0.3)
         }
 
         .s-neutral {
-            background-color: rgb(11, 23, 57)
+            --card-glow: rgba(99, 102, 241, 0.2)
         }
 
         .s-neutral::before {
-            background: linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc)
+            background: linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc, #6366f1);
+            background-size: 200% 100%
+        }
+
+        .s-neutral:hover {
+            border-color: rgba(99, 102, 241, 0.3)
         }
 
         .s-best {
-            background-color: rgb(11, 23, 57)
+            --card-glow: rgba(34, 197, 94, 0.2)
         }
 
         .s-best::before {
-            background: linear-gradient(90deg, #22c55e, #4ade80)
+            background: linear-gradient(90deg, #22c55e, #4ade80, #86efac, #22c55e);
+            background-size: 200% 100%
+        }
+
+        .s-best:hover {
+            border-color: rgba(34, 197, 94, 0.3)
         }
 
         .s-worst {
-            background-color: rgb(11, 23, 57)
+            --card-glow: rgba(239, 68, 68, 0.2)
         }
 
         .s-worst::before {
-            background: linear-gradient(90deg, #ef4444, #f87171)
+            background: linear-gradient(90deg, #ef4444, #f87171, #fca5a5, #ef4444);
+            background-size: 200% 100%
+        }
+
+        .s-worst:hover {
+            border-color: rgba(239, 68, 68, 0.3)
         }
 
         .btn-primary {
@@ -164,15 +271,30 @@ $flashError = get_flash('error');
             border: none;
             border-radius: 12px;
             cursor: pointer;
-            transition: transform .15s, box-shadow .15s;
+            transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
             display: inline-flex;
             align-items: center;
-            justify-content: center
+            justify-content: center;
+            position: relative;
+            overflow: hidden
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.5s ease
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 22px rgba(99, 102, 241, .55)
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 10px 30px rgba(99, 102, 241, .5), 0 0 20px rgba(99, 102, 241, 0.3)
+        }
+
+        .btn-primary:hover::before {
+            transform: translateX(100%)
         }
 
         .btn-orange {
@@ -183,15 +305,30 @@ $flashError = get_flash('error');
             border: none;
             border-radius: 12px;
             cursor: pointer;
-            transition: transform .15s, box-shadow .15s;
+            transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
             display: inline-flex;
             align-items: center;
-            justify-content: center
+            justify-content: center;
+            position: relative;
+            overflow: hidden
+        }
+
+        .btn-orange::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.5s ease
         }
 
         .btn-orange:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 22px rgba(249, 115, 22, .55)
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 10px 30px rgba(249, 115, 22, .5), 0 0 20px rgba(249, 115, 22, 0.3)
+        }
+
+        .btn-orange:hover::before {
+            transform: translateX(100%)
         }
 
         .btn-teal {
@@ -214,25 +351,25 @@ $flashError = get_flash('error');
         }
 
         .btn-ghost {
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(255, 255, 255, 0.10);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
             color: #94a3b8;
             font-weight: 600;
             border-radius: 12px;
             cursor: pointer;
-            transition: all .15s ease;
+            transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
             display: inline-flex;
             align-items: center;
             justify-content: center
         }
 
         .btn-ghost:hover {
-            background: rgba(255, 255, 255, 0.10);
+            background: rgba(99, 102, 241, 0.15);
             color: #e2e8f0;
-            border-color: rgba(255, 255, 255, 0.18);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-            transform: translateY(-1px)
+            border-color: rgba(99, 102, 241, 0.4);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.2), 0 0 15px rgba(99, 102, 241, 0.1);
+            transform: translateY(-2px)
         }
 
         .btn-danger {
@@ -278,20 +415,43 @@ $flashError = get_flash('error');
         }
 
         tbody tr {
-            transition: background .12s
+            transition: all .25s cubic-bezier(0.4, 0, 0.2, 1)
         }
 
         tbody tr:hover {
-            background: rgba(255, 255, 255, 0.03)
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.05), transparent);
+            transform: scale(1.005)
+        }
+
+        /* Glowing number effects */
+        .glow-orange {
+            text-shadow: 0 0 20px rgba(249, 115, 22, 0.5), 0 0 40px rgba(249, 115, 22, 0.2)
+        }
+
+        .glow-cyan {
+            text-shadow: 0 0 20px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.2)
+        }
+
+        .glow-green {
+            text-shadow: 0 0 20px rgba(16, 185, 129, 0.5), 0 0 40px rgba(16, 185, 129, 0.2)
+        }
+
+        .glow-purple {
+            text-shadow: 0 0 20px rgba(139, 92, 246, 0.5), 0 0 40px rgba(139, 92, 246, 0.2)
+        }
+
+        .glow-red {
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.5), 0 0 40px rgba(239, 68, 68, 0.2)
         }
 
         .nav-active {
-            background: rgba(99, 102, 241, 0.15);
-            border: 1px solid rgba(99, 102, 241, 0.30);
-            box-shadow: 0 0 14px rgba(99, 102, 241, 0.20);
-            color: #818cf8 !important;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.15));
+            border: 1px solid rgba(99, 102, 241, 0.40);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            color: #a5b4fc !important;
             font-weight: bold;
-            transform: translateY(-2px)
+            transform: translateY(-2px);
+            animation: pulse-glow 2s ease-in-out infinite
         }
 
         .modal-bg {
@@ -301,13 +461,19 @@ $flashError = get_flash('error');
         }
 
         .progress-orange {
-            background: linear-gradient(90deg, #f97316, #fbbf24);
-            box-shadow: 0 0 10px rgba(249, 115, 22, .40)
+            background: linear-gradient(90deg, #f97316, #fbbf24, #f97316);
+            background-size: 200% 100%;
+            box-shadow: 0 0 15px rgba(249, 115, 22, .50);
+            animation: shimmer 2s ease-in-out infinite;
+            border-radius: 999px
         }
 
         .progress-green {
-            background: linear-gradient(90deg, #10b981, #34d399);
-            box-shadow: 0 0 10px rgba(16, 185, 129, .40)
+            background: linear-gradient(90deg, #10b981, #34d399, #10b981);
+            background-size: 200% 100%;
+            box-shadow: 0 0 15px rgba(16, 185, 129, .50);
+            animation: shimmer 2s ease-in-out infinite;
+            border-radius: 999px
         }
 
         @keyframes slideInRight {
@@ -348,7 +514,7 @@ $flashError = get_flash('error');
 
 <body class="text-slate-200">
 
-    <header class="sticky top-0 z-40 border-b border-white/[0.07] bg-[#0d1526]/90 backdrop-blur-md">
+    <header class="sticky top-0 z-40 border-b border-white/[0.07] bg-[rgb(8,16,40)]/95 backdrop-blur-xl">
         <div class="mx-auto flex w-full max-w-6xl flex-wrap items-start justify-between gap-3 px-4 py-3 sm:items-center">
             <a href="<?= e(app_url('/dashboard.php')) ?>" class="flex items-center gap-2">
                 <span class="text-xl">📊</span>

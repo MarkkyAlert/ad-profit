@@ -44,14 +44,47 @@ $flashError = get_flash('error');
         }
 
         .bg-animated {
-            background-color: rgb(8, 16, 40)
+            background-color: rgb(8, 16, 40);
+            position: relative;
+            overflow: hidden
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) }
+            50% { transform: translateY(-10px) }
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% center }
+            100% { background-position: 200% center }
         }
 
         .glass-card {
-            background-color: rgb(11, 23, 57);
-            border: 1px solid #1e293b;
-            border-radius: 14px;
-            box-shadow: rgba(1, 5, 17, 0.3) 0px 8px 28px 0px
+            background: linear-gradient(145deg, rgba(14, 28, 65, 0.95) 0%, rgba(11, 23, 57, 0.9) 100%);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 20px;
+            box-shadow: rgba(1, 5, 17, 0.5) 0px 20px 60px 0px,
+                        0 0 40px rgba(99, 102, 241, 0.1),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            position: relative;
+            z-index: 1;
+            animation: float 6s ease-in-out infinite
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), transparent 50%, rgba(139, 92, 246, 0.3));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none
         }
 
         .text-gradient {
@@ -69,15 +102,30 @@ $flashError = get_flash('error');
             border: none;
             border-radius: 12px;
             cursor: pointer;
-            transition: transform .15s, box-shadow .15s;
+            transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
-            padding: 12px;
-            font-size: 1rem
+            padding: 14px;
+            font-size: 1rem;
+            position: relative;
+            overflow: hidden
+        }
+
+        .btn-orange::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.25) 50%, transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.5s ease
         }
 
         .btn-orange:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(249, 115, 22, .35)
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 12px 35px rgba(249, 115, 22, .5), 0 0 25px rgba(249, 115, 22, 0.3)
+        }
+
+        .btn-orange:hover::before {
+            transform: translateX(100%)
         }
 
         .btn-primary {
@@ -88,15 +136,30 @@ $flashError = get_flash('error');
             border: none;
             border-radius: 12px;
             cursor: pointer;
-            transition: transform .15s, box-shadow .15s;
+            transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
-            padding: 12px;
-            font-size: 1rem
+            padding: 14px;
+            font-size: 1rem;
+            position: relative;
+            overflow: hidden
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.25) 50%, transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.5s ease
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(99, 102, 241, .35)
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 12px 35px rgba(99, 102, 241, .5), 0 0 25px rgba(99, 102, 241, 0.3)
+        }
+
+        .btn-primary:hover::before {
+            transform: translateX(100%)
         }
 
         input {
@@ -117,10 +180,10 @@ $flashError = get_flash('error');
         }
 
         .tab-active {
-            background: rgba(99, 102, 241, 0.18);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.2));
             color: #a5b4fc;
-            box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
-            border: 1px solid rgba(99, 102, 241, 0.30)
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.40)
         }
 
         @keyframes slideInRight {
@@ -151,8 +214,11 @@ $flashError = get_flash('error');
 </head>
 
 <body class="bg-animated min-h-screen text-slate-200">
+    <!-- Floating ambient orbs -->
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
 
-    <div class="flex min-h-screen w-full items-center justify-center px-4 py-10">
+    <div class="flex min-h-screen w-full items-center justify-center px-4 py-10 relative z-10">
         <div class="w-full max-w-md">
             <div class="mb-8 text-center">
                 <div class="mb-3 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-3xl shadow-sm">📊</div>
@@ -196,9 +262,6 @@ $flashError = get_flash('error');
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="ตั้งชื่อผู้ใช้">
                         </div>
-                        <div>
-                            <label for="register-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>
-                            <input id="register-password" name="password" type="password" required minlength="4"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="อย่างน้อย 4 ตัวอักษร">
                         </div>
