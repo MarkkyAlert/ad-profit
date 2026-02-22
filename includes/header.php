@@ -8,7 +8,6 @@ $username = (string)($_SESSION['username'] ?? '');
 $currentShopId = (int)($_SESSION['current_shop_id'] ?? 0);
 $currentShopName = (string)($_SESSION['current_shop_name'] ?? 'ร้านค้าของฉัน');
 $headerShops = [];
-$canDeleteCurrentShop = false;
 
 if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0) {
     $headerUserId = (int)$_SESSION['user_id'];
@@ -26,7 +25,6 @@ if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0) {
         $_SESSION['current_shop_name'] = $currentShopName;
     }
 
-    $canDeleteCurrentShop = $headerShopService->canDeleteShop($headerUserId);
     $shopCount = count($headerShops);
 }
 
@@ -539,7 +537,11 @@ $flashError = get_flash('error');
                     <span class="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-slate-300 shadow-sm">🏪 <?= e($currentShopName) ?></span>
                 <?php endif; ?>
 
-                <button type="button" id="open-shop-modal" class="btn-primary px-3 py-1.5 text-sm">+ ร้านใหม่</button>
+                <?php if ($currentPage === 'shops'): ?>
+                    <a href="<?= e(app_url('/dashboard.php')) ?>" class="btn-ghost px-3 py-1.5 text-sm" data-loading-link="true">← กลับแดชบอร์ด</a>
+                <?php else: ?>
+                    <a href="<?= e(app_url('/shops.php')) ?>" class="btn-primary px-3 py-1.5 text-sm" data-loading-link="true">🏪 จัดการร้าน</a>
+                <?php endif; ?>
                 <span class="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-400 shadow-sm">👤 <?= e($username) ?></span>
                 <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" data-confirm="ยืนยันการออกจากระบบใช่หรือไม่?">
                     <?= csrf_field() ?>
@@ -549,104 +551,6 @@ $flashError = get_flash('error');
             </div>
         </div>
     </header>
-
-    <div id="shop-modal" class="modal-bg fixed inset-0 z-50 hidden items-center justify-center p-4">
-        <div class="section-card w-full max-w-md p-6 shadow-2xl shadow-black/50">
-            <div class="mb-5 flex items-center justify-between">
-                <h2 class="text-lg font-bold text-slate-100">🏪 จัดการร้านค้า</h2>
-                <button type="button" id="close-shop-modal" class="btn-ghost rounded-lg px-3 py-1 text-sm">ปิด ✕</button>
-            </div>
-
-            <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="space-y-4">
-                <?= csrf_field() ?>
-                <input type="hidden" name="action" value="create">
-                <input type="hidden" name="redirect_to" value="<?= e($redirectTo) ?>">
-
-                <div>
-                    <label for="new-shop-name" class="mb-1.5 block text-sm font-medium text-slate-300">ชื่อร้านใหม่</label>
-                    <input id="new-shop-name" name="name" type="text" required maxlength="100"
-                        class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
-                        placeholder="เช่น ร้านเสื้อออนไลน์">
-                </div>
-
-                <div class="flex justify-end gap-2">
-                    <button type="button" id="cancel-shop-modal" class="btn-ghost px-4 py-2 text-sm">ยกเลิก</button>
-                    <button type="submit" class="btn-primary px-4 py-2 text-sm">✨ สร้างร้าน</button>
-                </div>
-            </form>
-
-            <div class="mt-5 border-t border-white/10 pt-5">
-                <h3 class="text-sm font-semibold text-slate-200">⚠️ ลบร้านที่เลือกอยู่</h3>
-                <p class="mt-1 text-xs text-slate-400">ข้อมูลทั้งหมดในร้าน (ยอดขาย, ค่าแอด, เป้าหมาย) จะถูกลบถาวร</p>
-
-                <form id="delete-current-shop-form" action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="mt-3">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="shop_id" value="<?= e((string)$currentShopId) ?>">
-                    <input type="hidden" name="redirect_to" value="<?= e($redirectTo) ?>">
-
-                    <?php if ($canDeleteCurrentShop): ?>
-                        <button type="submit" class="btn-danger px-4 py-2 text-sm">🗑️ ลบร้านปัจจุบัน</button>
-                    <?php else: ?>
-                        <button type="button" disabled class="cursor-not-allowed rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-500">🗑️ ลบร้านปัจจุบัน</button>
-                    <?php endif; ?>
-                </form>
-
-                <?php if (!$canDeleteCurrentShop): ?>
-                    <p class="mt-2 text-xs text-amber-400 font-medium">⚠ ต้องมีอย่างน้อย 2 ร้าน จึงจะลบร้านได้</p>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        (function() {
-            const modal = document.getElementById('shop-modal');
-            const openButton = document.getElementById('open-shop-modal');
-            const closeButton = document.getElementById('close-shop-modal');
-            const cancelButton = document.getElementById('cancel-shop-modal');
-            const deleteForm = document.getElementById('delete-current-shop-form');
-
-            if (!modal || !openButton) {
-                return;
-            }
-
-            const openModal = () => {
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-            };
-
-            const closeModal = () => {
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-            };
-
-            openButton.addEventListener('click', openModal);
-
-            [closeButton, cancelButton].forEach((button) => {
-                if (!button) {
-                    return;
-                }
-
-                button.addEventListener('click', closeModal);
-            });
-
-            modal.addEventListener('click', (event) => {
-                if (event.target === modal) {
-                    closeModal();
-                }
-            });
-
-            if (deleteForm) {
-                deleteForm.addEventListener('submit', (event) => {
-                    const accepted = window.confirm('ยืนยันการลบร้านนี้ใช่หรือไม่? ข้อมูลทั้งหมดในร้านจะถูกลบถาวร');
-                    if (!accepted) {
-                        event.preventDefault();
-                    }
-                });
-            }
-        })();
-    </script>
 
     <main class="mx-auto min-h-[calc(100vh-160px)] w-full max-w-6xl px-4 py-6 pb-24">
         <?php if ($flashSuccess !== null): ?>

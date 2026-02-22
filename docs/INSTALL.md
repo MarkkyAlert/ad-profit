@@ -86,3 +86,25 @@
 - ถ้า redirect path เพี้ยน:
   - ตั้ง `APP_URL` ใน environment หรือแก้ใน `includes/config.php`
 - log error อยู่ที่: `logs/php-error.log`
+
+## 9) Cron Jobs (แนะนำสำหรับ production)
+
+สคริปต์ที่ควรตั้งเวลา:
+
+1. `cron/cleanup-idempotency.php`
+   - หน้าที่: ลบ row ใน `idempotency_requests` ที่หมดอายุ (`expires_at < NOW()`)
+   - แนะนำ: รันวันละครั้ง
+
+2. `cron/cleanup-logs.php`
+   - หน้าที่: ลบไฟล์ใน `logs/` ที่เก่ากว่า 30 วัน
+   - แนะนำ: รันสัปดาห์ละครั้ง
+
+ตัวอย่าง `crontab`:
+
+```cron
+# cleanup idempotency ทุกวันเวลา 02:00
+0 2 * * * /usr/bin/php /path/to/ad-profit/cron/cleanup-idempotency.php >> /path/to/ad-profit/logs/cron-cleanup.log 2>&1
+
+# cleanup logs ทุกวันอาทิตย์เวลา 03:00
+0 3 * * 0 /usr/bin/php /path/to/ad-profit/cron/cleanup-logs.php >> /path/to/ad-profit/logs/cron-cleanup.log 2>&1
+```

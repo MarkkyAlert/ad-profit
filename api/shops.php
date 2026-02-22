@@ -144,6 +144,50 @@ if ($action === 'create') {
     ], 200, $redirectPath);
 }
 
+if ($action === 'rename') {
+    if (!is_post_request()) {
+        $respond([
+            'success' => false,
+            'error' => 'Method Not Allowed',
+        ], 405, $redirectPath);
+    }
+
+    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
+        $respond([
+            'success' => false,
+            'error' => 'Invalid CSRF token',
+        ], 403, $redirectPath);
+    }
+
+    $shopId = (int)($_POST['shop_id'] ?? 0);
+    $shopName = (string)($_POST['name'] ?? '');
+    $renameResult = $shopService->renameShop($userId, $shopId, $shopName);
+
+    if (($renameResult['success'] ?? false) !== true || !is_array($renameResult['shop'] ?? null)) {
+        $errorMessage = (string)($renameResult['error'] ?? 'ไม่สามารถอัปเดตชื่อร้านค้าได้');
+        $statusCode = str_contains($errorMessage, 'ไม่มีสิทธิ์') ? 403 : 422;
+
+        $respond([
+            'success' => false,
+            'error' => $errorMessage,
+        ], $statusCode, $redirectPath);
+    }
+
+    $shop = (array)$renameResult['shop'];
+    if ((int)($_SESSION['current_shop_id'] ?? 0) === (int)($shop['id'] ?? 0)) {
+        $_SESSION['current_shop_name'] = (string)($shop['name'] ?? '');
+    }
+
+    $respond([
+        'success' => true,
+        'message' => 'อัปเดตชื่อร้านค้าเรียบร้อยแล้ว',
+        'data' => [
+            'shop_id' => (int)($shop['id'] ?? 0),
+            'shop_name' => (string)($shop['name'] ?? ''),
+        ],
+    ], 200, $redirectPath);
+}
+
 if ($action === 'switch') {
     if (!is_post_request()) {
         $respond([
@@ -214,23 +258,40 @@ if ($action === 'delete') {
         ], $statusCode, $redirectPath);
     }
 
-    $nextShop = is_array($deleteResult['next_shop'] ?? null) ? (array)$deleteResult['next_shop'] : null;
-    if ($nextShop === null) {
-        $respond([
-            'success' => false,
-            'error' => 'ไม่พบร้านค้าสำหรับใช้งานต่อ',
-        ], 500, '/login.php');
+    $deletedShop = is_array($deleteResult['deleted_shop'] ?? null) ? (array)$deleteResult['deleted_shop'] : [];
+    $deletedShopId = (int)($deletedShop['id'] ?? 0);
+
+    $currentSessionShopId = (int)($_SESSION['current_shop_id'] ?? 0);
+    $activeShop = null;
+
+    if ($currentSessionShopId > 0 && $currentSessionShopId !== $deletedShopId) {
+        $activeShopResult = $shopService->switchShop($userId, $currentSessionShopId);
+        if (($activeShopResult['success'] ?? false) === true && is_array($activeShopResult['shop'] ?? null)) {
+            $activeShop = (array)$activeShopResult['shop'];
+        }
     }
 
-    $_SESSION['current_shop_id'] = (int)($nextShop['id'] ?? 0);
-    $_SESSION['current_shop_name'] = (string)($nextShop['name'] ?? '');
+    if ($activeShop === null) {
+        $nextShop = is_array($deleteResult['next_shop'] ?? null) ? (array)$deleteResult['next_shop'] : null;
+        if ($nextShop === null) {
+            $respond([
+                'success' => false,
+                'error' => 'ไม่พบร้านค้าสำหรับใช้งานต่อ',
+            ], 500, '/login.php');
+        }
+
+        $activeShop = $nextShop;
+    }
+
+    $_SESSION['current_shop_id'] = (int)($activeShop['id'] ?? 0);
+    $_SESSION['current_shop_name'] = (string)($activeShop['name'] ?? '');
 
     $respond([
         'success' => true,
         'message' => 'ลบร้านค้าเรียบร้อยแล้ว',
         'data' => [
-            'shop_id' => (int)($nextShop['id'] ?? 0),
-            'shop_name' => (string)($nextShop['name'] ?? ''),
+            'shop_id' => (int)($activeShop['id'] ?? 0),
+            'shop_name' => (string)($activeShop['name'] ?? ''),
         ],
     ], 200, $redirectPath);
 }

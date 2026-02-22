@@ -70,6 +70,78 @@ class ShopService
         ];
     }
 
+    public function renameShop(int $userId, int $shopId, string $name): array
+    {
+        if ($shopId <= 0) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบร้านค้าที่ต้องการแก้ไข',
+            ];
+        }
+
+        $shopName = trim($name);
+        if ($shopName === '') {
+            return [
+                'success' => false,
+                'error' => 'กรุณาระบุชื่อร้านค้า',
+            ];
+        }
+
+        $nameLength = function_exists('mb_strlen') ? mb_strlen($shopName) : strlen($shopName);
+        if ($nameLength > 100) {
+            return [
+                'success' => false,
+                'error' => 'ชื่อร้านค้ายาวเกิน 100 ตัวอักษร',
+            ];
+        }
+
+        $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
+        if ($shop === null) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์แก้ไขร้านค้านี้',
+            ];
+        }
+
+        $existingName = trim((string)($shop['name'] ?? ''));
+        if ($existingName === $shopName) {
+            return [
+                'success' => true,
+                'shop' => $shop,
+            ];
+        }
+
+        try {
+            $updated = $this->shopRepository->updateNameByIdAndUserId($shopId, $userId, $shopName);
+        } catch (Throwable $exception) {
+            error_log('[shop] renameShop failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถอัปเดตชื่อร้านค้าได้',
+            ];
+        }
+
+        if (!$updated) {
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถอัปเดตชื่อร้านค้าได้',
+            ];
+        }
+
+        $updatedShop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
+        if ($updatedShop === null) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบร้านค้าที่อัปเดตแล้ว',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'shop' => $updatedShop,
+        ];
+    }
+
     public function switchShop(int $userId, int $shopId): array
     {
         if ($shopId <= 0) {

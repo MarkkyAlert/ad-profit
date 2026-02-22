@@ -83,6 +83,22 @@ class ShopRepository
         return (int)($result['total'] ?? 0);
     }
 
+    public function updateNameByIdAndUserId(int $shopId, int $userId, string $name): bool
+    {
+        $sql = 'UPDATE shops
+                SET name = :name
+                WHERE id = :shop_id AND user_id = :user_id';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':name' => $name,
+            ':shop_id' => $shopId,
+            ':user_id' => $userId,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
     public function deleteByIdAndUserId(int $shopId, int $userId): bool
     {
         $sql = 'DELETE FROM shops
