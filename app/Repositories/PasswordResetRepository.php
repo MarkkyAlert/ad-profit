@@ -13,10 +13,12 @@ class PasswordResetRepository
 
     public function createToken(int $userId, string $tokenHash, string $expiresAt): bool
     {
-        $this->deleteByUserId($userId);
-
         $sql = 'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
-                VALUES (:user_id, :token_hash, :expires_at)';
+                VALUES (:user_id, :token_hash, :expires_at)
+                ON DUPLICATE KEY UPDATE
+                    token_hash = VALUES(token_hash),
+                    expires_at = VALUES(expires_at),
+                    created_at = CURRENT_TIMESTAMP';
 
         $stmt = $this->db->prepare($sql);
 

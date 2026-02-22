@@ -110,9 +110,11 @@ SELECT 'password_reset_tokens.uq_password_reset_token_hash' AS item, COUNT(*) AS
 | Variable | Default | คำอธิบาย |
 |----------|---------|---------|
 | `APP_ENV` | development | ตั้งเป็น `production` สำหรับ prod |
+| `APP_URL` | (empty) | **ต้องตั้งค่าใน production** เช่น `https://example.com` |
 | `SESSION_IDLE_TIMEOUT_SECONDS` | 14400 (4 ชม.) | หมดอายุหากไม่มีการใช้งาน |
 | `SESSION_ABSOLUTE_TIMEOUT_SECONDS` | 86400 (24 ชม.) | หมดอายุหลัง login |
 | `SCHEMA_GUARD_ENABLED` | true | ตรวจ schema ก่อนใช้งาน (ปิดได้ชั่วคราว) |
+| `TRUST_PROXY` | false | เปิดเฉพาะกรณีรันหลัง trusted reverse proxy |
 | `MAIL_TIMEOUT_SECONDS` | 15 | timeout การส่งอีเมล |
 | `MAIL_RETRY_ATTEMPTS` | 1 | จำนวนครั้งที่ retry หากส่งไม่สำเร็จ |
 

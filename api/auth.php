@@ -198,7 +198,8 @@ if ($action === 'reset_password') {
     $result = $authService->resetPassword(
         (string)($_POST['token'] ?? ''),
         (string)($_POST['password'] ?? ''),
-        (string)($_POST['password_confirm'] ?? '')
+        (string)($_POST['password_confirm'] ?? ''),
+        client_ip()
     );
 
     if (($result['success'] ?? false) === true) {

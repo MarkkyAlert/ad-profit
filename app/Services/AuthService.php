@@ -31,7 +31,7 @@ class AuthService
     {
         $normalizedEmail = $this->normalizeEmail($email);
 
-        if ($this->isRateLimited('register', $clientIp)) {
+        if ($this->isRateLimited('register', $clientIp, $normalizedEmail)) {
             return [
                 'success' => false,
                 'error' => 'ลองสมัครบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
@@ -39,7 +39,7 @@ class AuthService
         }
 
         if ($normalizedEmail === '' || !$this->isValidEmail($normalizedEmail)) {
-            $this->markFailedAttempt('register', $clientIp);
+            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
@@ -47,23 +47,23 @@ class AuthService
         }
 
         if (strlen($normalizedEmail) > 255) {
-            $this->markFailedAttempt('register', $clientIp);
+            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'อีเมลยาวเกินไป',
             ];
         }
 
-        if (strlen($password) < 4) {
-            $this->markFailedAttempt('register', $clientIp);
+        if (strlen($password) < 8) {
+            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร',
+                'error' => 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร',
             ];
         }
 
         if ($password !== $passwordConfirm) {
-            $this->markFailedAttempt('register', $clientIp);
+            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน',
@@ -71,7 +71,7 @@ class AuthService
         }
 
         if ($this->userRepository->findByEmail($normalizedEmail) !== null) {
-            $this->markFailedAttempt('register', $clientIp);
+            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่อีกครั้ง',
@@ -100,7 +100,7 @@ class AuthService
                 $this->db->rollBack();
             }
 
-            $this->markFailedAttempt('register', $clientIp);
+            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             error_log('[auth][register] ' . $exception->getMessage());
 
             $isDuplicateUser = $exception instanceof PDOException && $exception->getCode() === '23000';
@@ -118,7 +118,7 @@ class AuthService
         }
 
         $this->establishSession($userId, $normalizedEmail, $shopId, self::DEFAULT_SHOP_NAME);
-        $this->clearRateLimit('register', $clientIp);
+        $this->clearRateLimit('register', $clientIp, $normalizedEmail);
 
         return [
             'success' => true,
@@ -131,7 +131,7 @@ class AuthService
     {
         $normalizedEmail = $this->normalizeEmail($email);
 
-        if ($this->isRateLimited('login', $clientIp)) {
+        if ($this->isRateLimited('login', $clientIp, $normalizedEmail)) {
             return [
                 'success' => false,
                 'error' => 'ลองเข้าสู่ระบบบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
@@ -139,7 +139,7 @@ class AuthService
         }
 
         if ($normalizedEmail === '' || $password === '') {
-            $this->markFailedAttempt('login', $clientIp);
+            $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลและรหัสผ่าน',
@@ -148,7 +148,7 @@ class AuthService
 
         $user = $this->userRepository->findByEmail($normalizedEmail);
         if ($user === null) {
-            $this->markFailedAttempt('login', $clientIp);
+            $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -157,7 +157,7 @@ class AuthService
 
         $passwordHash = (string)($user['password_hash'] ?? '');
         if (!password_verify($password, $passwordHash)) {
-            $this->markFailedAttempt('login', $clientIp);
+            $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -186,7 +186,7 @@ class AuthService
 
         $this->userRepository->updateLastLoginAt($userId);
         $this->establishSession($userId, $userEmail, $shopId, $shopName);
-        $this->clearRateLimit('login', $clientIp);
+        $this->clearRateLimit('login', $clientIp, $normalizedEmail);
 
         return [
             'success' => true,
@@ -222,18 +222,29 @@ class AuthService
 
         $normalizedEmail = $this->normalizeEmail($email);
 
-        if ($this->isRateLimited('password_reset', $clientIp)) {
+        if ($this->isRateLimited('password_reset', $clientIp, $normalizedEmail)) {
             return [
                 'success' => false,
                 'error' => 'ลองขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่',
             ];
         }
 
+        // Count every password-reset request in the window to prevent abuse/spam.
+        $this->markFailedAttempt('password_reset', $clientIp, $normalizedEmail);
+
         if ($normalizedEmail === '' || !$this->isValidEmail($normalizedEmail)) {
-            $this->markFailedAttempt('password_reset', $clientIp);
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
+            ];
+        }
+
+        $hasAbsoluteAppUrl = preg_match('#^https?://#i', APP_URL) === 1;
+        if (APP_ENV === 'production' && !$hasAbsoluteAppUrl) {
+            error_log('[auth][password_reset] APP_URL must be an absolute URL in production for password reset links');
+            return [
+                'success' => false,
+                'error' => 'ระบบยังไม่พร้อมใช้งานในขณะนี้',
             ];
         }
 
@@ -260,8 +271,6 @@ class AuthService
             ];
         }
 
-        $this->clearRateLimit('password_reset', $clientIp);
-
         $resetLink = app_url('/reset-password.php?token=' . $token);
         $emailSent = false;
 
@@ -275,7 +284,7 @@ class AuthService
             'email_sent' => $emailSent,
         ];
 
-        if (APP_ENV === 'development' || !$emailSent) {
+        if (APP_ENV === 'development') {
             $response['token'] = $token;
             $response['email'] = $normalizedEmail;
         }
@@ -283,7 +292,7 @@ class AuthService
         return $response;
     }
 
-    public function resetPassword(string $token, string $newPassword, string $passwordConfirm): array
+    public function resetPassword(string $token, string $newPassword, string $passwordConfirm, string $clientIp): array
     {
         if ($this->passwordResetRepository === null) {
             return [
@@ -292,17 +301,26 @@ class AuthService
             ];
         }
 
+        $rateLimitSubject = '';
+        if ($this->isRateLimited('reset_password', $clientIp, $rateLimitSubject)) {
+            return [
+                'success' => false,
+                'error' => 'ลองรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่',
+            ];
+        }
+
         if ($token === '') {
+            $this->markFailedAttempt('reset_password', $clientIp, $rateLimitSubject);
             return [
                 'success' => false,
                 'error' => 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง',
             ];
         }
 
-        if (strlen($newPassword) < 4) {
+        if (strlen($newPassword) < 8) {
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร',
+                'error' => 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร',
             ];
         }
 
@@ -336,6 +354,8 @@ class AuthService
                 if ($startedTransaction && $this->db->inTransaction()) {
                     $this->db->rollBack();
                 }
+
+                $this->markFailedAttempt('reset_password', $clientIp, $rateLimitSubject);
 
                 return [
                     'success' => false,
@@ -383,6 +403,8 @@ class AuthService
             ];
         }
 
+        $this->clearRateLimit('reset_password', $clientIp, $rateLimitSubject);
+
         return [
             'success' => true,
             'message' => 'รีเซ็ตรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่',
@@ -411,44 +433,44 @@ class AuthService
         return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 
-    private function isRateLimited(string $action, string $clientIp): bool
+    private function isRateLimited(string $action, string $clientIp, string $subject = ''): bool
     {
         if ($this->canUseDatabaseRateLimit()) {
             try {
-                return $this->isRateLimitedInDatabase($action, $clientIp);
+                return $this->isRateLimitedInDatabase($action, $clientIp, $subject);
             } catch (Throwable $exception) {
                 error_log('[auth][rate_limit] DB read failed, fallback to session limiter: ' . $exception->getMessage());
             }
         }
 
-        $bucket = $this->getRateLimitBucket($action, $clientIp);
+        $bucket = $this->getRateLimitBucket($action, $clientIp, $subject);
 
         return (int)$bucket['attempts'] >= RATE_LIMIT_MAX_ATTEMPTS;
     }
 
-    private function markFailedAttempt(string $action, string $clientIp): void
+    private function markFailedAttempt(string $action, string $clientIp, string $subject = ''): void
     {
         if ($this->canUseDatabaseRateLimit()) {
             try {
-                $this->markFailedAttemptInDatabase($action, $clientIp);
+                $this->markFailedAttemptInDatabase($action, $clientIp, $subject);
                 return;
             } catch (Throwable $exception) {
                 error_log('[auth][rate_limit] DB write failed, fallback to session limiter: ' . $exception->getMessage());
             }
         }
 
-        $bucket = $this->getRateLimitBucket($action, $clientIp);
+        $bucket = $this->getRateLimitBucket($action, $clientIp, $subject);
         $bucket['attempts'] = (int)$bucket['attempts'] + 1;
 
-        $key = $this->rateLimitKey($action, $clientIp);
+        $key = $this->rateLimitKey($action, $clientIp, $subject);
         $_SESSION['auth_rate_limits'][$key] = $bucket;
     }
 
-    private function clearRateLimit(string $action, string $clientIp): void
+    private function clearRateLimit(string $action, string $clientIp, string $subject = ''): void
     {
         if ($this->canUseDatabaseRateLimit()) {
             try {
-                $this->clearRateLimitInDatabase($action, $clientIp);
+                $this->clearRateLimitInDatabase($action, $clientIp, $subject);
                 return;
             } catch (Throwable $exception) {
                 error_log('[auth][rate_limit] DB clear failed, fallback to session limiter: ' . $exception->getMessage());
@@ -459,17 +481,17 @@ class AuthService
             return;
         }
 
-        $key = $this->rateLimitKey($action, $clientIp);
+        $key = $this->rateLimitKey($action, $clientIp, $subject);
         unset($_SESSION['auth_rate_limits'][$key]);
     }
 
-    private function getRateLimitBucket(string $action, string $clientIp): array
+    private function getRateLimitBucket(string $action, string $clientIp, string $subject = ''): array
     {
         if (!isset($_SESSION['auth_rate_limits']) || !is_array($_SESSION['auth_rate_limits'])) {
             $_SESSION['auth_rate_limits'] = [];
         }
 
-        $key = $this->rateLimitKey($action, $clientIp);
+        $key = $this->rateLimitKey($action, $clientIp, $subject);
         $now = time();
 
         $bucket = $_SESSION['auth_rate_limits'][$key] ?? [
@@ -495,9 +517,11 @@ class AuthService
         return $normalizedBucket;
     }
 
-    private function rateLimitKey(string $action, string $clientIp): string
+    private function rateLimitKey(string $action, string $clientIp, string $subject = ''): string
     {
-        return hash('sha256', $action . '|' . $clientIp);
+        $normalizedSubject = strtolower(trim($subject));
+
+        return hash('sha256', $action . '|' . $clientIp . '|' . $normalizedSubject);
     }
 
     private function canUseDatabaseRateLimit(): bool
@@ -527,9 +551,9 @@ class AuthService
         }
     }
 
-    private function isRateLimitedInDatabase(string $action, string $clientIp): bool
+    private function isRateLimitedInDatabase(string $action, string $clientIp, string $subject = ''): bool
     {
-        $key = $this->rateLimitKey($action, $clientIp);
+        $key = $this->rateLimitKey($action, $clientIp, $subject);
 
         $sql = 'SELECT attempts, started_at
                 FROM auth_rate_limits
@@ -560,13 +584,13 @@ class AuthService
         return $attempts >= RATE_LIMIT_MAX_ATTEMPTS;
     }
 
-    private function markFailedAttemptInDatabase(string $action, string $clientIp): void
+    private function markFailedAttemptInDatabase(string $action, string $clientIp, string $subject = ''): void
     {
         if (random_int(1, 100) === 1) {
             $this->cleanupStaleRateLimitBucketsInDatabase();
         }
 
-        $key = $this->rateLimitKey($action, $clientIp);
+        $key = $this->rateLimitKey($action, $clientIp, $subject);
 
         $sql = 'INSERT INTO auth_rate_limits (bucket_key, action_type, client_ip, attempts, started_at, updated_at)
                 VALUES (:bucket_key, :action_type, :client_ip, 1, NOW(), NOW())
@@ -590,9 +614,9 @@ class AuthService
         ]);
     }
 
-    private function clearRateLimitInDatabase(string $action, string $clientIp): void
+    private function clearRateLimitInDatabase(string $action, string $clientIp, string $subject = ''): void
     {
-        $key = $this->rateLimitKey($action, $clientIp);
+        $key = $this->rateLimitKey($action, $clientIp, $subject);
 
         $sql = 'DELETE FROM auth_rate_limits
                 WHERE bucket_key = :bucket_key';

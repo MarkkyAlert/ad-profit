@@ -225,10 +225,10 @@ class ProfileService
             ];
         }
 
-        if (strlen($newPassword) < 4) {
+        if (strlen($newPassword) < 8) {
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร',
+                'error' => 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร',
             ];
         }
 

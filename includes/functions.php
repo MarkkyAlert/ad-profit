@@ -186,10 +186,37 @@ function get_flash(string $key): ?string
 
 function client_ip(): string
 {
-    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-    if ($ip === '') {
-        return 'unknown';
+    $candidates = [];
+
+    if (defined('TRUST_PROXY') && TRUST_PROXY) {
+        $forwardedFor = (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+        if ($forwardedFor !== '') {
+            foreach (explode(',', $forwardedFor) as $forwardedIp) {
+                $candidate = trim($forwardedIp);
+                if ($candidate !== '') {
+                    $candidates[] = $candidate;
+                }
+            }
+        }
+
+        $realIp = trim((string)($_SERVER['HTTP_X_REAL_IP'] ?? ''));
+        if ($realIp !== '') {
+            $candidates[] = $realIp;
+        }
     }
 
-    return substr($ip, 0, 45);
+    $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+    if ($remoteAddr !== '') {
+        $candidates[] = $remoteAddr;
+    }
+
+    foreach ($candidates as $candidate) {
+        if (filter_var($candidate, FILTER_VALIDATE_IP) === false) {
+            continue;
+        }
+
+        return substr($candidate, 0, 45);
+    }
+
+    return 'unknown';
 }

@@ -82,14 +82,6 @@ class RecordService
             ];
         }
 
-        $existingRecord = $this->recordRepository->findByIdAndShopId($recordId, $shopId);
-        if ($existingRecord === null) {
-            return [
-                'success' => false,
-                'error' => 'ไม่พบรายการที่ต้องการแก้ไข',
-            ];
-        }
-
         $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note);
         if (($validation['success'] ?? false) !== true) {
             return $validation;
@@ -99,6 +91,16 @@ class RecordService
 
         try {
             $this->beginTransactionIfAvailable();
+
+            $existingRecord = $this->recordRepository->findByIdAndShopIdForUpdate($recordId, $shopId);
+            if ($existingRecord === null) {
+                $this->rollBackTransactionIfAvailable();
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่พบรายการที่ต้องการแก้ไข',
+                ];
+            }
 
             $this->recordRepository->upsert(
                 $shopId,
@@ -112,7 +114,15 @@ class RecordService
             $newDate = (string)$payload['record_date'];
 
             if ($oldDate !== $newDate) {
-                $this->recordRepository->deleteByIdAndShopId($recordId, $shopId);
+                $deletedOldRow = $this->recordRepository->deleteByIdAndShopId($recordId, $shopId);
+                if (!$deletedOldRow) {
+                    $this->rollBackTransactionIfAvailable();
+
+                    return [
+                        'success' => false,
+                        'error' => 'ไม่สามารถแก้ไขรายการได้',
+                    ];
+                }
             }
 
             $this->commitTransactionIfAvailable();
@@ -252,12 +262,19 @@ class RecordService
         }
 
         try {
-            $this->recordRepository->deleteByIdAndShopId($recordId, $shopId);
+            $deleted = $this->recordRepository->deleteByIdAndShopId($recordId, $shopId);
         } catch (Throwable $exception) {
             error_log('[record] deleteRecord failed: ' . $exception->getMessage());
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถลบรายการได้',
+            ];
+        }
+
+        if (!$deleted) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบรายการที่ต้องการลบ',
             ];
         }
 

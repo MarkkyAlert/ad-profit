@@ -51,23 +51,29 @@ if (!defined('APP_NAME')) {
 }
 
 if (!defined('APP_URL')) {
-    $documentRoot = rtrim(str_replace('\\', '/', (string)($_SERVER['DOCUMENT_ROOT'] ?? '')), '/');
-    $projectRoot = str_replace('\\', '/', dirname(__DIR__));
-    $detectedAppUrl = '';
+    $configuredAppUrl = trim((string)(getenv('APP_URL') ?: ''));
 
-    if ($documentRoot !== '' && str_starts_with($projectRoot, $documentRoot)) {
-        $detectedAppUrl = substr($projectRoot, strlen($documentRoot));
-        if ($detectedAppUrl === false) {
-            $detectedAppUrl = '';
+    if ($configuredAppUrl !== '') {
+        define('APP_URL', rtrim($configuredAppUrl, '/'));
+    } else {
+        $documentRoot = rtrim(str_replace('\\', '/', (string)($_SERVER['DOCUMENT_ROOT'] ?? '')), '/');
+        $projectRoot = str_replace('\\', '/', dirname(__DIR__));
+        $detectedAppPath = '';
+
+        if ($documentRoot !== '' && str_starts_with($projectRoot, $documentRoot)) {
+            $detectedAppPath = substr($projectRoot, strlen($documentRoot));
+            if ($detectedAppPath === false) {
+                $detectedAppPath = '';
+            }
+        }
+
+        if (APP_ENV === 'production') {
+            // In production, force explicit APP_URL from environment to avoid Host header poisoning.
+            define('APP_URL', '');
+        } else {
+            define('APP_URL', rtrim($detectedAppPath, '/'));
         }
     }
-
-    if (php_sapi_name() !== 'cli' && isset($_SERVER['HTTP_HOST'])) {
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-        $detectedAppUrl = $protocol . $_SERVER['HTTP_HOST'] . $detectedAppUrl;
-    }
-
-    define('APP_URL', rtrim((string)(getenv('APP_URL') ?: $detectedAppUrl), '/'));
 }
 
 if (!defined('APP_TIMEZONE')) {
@@ -116,6 +122,10 @@ if (!defined('SESSION_ABSOLUTE_TIMEOUT_SECONDS')) {
 
 if (!defined('SCHEMA_GUARD_ENABLED')) {
     define('SCHEMA_GUARD_ENABLED', filter_var(getenv('SCHEMA_GUARD_ENABLED') ?: 'true', FILTER_VALIDATE_BOOLEAN));
+}
+
+if (!defined('TRUST_PROXY')) {
+    define('TRUST_PROXY', filter_var(getenv('TRUST_PROXY') ?: 'false', FILTER_VALIDATE_BOOLEAN));
 }
 
 if (!defined('LOG_FILE')) {

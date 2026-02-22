@@ -83,6 +83,24 @@ class RecordRepository
         return $record ?: null;
     }
 
+    public function findByIdAndShopIdForUpdate(int $recordId, int $shopId): ?array
+    {
+        $sql = 'SELECT id, shop_id, record_date, revenue, ad_cost, note, created_at, updated_at
+                FROM daily_records
+                WHERE id = :record_id AND shop_id = :shop_id
+                LIMIT 1
+                FOR UPDATE';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':record_id' => $recordId,
+            ':shop_id' => $shopId,
+        ]);
+        $record = $stmt->fetch();
+
+        return $record ?: null;
+    }
+
     public function getMonthlyTotalsByMonthRange(int $shopId, string $startMonth, string $endMonth): array
     {
         $startDate = $startMonth . '-01';
@@ -120,9 +138,11 @@ class RecordRepository
 
         $stmt = $this->db->prepare($sql);
 
-        return $stmt->execute([
+        $stmt->execute([
             ':record_id' => $recordId,
             ':shop_id' => $shopId,
         ]);
+
+        return $stmt->rowCount() > 0;
     }
 }
