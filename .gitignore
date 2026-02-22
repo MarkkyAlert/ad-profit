@@ -35,3 +35,4 @@ composer.phar
 database/*.sql
 !database/schema.sql
 !database/sample_data.sql
+!database/migrations/
