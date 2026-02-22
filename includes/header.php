@@ -563,7 +563,10 @@ $flashError = get_flash('error');
                     <span class="text-[10px] text-slate-500 ml-0.5">▼</span>
                 </button>
 
-                <div id="profile-dropdown" class="hidden absolute right-0 top-full mt-1.5 w-48 origin-top-right rounded-xl border border-white/10 bg-[#0a1120] p-1.5 shadow-xl z-50 ring-1 ring-black/5">
+                <div id="profile-dropdown" class="hidden absolute right-0 top-full mt-1.5 w-56 origin-top-right rounded-xl border border-white/10 bg-[#0a1120] p-1.5 shadow-xl z-50 ring-1 ring-black/5">
+                    <a href="<?= e(app_url('/profile.php')) ?>" class="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/10 transition-colors" data-loading-link="true">
+                        <span>🧑</span> ข้อมูลส่วนตัว
+                    </a>
                     <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" data-confirm="ยืนยันการออกจากระบบใช่หรือไม่?">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="logout">
