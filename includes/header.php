@@ -53,6 +53,14 @@ $flashError = get_flash('error');
             overflow-x: hidden
         }
 
+        /* Force native calendar icons to be light colored in dark mode */
+        input[type="date"],
+        input[type="datetime-local"],
+        input[type="month"],
+        input[type="time"] {
+            color-scheme: dark;
+        }
+
         @keyframes shimmer {
             0% {
                 background-position: -200% center
@@ -539,49 +547,76 @@ $flashError = get_flash('error');
 <body class="text-slate-200">
 
     <header class="sticky top-0 z-40 border-b border-white/[0.07] bg-[rgb(8,16,40)]/95 backdrop-blur-xl">
-        <div class="mx-auto w-full max-w-6xl px-3 py-2.5 sm:px-4 sm:py-3">
-            <div class="flex items-center justify-between gap-2">
-                <a href="<?= e(app_url('/dashboard.php')) ?>" class="flex items-center gap-1.5 shrink-0">
-                    <span class="text-lg sm:text-xl">📊</span>
-                    <span class="text-gradient text-sm sm:text-lg font-bold tracking-tight">วิเคราะห์ยอดขาย</span>
-                </a>
-                <div class="flex items-center gap-1.5 sm:gap-2 text-xs">
-                    <span class="hidden sm:inline-block rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-400 shadow-sm">👤 <?= e($userEmail) ?></span>
-                    <?php if ($currentPage === 'shops'): ?>
-                        <a href="<?= e(app_url('/dashboard.php')) ?>" class="btn-ghost px-2.5 py-1.5 text-xs" data-loading-link="true">← กลับ</a>
-                    <?php else: ?>
-                        <a href="<?= e(app_url('/shops.php')) ?>" class="btn-primary px-2.5 py-1.5 text-xs" data-loading-link="true">🏪 จัดการร้าน</a>
-                    <?php endif; ?>
+        <div class="mx-auto w-full max-w-6xl px-3 py-2.5 sm:px-4 sm:py-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-3 sm:gap-4">
+
+            <!-- Logo -->
+            <a href="<?= e(app_url('/dashboard.php')) ?>" class="flex items-center gap-1.5 shrink-0 order-1">
+                <span class="text-lg sm:text-xl">📊</span>
+                <span class="text-gradient text-sm sm:text-lg font-bold tracking-tight">วิเคราะห์ยอดขาย</span>
+            </a>
+
+            <!-- User Profile Dropdown -->
+            <div class="flex justify-end relative order-2 md:order-3 shrink-0" id="profile-menu-container">
+                <button type="button" onclick="document.getElementById('profile-dropdown').classList.toggle('hidden')" class="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 sm:py-1.5 text-xs text-slate-300 shadow-sm hover:bg-white/10 transition-colors">
+                    <span>👤</span>
+                    <span class="max-w-[120px] sm:max-w-[180px] truncate" title="<?= e($userEmail) ?>"><?= e($userEmail) ?></span>
+                    <span class="text-[10px] text-slate-500 ml-0.5">▼</span>
+                </button>
+
+                <div id="profile-dropdown" class="hidden absolute right-0 top-full mt-1.5 w-48 origin-top-right rounded-xl border border-white/10 bg-[#0a1120] p-1.5 shadow-xl z-50 ring-1 ring-black/5">
                     <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" data-confirm="ยืนยันการออกจากระบบใช่หรือไม่?">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="logout">
-                        <button type="submit" class="btn-ghost px-2.5 py-1.5 text-xs">ออกจากระบบ</button>
+                        <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+                            <span>🚪</span> ออกจากระบบ
+                        </button>
                     </form>
                 </div>
             </div>
-            <?php if (!empty($headerShops)): ?>
-                <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" data-no-loading class="mt-2">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="switch">
-                    <input type="hidden" name="redirect_to" value="<?= e($redirectTo) ?>">
-                    <select name="shop_id" aria-label="เลือกร้านค้า" onchange="this.form.submit()" class="w-full rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 text-sm text-slate-300 font-medium shadow-sm hover:border-indigo-500/50 transition-colors">
-                        <?php foreach ($headerShops as $shop): ?>
-                            <?php $shopId = (int)($shop['id'] ?? 0); ?>
-                            <option value="<?= e((string)$shopId) ?>" <?= $shopId === $currentShopId ? 'selected' : '' ?>>
-                                🏪 <?= e((string)($shop['name'] ?? 'ร้านค้า')) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </form>
-            <?php else: ?>
-                <div class="mt-2">
-                    <span class="inline-block w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-300 shadow-sm">🏪 <?= e($currentShopName) ?></span>
+
+            <!-- Shop Controls -->
+            <div class="flex items-center gap-2 w-full md:w-auto md:flex-1 md:justify-end order-3 md:order-2">
+                <?php if (!empty($headerShops)): ?>
+                    <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" data-no-loading class="flex-grow sm:flex-grow-0">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="switch">
+                        <input type="hidden" name="redirect_to" value="<?= e($redirectTo) ?>">
+                        <select name="shop_id" aria-label="เลือกร้านค้า" onchange="this.form.submit()" class="w-full sm:w-48 lg:w-56 rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 sm:py-1.5 text-sm text-slate-300 font-medium shadow-sm hover:border-indigo-500/50 transition-colors">
+                            <?php foreach ($headerShops as $shop): ?>
+                                <?php $shopId = (int)($shop['id'] ?? 0); ?>
+                                <option value="<?= e((string)$shopId) ?>" <?= $shopId === $currentShopId ? 'selected' : '' ?>>
+                                    🏪 <?= e((string)($shop['name'] ?? 'ร้านค้า')) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+                <?php else: ?>
+                    <span class="inline-block flex-grow sm:flex-grow-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 sm:py-1.5 text-sm font-medium text-slate-300 shadow-sm">🏪 <?= e($currentShopName) ?></span>
+                <?php endif; ?>
+
+                <div class="shrink-0 text-xs">
+                    <?php if ($currentPage === 'shops'): ?>
+                        <a href="<?= e(app_url('/dashboard.php')) ?>" class="btn-ghost px-2.5 py-1.5 sm:px-3" data-loading-link="true">← กลับ</a>
+                    <?php else: ?>
+                        <a href="<?= e(app_url('/shops.php')) ?>" class="btn-primary px-2.5 py-1.5 sm:px-3" data-loading-link="true">🏪 จัดการร้าน</a>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
+            </div>
+
+            <script>
+                document.addEventListener('click', function(event) {
+                    const container = document.getElementById('profile-menu-container');
+                    const dropdown = document.getElementById('profile-dropdown');
+                    if (container && !container.contains(event.target)) {
+                        dropdown.classList.add('hidden');
+                    }
+                });
+            </script>
+
         </div>
     </header>
 
-    <main class="mx-auto min-h-[calc(100vh-160px)] w-full max-w-6xl px-3 py-4 pb-24 sm:px-4 sm:py-6">
+    <main class="mx-auto min-h-[calc(100vh-160px)] w-full max-w-6xl px-3 pt-4 pb-28 sm:px-4 sm:pt-6 sm:pb-32">
         <?php if ($flashSuccess !== null): ?>
             <div id="app-toast" class="toast-anim fixed right-4 top-4 z-50 flex items-center gap-2 rounded-2xl border border-green-500/30 bg-[#071510] px-4 py-3 text-sm font-medium text-green-400 shadow-xl shadow-black/50 backdrop-blur-md">
                 <span>✅</span><?= e($flashSuccess) ?>
