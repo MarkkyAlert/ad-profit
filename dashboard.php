@@ -216,7 +216,7 @@ $goalProfitProgressWidth = $goalProgressProfit !== null ? max(0.0, min(100.0, $g
 $goalRedirectTo = (string)($_SERVER['REQUEST_URI'] ?? '/dashboard.php');
 
 $daysCount = (int)($statistics['days_count'] ?? 0);
-$hasDailyData = !empty($dailyPayload['dates']);
+$hasDailyData = !empty($dailyChartPayload['dates']);
 $hasSixMonthData = false;
 foreach (['revenue', 'ad_cost', 'profit'] as $seriesKey) {
     foreach ((array)($sixMonthPayload[$seriesKey] ?? []) as $value) {
@@ -499,8 +499,8 @@ require __DIR__ . '/includes/header.php';
         const cancelGoalModalButton = document.getElementById('cancel-goal-modal');
         const deleteGoalForm = document.getElementById('delete-goal-form');
 
-        const dailyPayload = <?= json_encode($dailyChartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-        const sixMonthPayload = <?= json_encode($sixMonthPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        const dailyPayload = <?= json_encode($dailyChartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        const sixMonthPayload = <?= json_encode($sixMonthPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
         const toggleCustomFields = () => {
             if (!customFields || !rangeSelect) {

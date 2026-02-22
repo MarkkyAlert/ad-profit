@@ -7,6 +7,21 @@ function requireAuth(bool $jsonResponse = false): void
     $isLoggedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
 
     if ($isLoggedIn) {
+        if (!isAuthSessionAlive()) {
+            clearAuthSession();
+
+            if ($jsonResponse || is_api_request()) {
+                jsonResponse([
+                    'success' => false,
+                    'error' => 'Session expired',
+                ], 401);
+            }
+
+            set_flash('error', 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง');
+            redirect('/login.php');
+        }
+
+        $_SESSION['last_activity_at'] = time();
         return;
     }
 
@@ -26,6 +41,50 @@ function requireGuest(): void
     $isLoggedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
 
     if ($isLoggedIn) {
+        if (!isAuthSessionAlive()) {
+            clearAuthSession();
+            return;
+        }
+
         redirect('/dashboard.php');
     }
+}
+
+function isAuthSessionAlive(): bool
+{
+    $now = time();
+    $startedAt = isset($_SESSION['auth_started_at']) ? (int)$_SESSION['auth_started_at'] : $now;
+    $lastActivityAt = isset($_SESSION['last_activity_at']) ? (int)$_SESSION['last_activity_at'] : $now;
+
+    if (!isset($_SESSION['auth_started_at'])) {
+        $_SESSION['auth_started_at'] = $startedAt;
+    }
+
+    if (!isset($_SESSION['last_activity_at'])) {
+        $_SESSION['last_activity_at'] = $lastActivityAt;
+    }
+
+    $idleTimeout = max(0, (int)SESSION_IDLE_TIMEOUT_SECONDS);
+    $absoluteTimeout = max(0, (int)SESSION_ABSOLUTE_TIMEOUT_SECONDS);
+
+    $idleExpired = $idleTimeout > 0 && ($now - $lastActivityAt) > $idleTimeout;
+    $absoluteExpired = $absoluteTimeout > 0 && ($now - $startedAt) > $absoluteTimeout;
+
+    return !$idleExpired && !$absoluteExpired;
+}
+
+function clearAuthSession(): void
+{
+    unset(
+        $_SESSION['user_id'],
+        $_SESSION['email'],
+        $_SESSION['display_name'],
+        $_SESSION['auth_started_at'],
+        $_SESSION['last_activity_at'],
+        $_SESSION['current_shop_id'],
+        $_SESSION['current_shop_name'],
+        $_SESSION['csrf_token']
+    );
+
+    session_regenerate_id(true);
 }

@@ -9,6 +9,7 @@ USE ad_profit;
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS password_reset_tokens;
+DROP TABLE IF EXISTS auth_rate_limits;
 DROP TABLE IF EXISTS idempotency_requests;
 DROP TABLE IF EXISTS monthly_goals;
 DROP TABLE IF EXISTS daily_records;
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS shops (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_shops_user_name (user_id, name),
     KEY idx_shops_user_id (user_id),
     CONSTRAINT fk_shops_user
         FOREIGN KEY (user_id)
@@ -107,6 +109,20 @@ CREATE TABLE IF NOT EXISTS idempotency_requests (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS auth_rate_limits (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    bucket_key CHAR(64) NOT NULL,
+    action_type VARCHAR(50) NOT NULL,
+    client_ip VARCHAR(45) NOT NULL,
+    attempts INT UNSIGNED NOT NULL DEFAULT 0,
+    started_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_auth_rate_limits_bucket (bucket_key),
+    KEY idx_auth_rate_limits_action_ip (action_type, client_ip),
+    KEY idx_auth_rate_limits_updated_at (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id BIGINT UNSIGNED NOT NULL,
@@ -115,6 +131,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_password_reset_user (user_id),
+    UNIQUE KEY uq_password_reset_token_hash (token_hash),
     KEY idx_password_reset_token (token_hash),
     KEY idx_password_reset_expires (expires_at),
     CONSTRAINT fk_password_reset_user

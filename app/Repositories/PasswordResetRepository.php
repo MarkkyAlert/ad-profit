@@ -44,6 +44,24 @@ class PasswordResetRepository
         return $token ?: null;
     }
 
+    public function findByTokenHashForUpdate(string $tokenHash): ?array
+    {
+        $sql = 'SELECT prt.id, prt.user_id, prt.token_hash, prt.expires_at, prt.created_at,
+                       u.email
+                FROM password_reset_tokens prt
+                JOIN users u ON u.id = prt.user_id
+                WHERE prt.token_hash = :token_hash
+                  AND prt.expires_at > NOW()
+                LIMIT 1
+                FOR UPDATE';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':token_hash' => $tokenHash]);
+        $token = $stmt->fetch();
+
+        return $token ?: null;
+    }
+
     public function deleteByUserId(int $userId): bool
     {
         $sql = 'DELETE FROM password_reset_tokens

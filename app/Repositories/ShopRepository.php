@@ -40,6 +40,23 @@ class ShopRepository
         return $shop ?: null;
     }
 
+    public function findByNameAndUserId(string $name, int $userId): ?array
+    {
+        $sql = 'SELECT id, user_id, name, created_at, updated_at
+                FROM shops
+                WHERE user_id = :user_id AND name = :name
+                LIMIT 1';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':name' => $name,
+        ]);
+        $shop = $stmt->fetch();
+
+        return $shop ?: null;
+    }
+
     public function findByIdAndUserId(int $shopId, int $userId): ?array
     {
         $sql = 'SELECT id, user_id, name, created_at, updated_at
@@ -75,6 +92,20 @@ class ShopRepository
         $sql = 'SELECT COUNT(*) AS total
                 FROM shops
                 WHERE user_id = :user_id';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':user_id' => $userId]);
+        $result = $stmt->fetch();
+
+        return (int)($result['total'] ?? 0);
+    }
+
+    public function countByUserIdForUpdate(int $userId): int
+    {
+        $sql = 'SELECT COUNT(*) AS total
+                FROM shops
+                WHERE user_id = :user_id
+                FOR UPDATE';
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':user_id' => $userId]);

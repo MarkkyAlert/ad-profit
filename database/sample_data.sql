@@ -7,6 +7,7 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 DELETE FROM password_reset_tokens;
+DELETE FROM auth_rate_limits;
 DELETE FROM idempotency_requests;
 DELETE FROM monthly_goals;
 DELETE FROM daily_records;

@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 require __DIR__ . '/../includes/bootstrap.php';
 
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    echo 'Forbidden';
+    exit(1);
+}
+
 $logCleanupRepository = new LogCleanupRepository();
 $logDirectory = dirname(__DIR__) . '/logs';
 $retentionDays = 30;

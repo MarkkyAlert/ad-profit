@@ -106,6 +106,18 @@ if (!defined('RATE_LIMIT_WINDOW_SECONDS')) {
     define('RATE_LIMIT_WINDOW_SECONDS', 60);
 }
 
+if (!defined('SESSION_IDLE_TIMEOUT_SECONDS')) {
+    define('SESSION_IDLE_TIMEOUT_SECONDS', (int)(getenv('SESSION_IDLE_TIMEOUT_SECONDS') ?: 14400));
+}
+
+if (!defined('SESSION_ABSOLUTE_TIMEOUT_SECONDS')) {
+    define('SESSION_ABSOLUTE_TIMEOUT_SECONDS', (int)(getenv('SESSION_ABSOLUTE_TIMEOUT_SECONDS') ?: 86400));
+}
+
+if (!defined('SCHEMA_GUARD_ENABLED')) {
+    define('SCHEMA_GUARD_ENABLED', filter_var(getenv('SCHEMA_GUARD_ENABLED') ?: 'true', FILTER_VALIDATE_BOOLEAN));
+}
+
 if (!defined('LOG_FILE')) {
     define('LOG_FILE', dirname(__DIR__) . '/logs/php-error.log');
 }
@@ -124,6 +136,14 @@ if (!defined('MAIL_HOST')) {
 
 if (!defined('MAIL_PORT')) {
     define('MAIL_PORT', (int)(getenv('MAIL_PORT') ?: 587));
+}
+
+if (!defined('MAIL_TIMEOUT_SECONDS')) {
+    define('MAIL_TIMEOUT_SECONDS', (int)(getenv('MAIL_TIMEOUT_SECONDS') ?: 15));
+}
+
+if (!defined('MAIL_RETRY_ATTEMPTS')) {
+    define('MAIL_RETRY_ATTEMPTS', max(0, (int)(getenv('MAIL_RETRY_ATTEMPTS') ?: 1)));
 }
 
 if (!defined('MAIL_USERNAME')) {

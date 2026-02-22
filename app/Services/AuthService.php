@@ -11,6 +11,7 @@ class AuthService
     private ShopRepository $shopRepository;
     private ?PasswordResetRepository $passwordResetRepository;
     private ?EmailService $emailService;
+    private ?bool $databaseRateLimitReady = null;
 
     public function __construct(
         PDO $db,
@@ -73,7 +74,7 @@ class AuthService
             $this->markFailedAttempt('register', $clientIp);
             return [
                 'success' => false,
-                'error' => 'อีเมลนี้ถูกใช้งานแล้ว',
+                'error' => 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่อีกครั้ง',
             ];
         }
 
@@ -106,7 +107,7 @@ class AuthService
             if ($isDuplicateUser) {
                 return [
                     'success' => false,
-                    'error' => 'อีเมลนี้ถูกใช้งานแล้ว',
+                    'error' => 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่อีกครั้ง',
                 ];
             }
 
@@ -199,6 +200,9 @@ class AuthService
         unset(
             $_SESSION['user_id'],
             $_SESSION['email'],
+            $_SESSION['display_name'],
+            $_SESSION['auth_started_at'],
+            $_SESSION['last_activity_at'],
             $_SESSION['current_shop_id'],
             $_SESSION['current_shop_name']
         );
@@ -310,16 +314,6 @@ class AuthService
         }
 
         $tokenHash = hash('sha256', $token);
-        $tokenRecord = $this->passwordResetRepository->findByTokenHash($tokenHash);
-
-        if ($tokenRecord === null) {
-            return [
-                'success' => false,
-                'error' => 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว',
-            ];
-        }
-
-        $userId = (int)$tokenRecord['user_id'];
         $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
 
         if (!is_string($passwordHash) || $passwordHash === '') {
@@ -330,10 +324,58 @@ class AuthService
             ];
         }
 
+        $startedTransaction = false;
         try {
-            $this->userRepository->updatePasswordHash($userId, $passwordHash);
-            $this->passwordResetRepository->deleteByUserId($userId);
+            if (!$this->db->inTransaction()) {
+                $this->db->beginTransaction();
+                $startedTransaction = true;
+            }
+
+            $tokenRecord = $this->passwordResetRepository->findByTokenHashForUpdate($tokenHash);
+            if ($tokenRecord === null) {
+                if ($startedTransaction && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว',
+                ];
+            }
+
+            $userId = (int)$tokenRecord['user_id'];
+            $updatedPassword = $this->userRepository->updatePasswordHash($userId, $passwordHash);
+            if (!$updatedPassword) {
+                if ($startedTransaction && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถรีเซ็ตรหัสผ่านได้',
+                ];
+            }
+
+            $deletedToken = $this->passwordResetRepository->deleteByUserId($userId);
+            if (!$deletedToken) {
+                if ($startedTransaction && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถรีเซ็ตรหัสผ่านได้',
+                ];
+            }
+
+            if ($startedTransaction && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[auth][reset_password] ' . $exception->getMessage());
             return [
                 'success' => false,
@@ -353,6 +395,8 @@ class AuthService
 
         $_SESSION['user_id'] = $userId;
         $_SESSION['email'] = $email;
+        $_SESSION['auth_started_at'] = time();
+        $_SESSION['last_activity_at'] = time();
         $_SESSION['current_shop_id'] = $shopId;
         $_SESSION['current_shop_name'] = $shopName;
     }
@@ -369,6 +413,14 @@ class AuthService
 
     private function isRateLimited(string $action, string $clientIp): bool
     {
+        if ($this->canUseDatabaseRateLimit()) {
+            try {
+                return $this->isRateLimitedInDatabase($action, $clientIp);
+            } catch (Throwable $exception) {
+                error_log('[auth][rate_limit] DB read failed, fallback to session limiter: ' . $exception->getMessage());
+            }
+        }
+
         $bucket = $this->getRateLimitBucket($action, $clientIp);
 
         return (int)$bucket['attempts'] >= RATE_LIMIT_MAX_ATTEMPTS;
@@ -376,6 +428,15 @@ class AuthService
 
     private function markFailedAttempt(string $action, string $clientIp): void
     {
+        if ($this->canUseDatabaseRateLimit()) {
+            try {
+                $this->markFailedAttemptInDatabase($action, $clientIp);
+                return;
+            } catch (Throwable $exception) {
+                error_log('[auth][rate_limit] DB write failed, fallback to session limiter: ' . $exception->getMessage());
+            }
+        }
+
         $bucket = $this->getRateLimitBucket($action, $clientIp);
         $bucket['attempts'] = (int)$bucket['attempts'] + 1;
 
@@ -385,6 +446,15 @@ class AuthService
 
     private function clearRateLimit(string $action, string $clientIp): void
     {
+        if ($this->canUseDatabaseRateLimit()) {
+            try {
+                $this->clearRateLimitInDatabase($action, $clientIp);
+                return;
+            } catch (Throwable $exception) {
+                error_log('[auth][rate_limit] DB clear failed, fallback to session limiter: ' . $exception->getMessage());
+            }
+        }
+
         if (!isset($_SESSION['auth_rate_limits']) || !is_array($_SESSION['auth_rate_limits'])) {
             return;
         }
@@ -427,6 +497,144 @@ class AuthService
 
     private function rateLimitKey(string $action, string $clientIp): string
     {
-        return hash('sha256', $action . '|' . $clientIp . '|' . session_id());
+        return hash('sha256', $action . '|' . $clientIp);
+    }
+
+    private function canUseDatabaseRateLimit(): bool
+    {
+        if ($this->databaseRateLimitReady !== null) {
+            return $this->databaseRateLimitReady;
+        }
+
+        try {
+            $stmt = $this->db->query('SELECT 1 FROM auth_rate_limits LIMIT 1');
+            if ($stmt !== false) {
+                $stmt->fetch();
+            }
+
+            $this->databaseRateLimitReady = true;
+            return true;
+        } catch (Throwable $exception) {
+            $this->databaseRateLimitReady = false;
+
+            if ($exception instanceof PDOException && $this->isMissingAuthRateLimitTableError($exception)) {
+                error_log('[auth][rate_limit] auth_rate_limits table not found, fallback to session-based rate limiting');
+                return false;
+            }
+
+            error_log('[auth][rate_limit] DB rate-limit probe failed: ' . $exception->getMessage());
+            return false;
+        }
+    }
+
+    private function isRateLimitedInDatabase(string $action, string $clientIp): bool
+    {
+        $key = $this->rateLimitKey($action, $clientIp);
+
+        $sql = 'SELECT attempts, started_at
+                FROM auth_rate_limits
+                WHERE bucket_key = :bucket_key
+                LIMIT 1';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':bucket_key' => $key]);
+        $row = $stmt->fetch();
+
+        if (!is_array($row)) {
+            return false;
+        }
+
+        $attempts = max(0, (int)($row['attempts'] ?? 0));
+        $startedAtRaw = (string)($row['started_at'] ?? '');
+        $startedAtTimestamp = strtotime($startedAtRaw);
+        if ($startedAtTimestamp === false) {
+            $this->resetRateLimitWindowInDatabase($action, $clientIp, $key);
+            return false;
+        }
+
+        if ((time() - $startedAtTimestamp) >= RATE_LIMIT_WINDOW_SECONDS) {
+            $this->resetRateLimitWindowInDatabase($action, $clientIp, $key);
+            return false;
+        }
+
+        return $attempts >= RATE_LIMIT_MAX_ATTEMPTS;
+    }
+
+    private function markFailedAttemptInDatabase(string $action, string $clientIp): void
+    {
+        if (random_int(1, 100) === 1) {
+            $this->cleanupStaleRateLimitBucketsInDatabase();
+        }
+
+        $key = $this->rateLimitKey($action, $clientIp);
+
+        $sql = 'INSERT INTO auth_rate_limits (bucket_key, action_type, client_ip, attempts, started_at, updated_at)
+                VALUES (:bucket_key, :action_type, :client_ip, 1, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                    attempts = CASE
+                        WHEN TIMESTAMPDIFF(SECOND, started_at, NOW()) >= :window_seconds THEN 1
+                        ELSE attempts + 1
+                    END,
+                    started_at = CASE
+                        WHEN TIMESTAMPDIFF(SECOND, started_at, NOW()) >= :window_seconds THEN NOW()
+                        ELSE started_at
+                    END,
+                    updated_at = NOW()';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':bucket_key' => $key,
+            ':action_type' => $action,
+            ':client_ip' => $clientIp,
+            ':window_seconds' => RATE_LIMIT_WINDOW_SECONDS,
+        ]);
+    }
+
+    private function clearRateLimitInDatabase(string $action, string $clientIp): void
+    {
+        $key = $this->rateLimitKey($action, $clientIp);
+
+        $sql = 'DELETE FROM auth_rate_limits
+                WHERE bucket_key = :bucket_key';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':bucket_key' => $key]);
+    }
+
+    private function resetRateLimitWindowInDatabase(string $action, string $clientIp, string $key): void
+    {
+        $sql = 'INSERT INTO auth_rate_limits (bucket_key, action_type, client_ip, attempts, started_at, updated_at)
+                VALUES (:bucket_key, :action_type, :client_ip, 0, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                    attempts = 0,
+                    started_at = NOW(),
+                    updated_at = NOW()';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':bucket_key' => $key,
+            ':action_type' => $action,
+            ':client_ip' => $clientIp,
+        ]);
+    }
+
+    private function isMissingAuthRateLimitTableError(PDOException $exception): bool
+    {
+        if ((string)$exception->getCode() !== '42S02') {
+            return false;
+        }
+
+        return str_contains(strtolower($exception->getMessage()), 'auth_rate_limits');
+    }
+
+    private function cleanupStaleRateLimitBucketsInDatabase(): void
+    {
+        $retentionSeconds = max(RATE_LIMIT_WINDOW_SECONDS * 10, 600);
+        $thresholdTime = date('Y-m-d H:i:s', time() - $retentionSeconds);
+        $sql = 'DELETE FROM auth_rate_limits
+                WHERE updated_at < :threshold_time';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':threshold_time' => $thresholdTime]);
     }
 }

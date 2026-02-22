@@ -83,16 +83,54 @@
    - กด "📥 Export CSV" ในหน้าประวัติ
    - เปิดไฟล์ใน Excel แล้วภาษาไทยต้องไม่เพี้ยน (UTF-8 BOM)
 
-## 8) Troubleshooting
+## 8) Migration สำหรับ Production ที่มีอยู่แล้ว
+
+หากมี database production อยู่แล้วและต้องการอัปเกรดเป็นเวอร์ชันล่าสุด:
+
+```powershell
+& "c:\xampp\mysql\bin\mysql.exe" -u root -p -e "source c:/xampp/htdocs/ad-profit/database/migrations/001_hardening_schema.sql"
+```
+
+**การตรวจสอบหลัง migration:**
+
+```sql
+-- ต้องได้ exists = 1 ทุกรายการ
+SELECT 'auth_rate_limits' AS item, COUNT(*) AS exists FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'ad_profit' AND TABLE_NAME = 'auth_rate_limits';
+SELECT 'users.display_name' AS item, COUNT(*) AS exists FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'ad_profit' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'display_name';
+SELECT 'shops.uq_shops_user_name' AS item, COUNT(*) AS exists FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = 'ad_profit' AND TABLE_NAME = 'shops' AND INDEX_NAME = 'uq_shops_user_name';
+SELECT 'password_reset_tokens.uq_password_reset_token_hash' AS item, COUNT(*) AS exists FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = 'ad_profit' AND TABLE_NAME = 'password_reset_tokens' AND INDEX_NAME = 'uq_password_reset_token_hash';
+```
+
+> **หมายเหตุ**: หากไม่รัน migration ระบบจะแสดงหน้า "ต้องอัปเกรดโครงสร้างฐานข้อมูล" (503) และไม่ให้เข้าใช้งาน
+
+## 9) Environment Variables (Production)
+
+สร้างไฟล์ `.env` จาก `.env.example` แล้วตั้งค่าตามต้องการ:
+
+| Variable | Default | คำอธิบาย |
+|----------|---------|---------|
+| `APP_ENV` | development | ตั้งเป็น `production` สำหรับ prod |
+| `SESSION_IDLE_TIMEOUT_SECONDS` | 14400 (4 ชม.) | หมดอายุหากไม่มีการใช้งาน |
+| `SESSION_ABSOLUTE_TIMEOUT_SECONDS` | 86400 (24 ชม.) | หมดอายุหลัง login |
+| `SCHEMA_GUARD_ENABLED` | true | ตรวจ schema ก่อนใช้งาน (ปิดได้ชั่วคราว) |
+| `MAIL_TIMEOUT_SECONDS` | 15 | timeout การส่งอีเมล |
+| `MAIL_RETRY_ATTEMPTS` | 1 | จำนวนครั้งที่ retry หากส่งไม่สำเร็จ |
+
+## 10) Troubleshooting
 
 - ถ้าเจอ DB connection failed:
   - ตรวจว่า MySQL start แล้ว
   - ตรวจค่าฐานข้อมูลใน `includes/config.php`
 - ถ้า redirect path เพี้ยน:
   - ตั้ง `APP_URL` ใน environment หรือแก้ใน `includes/config.php`
+- ถ้าเจอหน้า **"ต้องอัปเกรดโครงสร้างฐานข้อมูล"** (503):
+  - รัน migration script ตามข้อ 8
+  - หรือตั้ง `SCHEMA_GUARD_ENABLED=false` ชั่วคราว (ไม่แนะนำ)
+- ถ้าเจอ "Session expired" บ่อยเกินไป:
+  - ปรับ `SESSION_IDLE_TIMEOUT_SECONDS` ให้มากขึ้น
 - log error อยู่ที่: `logs/php-error.log`
 
-## 9) Cron Jobs (แนะนำสำหรับ production)
+## 11) Cron Jobs (แนะนำสำหรับ production)
 
 สคริปต์ที่ควรตั้งเวลา:
 

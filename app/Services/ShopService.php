@@ -5,10 +5,12 @@ declare(strict_types=1);
 class ShopService
 {
     private ShopRepository $shopRepository;
+    private ?PDO $db;
 
-    public function __construct(ShopRepository $shopRepository)
+    public function __construct(ShopRepository $shopRepository, ?PDO $db = null)
     {
         $this->shopRepository = $shopRepository;
+        $this->db = $db;
     }
 
     public function getShopContext(int $userId, ?int $currentShopId): array
@@ -54,9 +56,45 @@ class ShopService
             ];
         }
 
+        $startedTransaction = false;
+        $canLockRows = false;
         try {
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
+
+                $canLockRows = $this->db->inTransaction();
+                if ($canLockRows) {
+                    $this->lockUserRowForUpdate($userId);
+                    $this->shopRepository->countByUserIdForUpdate($userId);
+                }
+            }
+
+            $existingShop = $this->shopRepository->findByNameAndUserId($shopName, $userId);
+            if ($existingShop !== null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+
+                return [
+                    'success' => true,
+                    'shop_id' => (int)($existingShop['id'] ?? 0),
+                    'already_exists' => true,
+                ];
+            }
+
             $shopId = $this->shopRepository->create($userId, $shopName);
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[shop] createShop failed: ' . $exception->getMessage());
             return [
                 'success' => false,
@@ -67,6 +105,7 @@ class ShopService
         return [
             'success' => true,
             'shop_id' => $shopId,
+            'already_exists' => false,
         ];
     }
 
@@ -174,39 +213,76 @@ class ShopService
             ];
         }
 
-        $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
-        if ($shop === null) {
-            return [
-                'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์ลบร้านค้านี้',
-            ];
-        }
-
-        if (!$this->canDeleteShop($userId)) {
-            return [
-                'success' => false,
-                'error' => 'ไม่สามารถลบร้านสุดท้ายได้',
-            ];
-        }
-
+        $startedTransaction = false;
+        $canLockRows = false;
         try {
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
+
+                $canLockRows = $this->db->inTransaction();
+                if ($canLockRows) {
+                    $this->lockUserRowForUpdate($userId);
+                }
+            }
+
+            $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
+            if ($shop === null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'คุณไม่มีสิทธิ์ลบร้านค้านี้',
+                ];
+            }
+
+            $shopCount = $canLockRows
+                ? $this->shopRepository->countByUserIdForUpdate($userId)
+                : $this->shopRepository->countByUserId($userId);
+
+            if ($shopCount <= 1) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถลบร้านสุดท้ายได้',
+                ];
+            }
+
             $deleted = $this->shopRepository->deleteByIdAndUserId($shopId, $userId);
+            if (!$deleted) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่พบร้านค้าที่ต้องการลบ',
+                ];
+            }
+
+            $nextShop = $this->shopRepository->getFirstByUserId($userId);
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[shop] deleteShop failed: ' . $exception->getMessage());
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถลบร้านค้าได้',
             ];
         }
-
-        if (!$deleted) {
-            return [
-                'success' => false,
-                'error' => 'ไม่พบร้านค้าที่ต้องการลบ',
-            ];
-        }
-
-        $nextShop = $this->shopRepository->getFirstByUserId($userId);
 
         return [
             'success' => true,
@@ -218,5 +294,15 @@ class ShopService
     public function canDeleteShop(int $userId): bool
     {
         return $this->shopRepository->countByUserId($userId) > 1;
+    }
+
+    private function lockUserRowForUpdate(int $userId): void
+    {
+        if (!$this->db instanceof PDO || $userId <= 0) {
+            return;
+        }
+
+        $stmt = $this->db->prepare('SELECT id FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
+        $stmt->execute([':id' => $userId]);
     }
 }

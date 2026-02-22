@@ -53,36 +53,48 @@ class EmailService
             return false;
         }
 
-        $mail = new PHPMailer(true);
+        $attempts = max(1, MAIL_RETRY_ATTEMPTS + 1);
 
-        try {
-            // Server settings
-            $mail->isSMTP();
-            $mail->Host       = $this->host;
-            $mail->SMTPAuth   = true;
-            $mail->Username   = $this->username;
-            $mail->Password   = $this->password;
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port       = $this->port;
-            $mail->CharSet    = 'UTF-8';
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            $mail = new PHPMailer(true);
 
-            // Recipients
-            $mail->setFrom($this->fromAddress, $this->fromName);
-            $mail->addAddress($to);
+            try {
+                // Server settings
+                $mail->isSMTP();
+                $mail->Host = $this->host;
+                $mail->SMTPAuth = true;
+                $mail->Username = $this->username;
+                $mail->Password = $this->password;
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                $mail->Port = $this->port;
+                $mail->Timeout = max(5, MAIL_TIMEOUT_SECONDS);
+                $mail->CharSet = 'UTF-8';
 
-            // Content
-            $mail->isHTML(true);
-            $mail->Subject = $subject;
-            $mail->Body    = $htmlBody;
-            $mail->AltBody = $textBody ?: strip_tags($htmlBody);
+                // Recipients
+                $mail->setFrom($this->fromAddress, $this->fromName);
+                $mail->addAddress($to);
 
-            $mail->send();
-            error_log('[email] Email sent successfully to: ' . $to);
-            return true;
-        } catch (Exception $e) {
-            error_log("[email] Failed to send email to: {$to}. Mailer Error: {$mail->ErrorInfo}");
-            return false;
+                // Content
+                $mail->isHTML(true);
+                $mail->Subject = $subject;
+                $mail->Body = $htmlBody;
+                $mail->AltBody = $textBody ?: strip_tags($htmlBody);
+
+                $mail->send();
+                error_log('[email] Email sent successfully to: ' . $to . ' (attempt ' . $attempt . '/' . $attempts . ')');
+                return true;
+            } catch (Exception $exception) {
+                error_log('[email] Failed to send email to: ' . $to . ' (attempt ' . $attempt . '/' . $attempts . '). Mailer Error: ' . $mail->ErrorInfo);
+
+                if ($attempt >= $attempts) {
+                    return false;
+                }
+
+                usleep(200000);
+            }
         }
+
+        return false;
     }
 
     private function buildPasswordResetHtml(string $resetLink): string

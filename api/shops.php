@@ -15,7 +15,7 @@ $wantsJson = str_contains($acceptHeader, 'application/json') || $requestedWith =
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $shopRepository = new ShopRepository($pdo);
-$shopService = new ShopService($shopRepository);
+$shopService = new ShopService($shopRepository, $pdo);
 
 $resolveRedirectPath = static function (string $fallback = '/dashboard.php'): string {
     $basePath = (string)(parse_url(APP_URL, PHP_URL_PATH) ?? '');
@@ -121,6 +121,14 @@ if ($action === 'create') {
     }
 
     $newShopId = (int)($createResult['shop_id'] ?? 0);
+    if ($newShopId <= 0) {
+        $respond([
+            'success' => false,
+            'error' => 'ไม่สามารถสร้างร้านค้าได้',
+        ], 422, $redirectPath);
+    }
+
+    $alreadyExists = (bool)($createResult['already_exists'] ?? false);
     $switchResult = $shopService->switchShop($userId, $newShopId);
 
     if (($switchResult['success'] ?? false) !== true || !is_array($switchResult['shop'] ?? null)) {
@@ -136,7 +144,9 @@ if ($action === 'create') {
 
     $respond([
         'success' => true,
-        'message' => 'สร้างร้านค้าเรียบร้อยแล้ว',
+        'message' => $alreadyExists
+            ? 'ร้านนี้มีอยู่แล้ว ระบบสลับไปใช้งานร้านนี้ให้แล้ว'
+            : 'สร้างร้านค้าเรียบร้อยแล้ว',
         'data' => [
             'shop_id' => (int)($shop['id'] ?? 0),
             'shop_name' => (string)($shop['name'] ?? ''),
