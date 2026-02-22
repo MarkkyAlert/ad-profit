@@ -62,16 +62,28 @@ class OverviewService
     {
         $rows = [];
 
+        $shopIds = [];
+        foreach ($shops as $shop) {
+            $shopId = (int)($shop['id'] ?? 0);
+            if ($shopId > 0) {
+                $shopIds[] = $shopId;
+            }
+        }
+
+        $totalsRows = $this->recordRepository->getTotalsByShopIdsAndDateRange($shopIds, $startDate, $endDate);
+        $totalsByShopId = [];
+        foreach ($totalsRows as $totalRow) {
+            $shopId = (int)($totalRow['shop_id'] ?? 0);
+            if ($shopId > 0) {
+                $totalsByShopId[$shopId] = $totalRow;
+            }
+        }
+
         foreach ($shops as $shop) {
             $shopId = (int)$shop['id'];
-            $records = $this->recordRepository->getByDateRange($shopId, $startDate, $endDate);
-
-            $totalRevenue = 0.0;
-            $totalAdCost = 0.0;
-            foreach ($records as $record) {
-                $totalRevenue += (float)$record['revenue'];
-                $totalAdCost += (float)$record['ad_cost'];
-            }
+            $totals = $totalsByShopId[$shopId] ?? null;
+            $totalRevenue = (float)($totals['total_revenue'] ?? 0);
+            $totalAdCost = (float)($totals['total_ad_cost'] ?? 0);
 
             $profit = $totalRevenue - $totalAdCost;
             $rows[] = [
@@ -154,18 +166,32 @@ class OverviewService
 
         $series = [];
 
+        $shopIds = [];
         foreach ($shops as $shop) {
             $shopId = (int)($shop['id'] ?? 0);
-            $shopName = (string)($shop['name'] ?? 'ร้านค้า');
-            $rows = $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $startMonth, $endMonth);
-
-            $rowByMonth = [];
-            foreach ($rows as $row) {
-                $monthKey = (string)($row['month_key'] ?? '');
-                if ($monthKey !== '') {
-                    $rowByMonth[$monthKey] = $row;
-                }
+            if ($shopId > 0) {
+                $shopIds[] = $shopId;
             }
+        }
+
+        $totalsRows = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange($shopIds, $startMonth, $endMonth);
+        $rowByShopIdAndMonth = [];
+        foreach ($totalsRows as $row) {
+            $shopId = (int)($row['shop_id'] ?? 0);
+            $monthKey = (string)($row['month_key'] ?? '');
+            if ($shopId > 0 && $monthKey !== '') {
+                $rowByShopIdAndMonth[$shopId][$monthKey] = $row;
+            }
+        }
+
+        foreach ($shops as $shop) {
+            $shopId = (int)($shop['id'] ?? 0);
+            if ($shopId <= 0) {
+                continue;
+            }
+
+            $shopName = (string)($shop['name'] ?? 'ร้านค้า');
+            $rowByMonth = $rowByShopIdAndMonth[$shopId] ?? [];
 
             $revenues = [];
             foreach ($months as $month) {

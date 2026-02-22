@@ -32,6 +32,35 @@ class RecordRepository
         ]);
     }
 
+    public function updateByIdAndShopId(
+        int $recordId,
+        int $shopId,
+        string $recordDate,
+        float $revenue,
+        float $adCost,
+        ?string $note
+    ): bool {
+        $sql = 'UPDATE daily_records
+                SET record_date = :record_date,
+                    revenue = :revenue,
+                    ad_cost = :ad_cost,
+                    note = :note,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :record_id
+                  AND shop_id = :shop_id';
+
+        $stmt = $this->db->prepare($sql);
+
+        return $stmt->execute([
+            ':record_id' => $recordId,
+            ':shop_id' => $shopId,
+            ':record_date' => $recordDate,
+            ':revenue' => $revenue,
+            ':ad_cost' => $adCost,
+            ':note' => $note,
+        ]);
+    }
+
     public function getRecentByShopId(int $shopId, int $limit = 7): array
     {
         $sql = 'SELECT id, shop_id, record_date, revenue, ad_cost, note, created_at, updated_at
@@ -101,6 +130,25 @@ class RecordRepository
         return $record ?: null;
     }
 
+    public function findByShopIdAndRecordDateForUpdate(int $shopId, string $recordDate): ?array
+    {
+        $sql = 'SELECT id, shop_id, record_date, revenue, ad_cost, note, created_at, updated_at
+                FROM daily_records
+                WHERE shop_id = :shop_id
+                  AND record_date = :record_date
+                LIMIT 1
+                FOR UPDATE';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':shop_id' => $shopId,
+            ':record_date' => $recordDate,
+        ]);
+        $record = $stmt->fetch();
+
+        return $record ?: null;
+    }
+
     public function getMonthlyTotalsByMonthRange(int $shopId, string $startMonth, string $endMonth): array
     {
         $startDate = $startMonth . '-01';
@@ -127,6 +175,91 @@ class RecordRepository
             ':start_date' => $startDate,
             ':end_date' => $endDate,
         ]);
+
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * @param int[] $shopIds
+     */
+    public function getTotalsByShopIdsAndDateRange(array $shopIds, string $startDate, string $endDate): array
+    {
+        $shopIds = array_values(array_unique(array_filter(array_map('intval', $shopIds), static fn(int $id): bool => $id > 0)));
+        if ($shopIds === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $params = [
+            ':start_date' => $startDate,
+            ':end_date' => $endDate,
+        ];
+
+        foreach ($shopIds as $index => $shopId) {
+            $key = ':shop_id_' . $index;
+            $placeholders[] = $key;
+            $params[$key] = $shopId;
+        }
+
+        $sql = 'SELECT shop_id,
+                       SUM(revenue) AS total_revenue,
+                       SUM(ad_cost) AS total_ad_cost,
+                       COUNT(*) AS days_count
+                FROM daily_records
+                WHERE shop_id IN (' . implode(', ', $placeholders) . ')
+                  AND record_date BETWEEN :start_date AND :end_date
+                GROUP BY shop_id
+                ORDER BY shop_id ASC';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * @param int[] $shopIds
+     */
+    public function getMonthlyTotalsByShopIdsAndMonthRange(array $shopIds, string $startMonth, string $endMonth): array
+    {
+        $shopIds = array_values(array_unique(array_filter(array_map('intval', $shopIds), static fn(int $id): bool => $id > 0)));
+        if ($shopIds === []) {
+            return [];
+        }
+
+        $startDate = $startMonth . '-01';
+        $endDateObject = DateTime::createFromFormat('Y-m-d', $endMonth . '-01');
+        if (!$endDateObject) {
+            return [];
+        }
+
+        $endDate = $endDateObject->format('Y-m-t');
+
+        $placeholders = [];
+        $params = [
+            ':start_date' => $startDate,
+            ':end_date' => $endDate,
+        ];
+
+        foreach ($shopIds as $index => $shopId) {
+            $key = ':shop_id_' . $index;
+            $placeholders[] = $key;
+            $params[$key] = $shopId;
+        }
+
+        $sql = "SELECT shop_id,
+                       DATE_FORMAT(record_date, '%Y-%m') AS month_key,
+                       SUM(revenue) AS total_revenue,
+                       SUM(ad_cost) AS total_ad_cost,
+                       COUNT(*) AS days_count
+                FROM daily_records
+                WHERE shop_id IN (" . implode(', ', $placeholders) . ")
+                  AND record_date BETWEEN :start_date AND :end_date
+                GROUP BY shop_id, DATE_FORMAT(record_date, '%Y-%m')
+                ORDER BY shop_id ASC, month_key ASC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }

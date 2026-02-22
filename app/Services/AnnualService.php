@@ -29,6 +29,18 @@ class AnnualService
             ];
         }
 
+        $startMonth = sprintf('%04d-01', $year);
+        $endMonth = sprintf('%04d-12', $year);
+        $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $startMonth, $endMonth);
+
+        $totalsByMonthKey = [];
+        foreach ($monthlyTotals as $row) {
+            $monthKey = (string)($row['month_key'] ?? '');
+            if ($monthKey !== '') {
+                $totalsByMonthKey[$monthKey] = $row;
+            }
+        }
+
         $months = [];
         $totalRevenue = 0.0;
         $totalAdCost = 0.0;
@@ -36,22 +48,16 @@ class AnnualService
         $worstMonth = null;
 
         for ($month = 1; $month <= 12; $month++) {
-            $startDate = sprintf('%04d-%02d-01', $year, $month);
-            $endDate = date('Y-m-t', strtotime($startDate));
-            $records = $this->recordRepository->getByDateRange($shopId, $startDate, $endDate);
+            $monthKey = sprintf('%04d-%02d', $year, $month);
+            $totals = $totalsByMonthKey[$monthKey] ?? null;
 
-            $monthRevenue = 0.0;
-            $monthAdCost = 0.0;
-
-            foreach ($records as $record) {
-                $monthRevenue += (float)($record['revenue'] ?? 0);
-                $monthAdCost += (float)($record['ad_cost'] ?? 0);
-            }
-
+            $monthRevenue = (float)($totals['total_revenue'] ?? 0);
+            $monthAdCost = (float)($totals['total_ad_cost'] ?? 0);
             $monthProfit = $monthRevenue - $monthAdCost;
+
             $monthRow = [
                 'month' => $month,
-                'month_key' => sprintf('%04d-%02d', $year, $month),
+                'month_key' => $monthKey,
                 'total_revenue' => $monthRevenue,
                 'total_ad_cost' => $monthAdCost,
                 'profit' => $monthProfit,

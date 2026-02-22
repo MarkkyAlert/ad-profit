@@ -176,11 +176,26 @@ class AuthService
                 $shopId = $this->shopRepository->create($userId, self::DEFAULT_SHOP_NAME);
                 $shopName = self::DEFAULT_SHOP_NAME;
             } catch (Throwable $exception) {
-                error_log('[auth][login] Unable to create default shop: ' . $exception->getMessage());
-                return [
-                    'success' => false,
-                    'error' => 'ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง',
-                ];
+                $isDuplicateShop = $exception instanceof PDOException && (string)$exception->getCode() === '23000';
+                if ($isDuplicateShop) {
+                    $shop = $this->shopRepository->getFirstByUserId($userId);
+                    if ($shop !== null) {
+                        $shopId = (int)$shop['id'];
+                        $shopName = (string)$shop['name'];
+                    } else {
+                        error_log('[auth][login] Duplicate shop creation detected but no shop found: ' . $exception->getMessage());
+                        return [
+                            'success' => false,
+                            'error' => 'ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง',
+                        ];
+                    }
+                } else {
+                    error_log('[auth][login] Unable to create default shop: ' . $exception->getMessage());
+                    return [
+                        'success' => false,
+                        'error' => 'ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง',
+                    ];
+                }
             }
         } else {
             $shopId = (int)$shop['id'];

@@ -102,30 +102,47 @@ class RecordService
                 ];
             }
 
-            $this->recordRepository->upsert(
+            $oldDate = (string)($existingRecord['record_date'] ?? '');
+            $newDate = (string)$payload['record_date'];
+
+            if ($oldDate !== $newDate) {
+                $conflictRecord = $this->recordRepository->findByShopIdAndRecordDateForUpdate($shopId, $newDate);
+                if ($conflictRecord !== null && (int)($conflictRecord['id'] ?? 0) !== $recordId) {
+                    $this->rollBackTransactionIfAvailable();
+
+                    return [
+                        'success' => false,
+                        'error' => 'วันที่ที่เลือกมีข้อมูลอยู่แล้ว กรุณาแก้ไขรายการของวันที่ดังกล่าวแทน',
+                    ];
+                }
+            }
+
+            $this->recordRepository->updateByIdAndShopId(
+                $recordId,
                 $shopId,
-                (string)$payload['record_date'],
+                $newDate,
                 (float)$payload['revenue'],
                 (float)$payload['ad_cost'],
                 $payload['note']
             );
 
-            $oldDate = (string)($existingRecord['record_date'] ?? '');
-            $newDate = (string)$payload['record_date'];
+            $this->commitTransactionIfAvailable();
+        } catch (PDOException $exception) {
+            $this->rollBackTransactionIfAvailable();
 
-            if ($oldDate !== $newDate) {
-                $deletedOldRow = $this->recordRepository->deleteByIdAndShopId($recordId, $shopId);
-                if (!$deletedOldRow) {
-                    $this->rollBackTransactionIfAvailable();
-
-                    return [
-                        'success' => false,
-                        'error' => 'ไม่สามารถแก้ไขรายการได้',
-                    ];
-                }
+            if ((string)$exception->getCode() === '23000') {
+                return [
+                    'success' => false,
+                    'error' => 'วันที่ที่เลือกมีข้อมูลอยู่แล้ว กรุณาแก้ไขรายการของวันที่ดังกล่าวแทน',
+                ];
             }
 
-            $this->commitTransactionIfAvailable();
+            error_log('[record] updateRecord failed: ' . $exception->getMessage());
+
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถแก้ไขรายการได้',
+            ];
         } catch (Throwable $exception) {
             $this->rollBackTransactionIfAvailable();
             error_log('[record] updateRecord failed: ' . $exception->getMessage());
