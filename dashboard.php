@@ -400,7 +400,7 @@ require __DIR__ . '/includes/header.php';
             <?php endif; ?>
         </div>
 
-        <form id="delete-goal-form" action="<?= e(app_url('/api/goals.php')) ?>" method="post" class="mt-4">
+        <form id="delete-goal-form" action="<?= e(app_url('/api/goals.php')) ?>" method="post" class="mt-4" data-confirm="ยืนยันการลบเป้าหมายของเดือนนี้ใช่หรือไม่?">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="goal_month" value="<?= e($goalMonth) ?>">
@@ -576,14 +576,7 @@ require __DIR__ . '/includes/header.php';
             });
         }
 
-        if (deleteGoalForm) {
-            deleteGoalForm.addEventListener('submit', (event) => {
-                const accepted = window.confirm('ยืนยันการลบเป้าหมายของเดือนนี้ใช่หรือไม่?');
-                if (!accepted) {
-                    event.preventDefault();
-                }
-            });
-        }
+
 
         const dailyCanvas = document.getElementById('daily-bar-chart');
         if (dailyCanvas) {

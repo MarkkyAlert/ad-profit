@@ -39,6 +39,22 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
     </div>
 </div>
 
+<div id="global-confirm-modal" class="modal-bg fixed inset-0 z-[70] hidden items-center justify-center p-4 opacity-0 transition-opacity duration-200">
+    <div id="global-confirm-card" class="section-card w-full max-w-sm transform scale-95 p-6 text-center shadow-2xl shadow-black/60 transition-transform duration-200">
+        <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 ring-1 ring-red-500/20">
+            <svg class="h-7 w-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+        </div>
+        <h3 class="mb-2 text-lg font-bold text-slate-100">ยืนยันการดำเนินการ</h3>
+        <p id="global-confirm-message" class="mb-6 text-sm text-slate-400">คุณแน่ใจหรือไม่ว่าต้องการดำเนินการนี้?</p>
+        <div class="flex items-center justify-center gap-3">
+            <button type="button" id="global-confirm-cancel" class="btn-ghost flex-1 py-2.5 text-sm">ยกเลิก</button>
+            <button type="button" id="global-confirm-ok" class="btn-danger flex-1 py-2.5 text-sm">ยืนยัน</button>
+        </div>
+    </div>
+</div>
+
 <script>
     (function() {
         const toast = document.getElementById('app-toast');
@@ -68,6 +84,68 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
             loading.classList.remove('flex');
         };
 
+        const confirmModal = document.getElementById('global-confirm-modal');
+        const confirmCard = document.getElementById('global-confirm-card');
+        const confirmMessageEl = document.getElementById('global-confirm-message');
+        const btnConfirmCancel = document.getElementById('global-confirm-cancel');
+        const btnConfirmOk = document.getElementById('global-confirm-ok');
+        let pendingForm = null;
+
+        const showConfirmModal = (message) => {
+            if (confirmMessageEl) confirmMessageEl.textContent = message;
+            if (confirmModal) {
+                confirmModal.classList.remove('hidden');
+                confirmModal.classList.add('flex');
+                requestAnimationFrame(() => {
+                    confirmModal.classList.remove('opacity-0');
+                    if (confirmCard) {
+                        confirmCard.classList.remove('scale-95');
+                        confirmCard.classList.add('scale-100');
+                    }
+                });
+            }
+        };
+
+        const hideConfirmModal = () => {
+            if (confirmModal) {
+                confirmModal.classList.add('opacity-0');
+                if (confirmCard) {
+                    confirmCard.classList.remove('scale-100');
+                    confirmCard.classList.add('scale-95');
+                }
+                setTimeout(() => {
+                    confirmModal.classList.add('hidden');
+                    confirmModal.classList.remove('flex');
+                    pendingForm = null;
+                }, 200);
+            }
+        };
+
+        if (btnConfirmCancel) {
+            btnConfirmCancel.addEventListener('click', hideConfirmModal);
+        }
+
+        if (confirmModal) {
+            confirmModal.addEventListener('click', (event) => {
+                if (event.target === confirmModal) {
+                    hideConfirmModal();
+                }
+            });
+        }
+
+        if (btnConfirmOk) {
+            btnConfirmOk.addEventListener('click', () => {
+                if (pendingForm) {
+                    const formToSubmit = pendingForm;
+                    hideConfirmModal();
+                    if (!formToSubmit.hasAttribute('data-no-loading')) {
+                        showLoading();
+                    }
+                    formToSubmit.submit();
+                }
+            });
+        }
+
         document.querySelectorAll('form').forEach((form) => {
             form.addEventListener('submit', (event) => {
                 if (event.defaultPrevented) {
@@ -75,8 +153,10 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
                 }
 
                 const confirmMessage = form.getAttribute('data-confirm');
-                if (confirmMessage && !window.confirm(confirmMessage)) {
+                if (confirmMessage && pendingForm !== form) {
                     event.preventDefault();
+                    pendingForm = form;
+                    showConfirmModal(confirmMessage);
                     return;
                 }
 

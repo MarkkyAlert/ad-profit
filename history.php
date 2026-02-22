@@ -134,7 +134,7 @@ require __DIR__ . '/includes/header.php';
                                         ✏️ แก้ไข
                                     </button>
 
-                                    <form action="<?= e(app_url('/api/records.php')) ?>" method="post" data-delete-form>
+                                    <form action="<?= e(app_url('/api/records.php')) ?>" method="post" data-delete-form data-confirm="ยืนยันการลบรายการนี้ใช่หรือไม่?">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
@@ -269,14 +269,7 @@ require __DIR__ . '/includes/header.php';
             });
         }
 
-        deleteForms.forEach((form) => {
-            form.addEventListener('submit', (event) => {
-                const accepted = window.confirm('ยืนยันการลบรายการนี้ใช่หรือไม่?');
-                if (!accepted) {
-                    event.preventDefault();
-                }
-            });
-        });
+
     })();
 </script>
 <?php require __DIR__ . '/includes/footer.php'; ?>
