@@ -355,16 +355,28 @@ function get_flash(string $key): ?string
 
 function client_ip(): string
 {
-    $candidates = [];
+    $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
 
-    if (defined('TRUST_PROXY') && TRUST_PROXY) {
-        $forwardedFor = (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+    $candidates = [];
+    $proxyHeadersAllowed = false;
+
+    if (
+        $remoteAddr !== ''
+        && defined('TRUST_PROXY')
+        && TRUST_PROXY
+        && defined('TRUSTED_PROXIES')
+        && is_array(TRUSTED_PROXIES)
+        && in_array($remoteAddr, TRUSTED_PROXIES, true)
+    ) {
+        $proxyHeadersAllowed = true;
+    }
+
+    if ($proxyHeadersAllowed) {
+        $forwardedFor = trim((string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
         if ($forwardedFor !== '') {
-            foreach (explode(',', $forwardedFor) as $forwardedIp) {
-                $candidate = trim($forwardedIp);
-                if ($candidate !== '') {
-                    $candidates[] = $candidate;
-                }
+            $firstHop = trim((string)explode(',', $forwardedFor)[0]);
+            if ($firstHop !== '') {
+                $candidates[] = $firstHop;
             }
         }
 
@@ -374,7 +386,6 @@ function client_ip(): string
         }
     }
 
-    $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
     if ($remoteAddr !== '') {
         $candidates[] = $remoteAddr;
     }

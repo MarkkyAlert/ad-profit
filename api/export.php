@@ -62,6 +62,17 @@ if ($asciiBase === '') {
 
 $asciiFilename = $asciiBase . '.csv';
 
+$sanitizeCsvCell = static function (mixed $value): string {
+    $stringValue = (string)$value;
+    $trimmedLeft = ltrim($stringValue);
+
+    if ($trimmedLeft !== '' && preg_match('/^[=+\-@\t\r]/', $trimmedLeft) === 1) {
+        return "'" . $stringValue;
+    }
+
+    return $stringValue;
+};
+
 header('Content-Type: text/csv; charset=UTF-8');
 header('Content-Disposition: attachment; filename="' . $asciiFilename . '"; filename*=UTF-8\'\'' . rawurlencode($filenameUtf8));
 header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -84,15 +95,15 @@ if ($output === false) {
 echo "\xEF\xBB\xBF";
 
 if (!empty($headers)) {
-    fputcsv($output, array_map(static fn($value): string => (string)$value, $headers));
+    fputcsv($output, array_map($sanitizeCsvCell, $headers));
 }
 
 foreach ($rows as $row) {
-    fputcsv($output, array_map(static fn($value): string => (string)$value, (array)$row));
+    fputcsv($output, array_map($sanitizeCsvCell, (array)$row));
 }
 
 if (!empty($totalsRow)) {
-    fputcsv($output, array_map(static fn($value): string => (string)$value, $totalsRow));
+    fputcsv($output, array_map($sanitizeCsvCell, $totalsRow));
 }
 
 fclose($output);

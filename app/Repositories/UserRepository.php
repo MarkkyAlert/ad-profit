@@ -150,6 +150,58 @@ class UserRepository
         return $stmt->rowCount() > 0;
     }
 
+    public function getSessionVersion(int $userId): int
+    {
+        if ($userId <= 0) {
+            return 1;
+        }
+
+        $sql = 'SELECT session_version
+                FROM users
+                WHERE id = :id
+                LIMIT 1';
+
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => $userId]);
+            $row = $stmt->fetch();
+        } catch (PDOException $exception) {
+            if ($this->isMissingSessionVersionColumnError($exception)) {
+                return 1;
+            }
+
+            throw $exception;
+        }
+
+        if (!is_array($row)) {
+            return 1;
+        }
+
+        return max(1, (int)($row['session_version'] ?? 1));
+    }
+
+    public function incrementSessionVersion(int $userId): void
+    {
+        if ($userId <= 0) {
+            return;
+        }
+
+        $sql = 'UPDATE users
+                SET session_version = COALESCE(session_version, 1) + 1
+                WHERE id = :id';
+
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => $userId]);
+        } catch (PDOException $exception) {
+            if ($this->isMissingSessionVersionColumnError($exception)) {
+                return;
+            }
+
+            throw $exception;
+        }
+    }
+
     private function isMissingDisplayNameColumnError(PDOException $exception): bool
     {
         if ((string)$exception->getCode() !== '42S22') {
@@ -157,5 +209,14 @@ class UserRepository
         }
 
         return str_contains(strtolower($exception->getMessage()), 'display_name');
+    }
+
+    private function isMissingSessionVersionColumnError(PDOException $exception): bool
+    {
+        if ((string)$exception->getCode() !== '42S22') {
+            return false;
+        }
+
+        return str_contains(strtolower($exception->getMessage()), 'session_version');
     }
 }

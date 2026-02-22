@@ -7,7 +7,7 @@ function requireAuth(bool $jsonResponse = false): void
     $isLoggedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
 
     if ($isLoggedIn) {
-        if (!isAuthSessionAlive()) {
+        if (!isAuthSessionAlive() || !isSessionVersionValid()) {
             clearAuthSession();
 
             if ($jsonResponse || is_api_request()) {
@@ -41,7 +41,7 @@ function requireGuest(): void
     $isLoggedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
 
     if ($isLoggedIn) {
-        if (!isAuthSessionAlive()) {
+        if (!isAuthSessionAlive() || !isSessionVersionValid()) {
             clearAuthSession();
             return;
         }
@@ -73,16 +73,59 @@ function isAuthSessionAlive(): bool
     return !$idleExpired && !$absoluteExpired;
 }
 
+function isSessionVersionValid(): bool
+{
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        return false;
+    }
+
+    if (!function_exists('db')) {
+        return true;
+    }
+
+    $sessionVersion = max(1, (int)($_SESSION['session_version'] ?? 1));
+
+    try {
+        $pdo = db();
+        $stmt = $pdo->prepare('SELECT session_version FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+        $row = $stmt->fetch();
+
+        if (!is_array($row)) {
+            return false;
+        }
+
+        $currentVersion = max(1, (int)($row['session_version'] ?? 1));
+        return $currentVersion === $sessionVersion;
+    } catch (PDOException $exception) {
+        $isMissingColumn = (string)$exception->getCode() === '42S22'
+            && str_contains(strtolower($exception->getMessage()), 'session_version');
+
+        if ($isMissingColumn) {
+            return true;
+        }
+
+        error_log('[auth] session version check failed: ' . $exception->getMessage());
+        return true;
+    } catch (Throwable $exception) {
+        error_log('[auth] session version check failed: ' . $exception->getMessage());
+        return true;
+    }
+}
+
 function clearAuthSession(): void
 {
     unset(
         $_SESSION['user_id'],
         $_SESSION['email'],
         $_SESSION['display_name'],
+        $_SESSION['session_version'],
         $_SESSION['auth_started_at'],
         $_SESSION['last_activity_at'],
         $_SESSION['current_shop_id'],
         $_SESSION['current_shop_name'],
+        $_SESSION['password_reset_token'],
         $_SESSION['csrf_token']
     );
 

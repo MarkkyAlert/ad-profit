@@ -43,7 +43,7 @@ if (is_file($envFilePath) && is_readable($envFilePath)) {
 }
 
 if (!defined('APP_ENV')) {
-    define('APP_ENV', (string)(getenv('APP_ENV') ?: 'development'));
+    define('APP_ENV', (string)(getenv('APP_ENV') ?: 'production'));
 }
 
 if (!defined('APP_NAME')) {
@@ -132,8 +132,35 @@ if (!defined('TRUST_PROXY')) {
     define('TRUST_PROXY', filter_var(getenv('TRUST_PROXY') ?: 'false', FILTER_VALIDATE_BOOLEAN));
 }
 
+if (!defined('TRUSTED_PROXIES')) {
+    $trustedProxiesRaw = (string)(getenv('TRUSTED_PROXIES') ?: '');
+    $trustedProxies = [];
+
+    if ($trustedProxiesRaw !== '') {
+        foreach (explode(',', $trustedProxiesRaw) as $proxyCandidate) {
+            $proxyIp = trim($proxyCandidate);
+            if ($proxyIp === '') {
+                continue;
+            }
+
+            if (filter_var($proxyIp, FILTER_VALIDATE_IP) === false) {
+                continue;
+            }
+
+            $trustedProxies[] = $proxyIp;
+        }
+    }
+
+    define('TRUSTED_PROXIES', $trustedProxies);
+}
+
+if (!defined('EXPOSE_DEV_RESET_LINK')) {
+    define('EXPOSE_DEV_RESET_LINK', filter_var(getenv('EXPOSE_DEV_RESET_LINK') ?: 'false', FILTER_VALIDATE_BOOLEAN));
+}
+
 if (!defined('LOG_FILE')) {
-    define('LOG_FILE', dirname(__DIR__) . '/logs/php-error.log');
+    $defaultLogFile = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'ad-profit' . DIRECTORY_SEPARATOR . 'php-error.log';
+    define('LOG_FILE', (string)(getenv('LOG_FILE') ?: $defaultLogFile));
 }
 
 if (!defined('PASSWORD_RESET_TOKEN_TTL_HOURS')) {

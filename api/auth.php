@@ -108,7 +108,7 @@ if ($action === 'forgot_password') {
             'message' => (string)($result['message'] ?? 'หากอีเมลนี้มีอยู่ในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน'),
         ];
 
-        if (APP_ENV === 'development' && isset($result['token'])) {
+        if (APP_ENV === 'development' && EXPOSE_DEV_RESET_LINK && isset($result['token'])) {
             $resetLink = app_url('/reset-password.php?token=' . $result['token']);
             $responseData['reset_link'] = $resetLink;
             set_flash('reset_link', $resetLink);
@@ -127,25 +127,28 @@ if ($action === 'reset_password') {
     ensure_post_request_or_respond($wantsJson, '/reset-password.php');
     ensure_valid_csrf_or_respond($wantsJson, '/reset-password.php', (string)($_POST['csrf_token'] ?? ''));
 
+    $resetToken = trim((string)($_POST['token'] ?? ($_SESSION['password_reset_token'] ?? '')));
+
     $result = $authService->resetPassword(
-        (string)($_POST['token'] ?? ''),
+        $resetToken,
         (string)($_POST['password'] ?? ''),
         (string)($_POST['password_confirm'] ?? ''),
         client_ip()
     );
 
     if (($result['success'] ?? false) === true) {
+        unset($_SESSION['password_reset_token']);
+
         $respond([
             'success' => true,
             'message' => (string)($result['message'] ?? 'รีเซ็ตรหัสผ่านสำเร็จ'),
         ], 200, '/login.php');
     }
 
-    $token = (string)($_POST['token'] ?? '');
     $respond([
         'success' => false,
         'error' => (string)($result['error'] ?? 'ไม่สามารถรีเซ็ตรหัสผ่านได้'),
-    ], 422, '/reset-password.php?token=' . urlencode($token));
+    ], 422, '/reset-password.php');
 }
 
 $respond([

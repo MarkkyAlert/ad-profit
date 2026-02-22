@@ -25,6 +25,70 @@ $respond = static function (array $payload, int $statusCode, string $redirectUrl
     api_respond($payload, $statusCode, $redirectUrl, $wantsJson);
 };
 
+$profileClientIp = client_ip();
+
+$getProfileRateLimitBucket = static function (string $action, int $userId, string $clientIp): array {
+    if (!isset($_SESSION['profile_rate_limits']) || !is_array($_SESSION['profile_rate_limits'])) {
+        $_SESSION['profile_rate_limits'] = [];
+    }
+
+    $key = hash('sha256', 'profile|' . $action . '|' . $userId . '|' . $clientIp);
+    $now = time();
+
+    $bucket = $_SESSION['profile_rate_limits'][$key] ?? [
+        'attempts' => 0,
+        'started_at' => $now,
+    ];
+
+    $startedAt = (int)($bucket['started_at'] ?? $now);
+    $attempts = max(0, (int)($bucket['attempts'] ?? 0));
+
+    if (($now - $startedAt) >= RATE_LIMIT_WINDOW_SECONDS) {
+        $startedAt = $now;
+        $attempts = 0;
+    }
+
+    $normalizedBucket = [
+        'attempts' => $attempts,
+        'started_at' => $startedAt,
+        'key' => $key,
+    ];
+
+    $_SESSION['profile_rate_limits'][$key] = [
+        'attempts' => $attempts,
+        'started_at' => $startedAt,
+    ];
+
+    return $normalizedBucket;
+};
+
+$isProfileRateLimited = static function (string $action, int $userId, string $clientIp) use ($getProfileRateLimitBucket): bool {
+    $bucket = $getProfileRateLimitBucket($action, $userId, $clientIp);
+    return (int)$bucket['attempts'] >= RATE_LIMIT_MAX_ATTEMPTS;
+};
+
+$markProfileRateLimitFailedAttempt = static function (string $action, int $userId, string $clientIp) use ($getProfileRateLimitBucket): void {
+    $bucket = $getProfileRateLimitBucket($action, $userId, $clientIp);
+    $key = (string)($bucket['key'] ?? '');
+    if ($key === '') {
+        return;
+    }
+
+    $_SESSION['profile_rate_limits'][$key] = [
+        'attempts' => (int)$bucket['attempts'] + 1,
+        'started_at' => (int)$bucket['started_at'],
+    ];
+};
+
+$clearProfileRateLimit = static function (string $action, int $userId, string $clientIp): void {
+    if (!isset($_SESSION['profile_rate_limits']) || !is_array($_SESSION['profile_rate_limits'])) {
+        return;
+    }
+
+    $key = hash('sha256', 'profile|' . $action . '|' . $userId . '|' . $clientIp);
+    unset($_SESSION['profile_rate_limits'][$key]);
+};
+
 if ($action === 'update_profile') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
@@ -53,6 +117,14 @@ if ($action === 'change_email') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
+    $rateLimitAction = 'change_email';
+    if ($isProfileRateLimited($rateLimitAction, $userId, $profileClientIp)) {
+        $respond([
+            'success' => false,
+            'error' => 'ลองเปลี่ยนอีเมลบ่อยเกินไป กรุณารอแล้วลองใหม่อีกครั้ง',
+        ], 429, $redirectPath);
+    }
+
     $result = $profileService->changeEmail(
         $userId,
         (string)($_POST['email'] ?? ''),
@@ -67,12 +139,16 @@ if ($action === 'change_email') {
             $_SESSION['email'] = $email;
         }
 
+        $clearProfileRateLimit($rateLimitAction, $userId, $profileClientIp);
+
         $respond([
             'success' => true,
             'message' => 'เปลี่ยนอีเมลเรียบร้อยแล้ว',
             'data' => $data,
         ], 200, $redirectPath);
     }
+
+    $markProfileRateLimitFailedAttempt($rateLimitAction, $userId, $profileClientIp);
 
     $respond([
         'success' => false,
@@ -84,6 +160,14 @@ if ($action === 'change_password') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
+    $rateLimitAction = 'change_password';
+    if ($isProfileRateLimited($rateLimitAction, $userId, $profileClientIp)) {
+        $respond([
+            'success' => false,
+            'error' => 'ลองเปลี่ยนรหัสผ่านบ่อยเกินไป กรุณารอแล้วลองใหม่อีกครั้ง',
+        ], 429, $redirectPath);
+    }
+
     $result = $profileService->changePassword(
         $userId,
         (string)($_POST['current_password'] ?? ''),
@@ -92,11 +176,21 @@ if ($action === 'change_password') {
     );
 
     if (($result['success'] ?? false) === true) {
+        $clearProfileRateLimit($rateLimitAction, $userId, $profileClientIp);
+
+        try {
+            $_SESSION['session_version'] = $userRepository->getSessionVersion($userId);
+        } catch (Throwable $exception) {
+            $_SESSION['session_version'] = max(1, (int)($_SESSION['session_version'] ?? 1));
+        }
+
         $respond([
             'success' => true,
             'message' => 'เปลี่ยนรหัสผ่านเรียบร้อยแล้ว',
         ], 200, $redirectPath);
     }
+
+    $markProfileRateLimitFailedAttempt($rateLimitAction, $userId, $profileClientIp);
 
     $respond([
         'success' => false,

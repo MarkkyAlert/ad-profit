@@ -167,7 +167,7 @@ class ProfileService
         if ($existingUser !== null && (int)$existingUser['id'] !== $userId) {
             return [
                 'success' => false,
-                'error' => 'อีเมลนี้ถูกใช้งานแล้ว',
+                'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
             ];
         }
 
@@ -180,7 +180,7 @@ class ProfileService
             if ($isDuplicateUser) {
                 return [
                     'success' => false,
-                    'error' => 'อีเมลนี้ถูกใช้งานแล้ว',
+                    'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
                 ];
             }
 
@@ -286,6 +286,12 @@ class ProfileService
                 'success' => false,
                 'error' => 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
             ];
+        }
+
+        try {
+            $this->userRepository->incrementSessionVersion($userId);
+        } catch (Throwable $exception) {
+            error_log('[profile] increment session_version failed: ' . $exception->getMessage());
         }
 
         return [

@@ -12,11 +12,16 @@ if (file_exists($composerAutoload)) {
 require_once __DIR__ . '/config.php';
 
 $httpsEnabled = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+$cookieSecure = APP_ENV === 'production' ? true : $httpsEnabled;
+
+header('X-Frame-Options: DENY');
+header("Content-Security-Policy: frame-ancestors 'none'");
+header('X-Content-Type-Options: nosniff');
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start([
         'cookie_httponly' => true,
-        'cookie_secure' => $httpsEnabled,
+        'cookie_secure' => $cookieSecure,
         'cookie_samesite' => 'Lax',
         'use_strict_mode' => true,
     ]);
@@ -129,6 +134,14 @@ function check_schema_compatibility(PDO $pdo): array
             $cachedResult = [
                 'ok' => false,
                 'message' => 'Missing required column users.display_name',
+            ];
+            return $cachedResult;
+        }
+
+        if (!schema_column_exists($pdo, 'users', 'session_version')) {
+            $cachedResult = [
+                'ok' => false,
+                'message' => 'Missing required column users.session_version',
             ];
             return $cachedResult;
         }

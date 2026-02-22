@@ -87,12 +87,15 @@ class AuthService
             ];
         }
 
+        $sessionVersion = 1;
+
         try {
             $this->db->beginTransaction();
 
             $userId = $this->userRepository->create($normalizedEmail, $passwordHash);
             $shopId = $this->shopRepository->create($userId, self::DEFAULT_SHOP_NAME);
             $this->userRepository->updateLastLoginAt($userId);
+            $sessionVersion = $this->userRepository->getSessionVersion($userId);
 
             $this->db->commit();
         } catch (Throwable $exception) {
@@ -117,7 +120,7 @@ class AuthService
             ];
         }
 
-        $this->establishSession($userId, $normalizedEmail, $shopId, self::DEFAULT_SHOP_NAME);
+        $this->establishSession($userId, $normalizedEmail, $shopId, self::DEFAULT_SHOP_NAME, $sessionVersion);
         $this->clearRateLimit('register', $clientIp, $normalizedEmail);
 
         return [
@@ -184,8 +187,15 @@ class AuthService
             $shopName = (string)$shop['name'];
         }
 
+        $sessionVersion = 1;
+        try {
+            $sessionVersion = $this->userRepository->getSessionVersion($userId);
+        } catch (Throwable $exception) {
+            error_log('[auth][login] Unable to load session_version: ' . $exception->getMessage());
+        }
+
         $this->userRepository->updateLastLoginAt($userId);
-        $this->establishSession($userId, $userEmail, $shopId, $shopName);
+        $this->establishSession($userId, $userEmail, $shopId, $shopName, $sessionVersion);
         $this->clearRateLimit('login', $clientIp, $normalizedEmail);
 
         return [
@@ -201,10 +211,12 @@ class AuthService
             $_SESSION['user_id'],
             $_SESSION['email'],
             $_SESSION['display_name'],
+            $_SESSION['session_version'],
             $_SESSION['auth_started_at'],
             $_SESSION['last_activity_at'],
             $_SESSION['current_shop_id'],
-            $_SESSION['current_shop_name']
+            $_SESSION['current_shop_name'],
+            $_SESSION['password_reset_token']
         );
 
         unset($_SESSION['csrf_token']);
@@ -284,7 +296,7 @@ class AuthService
             'email_sent' => $emailSent,
         ];
 
-        if (APP_ENV === 'development') {
+        if (APP_ENV === 'development' && EXPOSE_DEV_RESET_LINK) {
             $response['token'] = $token;
             $response['email'] = $normalizedEmail;
         }
@@ -376,6 +388,8 @@ class AuthService
                 ];
             }
 
+            $this->userRepository->incrementSessionVersion($userId);
+
             $deletedToken = $this->passwordResetRepository->deleteByUserId($userId);
             if (!$deletedToken) {
                 if ($startedTransaction && $this->db->inTransaction()) {
@@ -411,12 +425,13 @@ class AuthService
         ];
     }
 
-    private function establishSession(int $userId, string $email, int $shopId, string $shopName): void
+    private function establishSession(int $userId, string $email, int $shopId, string $shopName, int $sessionVersion): void
     {
         session_regenerate_id(true);
 
         $_SESSION['user_id'] = $userId;
         $_SESSION['email'] = $email;
+        $_SESSION['session_version'] = max(1, $sessionVersion);
         $_SESSION['auth_started_at'] = time();
         $_SESSION['last_activity_at'] = time();
         $_SESSION['current_shop_id'] = $shopId;

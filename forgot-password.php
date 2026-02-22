@@ -77,7 +77,7 @@ $pageTitle = 'ลืมรหัสผ่าน - ' . APP_NAME;
                 <div class="mb-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-300">
                     หากอีเมลนี้มีอยู่ในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน
                 </div>
-                <?php if (APP_ENV === 'development' && ($resetLink = get_flash('reset_link'))): ?>
+                <?php if (APP_ENV === 'development' && EXPOSE_DEV_RESET_LINK && ($resetLink = get_flash('reset_link'))): ?>
                     <div class="mb-4 rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-300">
                         <strong>🔧 Dev Mode:</strong> คลิกลิงก์ด้านล่างเพื่อรีเซ็ตรหัสผ่าน<br>
                         <a href="<?= e($resetLink) ?>" class="mt-2 inline-block text-orange-400 hover:text-orange-300 underline break-all"><?= e($resetLink) ?></a>

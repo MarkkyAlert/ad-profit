@@ -7,7 +7,13 @@ require_once __DIR__ . '/includes/auth.php';
 
 requireGuest();
 
-$token = (string)($_GET['token'] ?? '');
+$tokenFromQuery = trim((string)($_GET['token'] ?? ''));
+if ($tokenFromQuery !== '') {
+    $_SESSION['password_reset_token'] = $tokenFromQuery;
+    redirect('/reset-password.php');
+}
+
+$token = trim((string)($_SESSION['password_reset_token'] ?? ''));
 
 if ($token === '') {
     set_flash('error', 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง');
@@ -81,7 +87,6 @@ $pageTitle = 'รีเซ็ตรหัสผ่าน - ' . APP_NAME;
             <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" class="space-y-4">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="reset_password">
-                <input type="hidden" name="token" value="<?= e($token) ?>">
                 <div>
                     <label for="password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่านใหม่</label>
                     <input id="password" name="password" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
