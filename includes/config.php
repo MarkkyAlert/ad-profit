@@ -62,6 +62,11 @@ if (!defined('APP_URL')) {
         }
     }
 
+    if (php_sapi_name() !== 'cli' && isset($_SERVER['HTTP_HOST'])) {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $detectedAppUrl = $protocol . $_SERVER['HTTP_HOST'] . $detectedAppUrl;
+    }
+
     define('APP_URL', rtrim((string)(getenv('APP_URL') ?: $detectedAppUrl), '/'));
 }
 

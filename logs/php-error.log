@@ -1,0 +1,13 @@
+[22-Feb-2026 12:53:16 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 12:54:27 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 12:54:37 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 13:02:16 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 13:04:09 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 13:11:39 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 13:12:56 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 13:12:59 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 13:13:01 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 13:16:39 Asia/Bangkok] [exception] Call to undefined function is_logged_in() in C:\xampp\htdocs\ad-profit\forgot-password.php:8
+[22-Feb-2026 13:35:33 Asia/Bangkok] [email] Failed to send email to: puettipong.o@gmail.com
+[22-Feb-2026 13:36:23 Asia/Bangkok] [email] Failed to send email to: puettipong.o@gmail.com
+[22-Feb-2026 13:41:40 Asia/Bangkok] [email] Email sent successfully to: puettipong.o@gmail.com
