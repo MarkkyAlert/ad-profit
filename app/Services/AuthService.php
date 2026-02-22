@@ -9,17 +9,26 @@ class AuthService
     private PDO $db;
     private UserRepository $userRepository;
     private ShopRepository $shopRepository;
+    private ?PasswordResetRepository $passwordResetRepository;
+    private ?EmailService $emailService;
 
-    public function __construct(PDO $db, UserRepository $userRepository, ShopRepository $shopRepository)
-    {
+    public function __construct(
+        PDO $db,
+        UserRepository $userRepository,
+        ShopRepository $shopRepository,
+        ?PasswordResetRepository $passwordResetRepository = null,
+        ?EmailService $emailService = null
+    ) {
         $this->db = $db;
         $this->userRepository = $userRepository;
         $this->shopRepository = $shopRepository;
+        $this->passwordResetRepository = $passwordResetRepository;
+        $this->emailService = $emailService;
     }
 
-    public function register(string $username, string $password, string $passwordConfirm, string $clientIp): array
+    public function register(string $email, string $password, string $passwordConfirm, string $clientIp): array
     {
-        $normalizedUsername = $this->normalizeUsername($username);
+        $normalizedEmail = $this->normalizeEmail($email);
 
         if ($this->isRateLimited('register', $clientIp)) {
             return [
@@ -28,19 +37,19 @@ class AuthService
             ];
         }
 
-        if ($normalizedUsername === '' || $this->usernameLength($normalizedUsername) < 3 || $this->usernameLength($normalizedUsername) > 50) {
+        if ($normalizedEmail === '' || !$this->isValidEmail($normalizedEmail)) {
             $this->markFailedAttempt('register', $clientIp);
             return [
                 'success' => false,
-                'error' => 'ชื่อผู้ใช้ต้องมีความยาว 3-50 ตัวอักษร',
+                'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
             ];
         }
 
-        if (!preg_match('/^[\p{L}\p{N}._-]+$/u', $normalizedUsername)) {
+        if (strlen($normalizedEmail) > 255) {
             $this->markFailedAttempt('register', $clientIp);
             return [
                 'success' => false,
-                'error' => 'ชื่อผู้ใช้ใช้ได้เฉพาะตัวอักษร ตัวเลข และ . _ -',
+                'error' => 'อีเมลยาวเกินไป',
             ];
         }
 
@@ -60,11 +69,11 @@ class AuthService
             ];
         }
 
-        if ($this->userRepository->findByUsername($normalizedUsername) !== null) {
+        if ($this->userRepository->findByEmail($normalizedEmail) !== null) {
             $this->markFailedAttempt('register', $clientIp);
             return [
                 'success' => false,
-                'error' => 'ชื่อผู้ใช้นี้ถูกใช้งานแล้ว',
+                'error' => 'อีเมลนี้ถูกใช้งานแล้ว',
             ];
         }
 
@@ -80,7 +89,7 @@ class AuthService
         try {
             $this->db->beginTransaction();
 
-            $userId = $this->userRepository->create($normalizedUsername, $passwordHash);
+            $userId = $this->userRepository->create($normalizedEmail, $passwordHash);
             $shopId = $this->shopRepository->create($userId, self::DEFAULT_SHOP_NAME);
             $this->userRepository->updateLastLoginAt($userId);
 
@@ -97,7 +106,7 @@ class AuthService
             if ($isDuplicateUser) {
                 return [
                     'success' => false,
-                    'error' => 'ชื่อผู้ใช้นี้ถูกใช้งานแล้ว',
+                    'error' => 'อีเมลนี้ถูกใช้งานแล้ว',
                 ];
             }
 
@@ -107,7 +116,7 @@ class AuthService
             ];
         }
 
-        $this->establishSession($userId, $normalizedUsername, $shopId, self::DEFAULT_SHOP_NAME);
+        $this->establishSession($userId, $normalizedEmail, $shopId, self::DEFAULT_SHOP_NAME);
         $this->clearRateLimit('register', $clientIp);
 
         return [
@@ -117,9 +126,9 @@ class AuthService
         ];
     }
 
-    public function login(string $username, string $password, string $clientIp): array
+    public function login(string $email, string $password, string $clientIp): array
     {
-        $normalizedUsername = $this->normalizeUsername($username);
+        $normalizedEmail = $this->normalizeEmail($email);
 
         if ($this->isRateLimited('login', $clientIp)) {
             return [
@@ -128,20 +137,20 @@ class AuthService
             ];
         }
 
-        if ($normalizedUsername === '' || $password === '') {
+        if ($normalizedEmail === '' || $password === '') {
             $this->markFailedAttempt('login', $clientIp);
             return [
                 'success' => false,
-                'error' => 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน',
+                'error' => 'กรุณากรอกอีเมลและรหัสผ่าน',
             ];
         }
 
-        $user = $this->userRepository->findByUsername($normalizedUsername);
+        $user = $this->userRepository->findByEmail($normalizedEmail);
         if ($user === null) {
             $this->markFailedAttempt('login', $clientIp);
             return [
                 'success' => false,
-                'error' => 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+                'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
             ];
         }
 
@@ -150,11 +159,12 @@ class AuthService
             $this->markFailedAttempt('login', $clientIp);
             return [
                 'success' => false,
-                'error' => 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+                'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
             ];
         }
 
         $userId = (int)$user['id'];
+        $userEmail = (string)$user['email'];
         $shop = $this->shopRepository->getFirstByUserId($userId);
 
         if ($shop === null) {
@@ -174,7 +184,7 @@ class AuthService
         }
 
         $this->userRepository->updateLastLoginAt($userId);
-        $this->establishSession($userId, $normalizedUsername, $shopId, $shopName);
+        $this->establishSession($userId, $userEmail, $shopId, $shopName);
         $this->clearRateLimit('login', $clientIp);
 
         return [
@@ -188,7 +198,7 @@ class AuthService
     {
         unset(
             $_SESSION['user_id'],
-            $_SESSION['username'],
+            $_SESSION['email'],
             $_SESSION['current_shop_id'],
             $_SESSION['current_shop_name']
         );
@@ -197,28 +207,164 @@ class AuthService
         session_regenerate_id(true);
     }
 
-    private function establishSession(int $userId, string $username, int $shopId, string $shopName): void
+    public function requestPasswordReset(string $email, string $clientIp): array
+    {
+        if ($this->passwordResetRepository === null) {
+            return [
+                'success' => false,
+                'error' => 'ระบบรีเซ็ตรหัสผ่านไม่พร้อมใช้งาน',
+            ];
+        }
+
+        $normalizedEmail = $this->normalizeEmail($email);
+
+        if ($this->isRateLimited('password_reset', $clientIp)) {
+            return [
+                'success' => false,
+                'error' => 'ลองขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่',
+            ];
+        }
+
+        if ($normalizedEmail === '' || !$this->isValidEmail($normalizedEmail)) {
+            $this->markFailedAttempt('password_reset', $clientIp);
+            return [
+                'success' => false,
+                'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
+            ];
+        }
+
+        $user = $this->userRepository->findByEmail($normalizedEmail);
+        if ($user === null) {
+            return [
+                'success' => true,
+                'message' => 'หากอีเมลนี้มีอยู่ในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน',
+            ];
+        }
+
+        $userId = (int)$user['id'];
+        $token = bin2hex(random_bytes(32));
+        $tokenHash = hash('sha256', $token);
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+' . PASSWORD_RESET_TOKEN_TTL_HOURS . ' hours'));
+
+        try {
+            $this->passwordResetRepository->createToken($userId, $tokenHash, $expiresAt);
+        } catch (Throwable $exception) {
+            error_log('[auth][password_reset] ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถสร้างลิงก์รีเซ็ตรหัสผ่านได้',
+            ];
+        }
+
+        $this->clearRateLimit('password_reset', $clientIp);
+
+        $resetLink = app_url('/reset-password.php?token=' . $token);
+        $emailSent = false;
+
+        if ($this->emailService !== null && $this->emailService->isEnabled()) {
+            $emailSent = $this->emailService->sendPasswordResetEmail($normalizedEmail, $resetLink);
+        }
+
+        $response = [
+            'success' => true,
+            'message' => 'หากอีเมลนี้มีอยู่ในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน',
+            'email_sent' => $emailSent,
+        ];
+
+        if (APP_ENV === 'development' || !$emailSent) {
+            $response['token'] = $token;
+            $response['email'] = $normalizedEmail;
+        }
+
+        return $response;
+    }
+
+    public function resetPassword(string $token, string $newPassword, string $passwordConfirm): array
+    {
+        if ($this->passwordResetRepository === null) {
+            return [
+                'success' => false,
+                'error' => 'ระบบรีเซ็ตรหัสผ่านไม่พร้อมใช้งาน',
+            ];
+        }
+
+        if ($token === '') {
+            return [
+                'success' => false,
+                'error' => 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง',
+            ];
+        }
+
+        if (strlen($newPassword) < 4) {
+            return [
+                'success' => false,
+                'error' => 'รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร',
+            ];
+        }
+
+        if ($newPassword !== $passwordConfirm) {
+            return [
+                'success' => false,
+                'error' => 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน',
+            ];
+        }
+
+        $tokenHash = hash('sha256', $token);
+        $tokenRecord = $this->passwordResetRepository->findByTokenHash($tokenHash);
+
+        if ($tokenRecord === null) {
+            return [
+                'success' => false,
+                'error' => 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว',
+            ];
+        }
+
+        $userId = (int)$tokenRecord['user_id'];
+        $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
+
+        if (!is_string($passwordHash) || $passwordHash === '') {
+            error_log('[auth][reset_password] Unable to create password hash');
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถรีเซ็ตรหัสผ่านได้ในขณะนี้',
+            ];
+        }
+
+        try {
+            $this->userRepository->updatePasswordHash($userId, $passwordHash);
+            $this->passwordResetRepository->deleteByUserId($userId);
+        } catch (Throwable $exception) {
+            error_log('[auth][reset_password] ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถรีเซ็ตรหัสผ่านได้',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'รีเซ็ตรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่',
+        ];
+    }
+
+    private function establishSession(int $userId, string $email, int $shopId, string $shopName): void
     {
         session_regenerate_id(true);
 
         $_SESSION['user_id'] = $userId;
-        $_SESSION['username'] = $username;
+        $_SESSION['email'] = $email;
         $_SESSION['current_shop_id'] = $shopId;
         $_SESSION['current_shop_name'] = $shopName;
     }
 
-    private function normalizeUsername(string $username): string
+    private function normalizeEmail(string $email): string
     {
-        return trim($username);
+        return strtolower(trim($email));
     }
 
-    private function usernameLength(string $username): int
+    private function isValidEmail(string $email): bool
     {
-        if (function_exists('mb_strlen')) {
-            return mb_strlen($username);
-        }
-
-        return strlen($username);
+        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 
     private function isRateLimited(string $action, string $clientIp): bool

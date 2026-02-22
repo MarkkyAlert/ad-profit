@@ -12,7 +12,9 @@ $wantsJson = str_contains($acceptHeader, 'application/json') || $requestedWith =
 
 $userRepository = new UserRepository($pdo);
 $shopRepository = new ShopRepository($pdo);
-$authService = new AuthService($pdo, $userRepository, $shopRepository);
+$passwordResetRepository = new PasswordResetRepository($pdo);
+$emailService = new EmailService();
+$authService = new AuthService($pdo, $userRepository, $shopRepository, $passwordResetRepository, $emailService);
 
 $respond = static function (array $payload, int $statusCode, string $redirectUrl) use ($wantsJson): never {
     if ($wantsJson) {
@@ -46,7 +48,7 @@ if ($action === 'register') {
     }
 
     $result = $authService->register(
-        (string)($_POST['username'] ?? ''),
+        (string)($_POST['email'] ?? ''),
         (string)($_POST['password'] ?? ''),
         (string)($_POST['password_confirm'] ?? ''),
         client_ip()
@@ -85,7 +87,7 @@ if ($action === 'login') {
     }
 
     $result = $authService->login(
-        (string)($_POST['username'] ?? ''),
+        (string)($_POST['email'] ?? ''),
         (string)($_POST['password'] ?? ''),
         client_ip()
     );
@@ -135,6 +137,82 @@ if ($action === 'logout') {
         'success' => true,
         'message' => 'ออกจากระบบเรียบร้อยแล้ว',
     ], 200, '/login.php');
+}
+
+if ($action === 'forgot_password') {
+    if (!is_post_request()) {
+        $respond([
+            'success' => false,
+            'error' => 'Method Not Allowed',
+        ], 405, '/forgot-password.php');
+    }
+
+    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
+        $respond([
+            'success' => false,
+            'error' => 'Invalid CSRF token',
+        ], 403, '/forgot-password.php');
+    }
+
+    $result = $authService->requestPasswordReset(
+        (string)($_POST['email'] ?? ''),
+        client_ip()
+    );
+
+    if (($result['success'] ?? false) === true) {
+        $responseData = [
+            'success' => true,
+            'message' => (string)($result['message'] ?? 'หากอีเมลนี้มีอยู่ในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน'),
+        ];
+
+        if (APP_ENV === 'development' && isset($result['token'])) {
+            $resetLink = app_url('/reset-password.php?token=' . $result['token']);
+            $responseData['reset_link'] = $resetLink;
+            set_flash('reset_link', $resetLink);
+        }
+
+        $respond($responseData, 200, '/forgot-password.php?sent=1');
+    }
+
+    $respond([
+        'success' => false,
+        'error' => (string)($result['error'] ?? 'ไม่สามารถขอรีเซ็ตรหัสผ่านได้'),
+    ], 422, '/forgot-password.php');
+}
+
+if ($action === 'reset_password') {
+    if (!is_post_request()) {
+        $respond([
+            'success' => false,
+            'error' => 'Method Not Allowed',
+        ], 405, '/reset-password.php');
+    }
+
+    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
+        $respond([
+            'success' => false,
+            'error' => 'Invalid CSRF token',
+        ], 403, '/reset-password.php');
+    }
+
+    $result = $authService->resetPassword(
+        (string)($_POST['token'] ?? ''),
+        (string)($_POST['password'] ?? ''),
+        (string)($_POST['password_confirm'] ?? '')
+    );
+
+    if (($result['success'] ?? false) === true) {
+        $respond([
+            'success' => true,
+            'message' => (string)($result['message'] ?? 'รีเซ็ตรหัสผ่านสำเร็จ'),
+        ], 200, '/login.php');
+    }
+
+    $token = (string)($_POST['token'] ?? '');
+    $respond([
+        'success' => false,
+        'error' => (string)($result['error'] ?? 'ไม่สามารถรีเซ็ตรหัสผ่านได้'),
+    ], 422, '/reset-password.php?token=' . urlencode($token));
 }
 
 $respond([

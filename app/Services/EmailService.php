@@ -1,0 +1,164 @@
+<?php
+
+declare(strict_types=1);
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+class EmailService
+{
+    private bool $enabled;
+    private string $host;
+    private int $port;
+    private string $username;
+    private string $password;
+    private string $fromAddress;
+    private string $fromName;
+
+    public function __construct()
+    {
+        $this->enabled = MAIL_ENABLED;
+        $this->host = MAIL_HOST;
+        $this->port = MAIL_PORT;
+        $this->username = MAIL_USERNAME;
+        $this->password = MAIL_PASSWORD;
+        $this->fromAddress = MAIL_FROM_ADDRESS;
+        $this->fromName = MAIL_FROM_NAME;
+    }
+
+    public function isEnabled(): bool
+    {
+        return $this->enabled && $this->username !== '' && $this->password !== '';
+    }
+
+    public function sendPasswordResetEmail(string $toEmail, string $resetLink): bool
+    {
+        if (!$this->isEnabled()) {
+            error_log('[email] Email sending is disabled or not configured');
+            return false;
+        }
+
+        $subject = 'รีเซ็ตรหัสผ่าน - ' . APP_NAME;
+        
+        $htmlBody = $this->buildPasswordResetHtml($resetLink);
+        $textBody = $this->buildPasswordResetText($resetLink);
+
+        return $this->send($toEmail, $subject, $htmlBody, $textBody);
+    }
+
+    private function send(string $to, string $subject, string $htmlBody, string $textBody = ''): bool
+    {
+        if (!class_exists(PHPMailer::class)) {
+            error_log('[email] PHPMailer is not installed. Please run `composer require phpmailer/phpmailer`');
+            return false;
+        }
+
+        $mail = new PHPMailer(true);
+
+        try {
+            // Server settings
+            $mail->isSMTP();
+            $mail->Host       = $this->host;
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $this->username;
+            $mail->Password   = $this->password;
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port       = $this->port;
+            $mail->CharSet    = 'UTF-8';
+
+            // Recipients
+            $mail->setFrom($this->fromAddress, $this->fromName);
+            $mail->addAddress($to);
+
+            // Content
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body    = $htmlBody;
+            $mail->AltBody = $textBody ?: strip_tags($htmlBody);
+
+            $mail->send();
+            error_log('[email] Email sent successfully to: ' . $to);
+            return true;
+        } catch (Exception $e) {
+            error_log("[email] Failed to send email to: {$to}. Mailer Error: {$mail->ErrorInfo}");
+            return false;
+        }
+    }
+
+    private function buildPasswordResetHtml(string $resetLink): string
+    {
+        $appName = htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8');
+        $safeLink = htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8');
+        $expiryHours = PASSWORD_RESET_TOKEN_TTL_HOURS;
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>รีเซ็ตรหัสผ่าน</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0a1628;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <tr>
+            <td style="background: linear-gradient(135deg, #0d1526 0%, #1a2744 100%); border-radius: 16px; padding: 40px; border: 1px solid rgba(255,255,255,0.1);">
+                <h1 style="color: #fff; font-size: 24px; margin: 0 0 20px 0; text-align: center;">
+                    📊 {$appName}
+                </h1>
+                
+                <h2 style="color: #e2e8f0; font-size: 20px; margin: 0 0 16px 0;">
+                    รีเซ็ตรหัสผ่านของคุณ
+                </h2>
+                
+                <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0;">
+                    เราได้รับคำขอรีเซ็ตรหัสผ่านสำหรับบัญชีของคุณ คลิกปุ่มด้านล่างเพื่อตั้งรหัสผ่านใหม่
+                </p>
+                
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                        <td style="text-align: center; padding: 20px 0;">
+                            <a href="{$safeLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px;">
+                                รีเซ็ตรหัสผ่าน
+                            </a>
+                        </td>
+                    </tr>
+                </table>
+                
+                <p style="color: #64748b; font-size: 12px; line-height: 1.6; margin: 24px 0 0 0;">
+                    ลิงก์นี้จะหมดอายุใน {$expiryHours} ชั่วโมง หากคุณไม่ได้ขอรีเซ็ตรหัสผ่าน กรุณาละเว้นอีเมลนี้
+                </p>
+                
+                <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 24px 0;">
+                
+                <p style="color: #475569; font-size: 11px; margin: 0;">
+                    หากปุ่มไม่ทำงาน ให้คัดลอกลิงก์นี้ไปวางในเบราว์เซอร์:<br>
+                    <a href="{$safeLink}" style="color: #f97316; word-break: break-all;">{$safeLink}</a>
+                </p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
+    }
+
+    private function buildPasswordResetText(string $resetLink): string
+    {
+        $appName = APP_NAME;
+        $expiryHours = PASSWORD_RESET_TOKEN_TTL_HOURS;
+
+        return <<<TEXT
+{$appName} - รีเซ็ตรหัสผ่าน
+
+เราได้รับคำขอรีเซ็ตรหัสผ่านสำหรับบัญชีของคุณ
+
+คลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่:
+{$resetLink}
+
+ลิงก์นี้จะหมดอายุใน {$expiryHours} ชั่วโมง
+
+หากคุณไม่ได้ขอรีเซ็ตรหัสผ่าน กรุณาละเว้นอีเมลนี้
+TEXT;
+    }
+}

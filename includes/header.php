@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 $pageTitle = $pageTitle ?? APP_NAME;
 $currentPage = $currentPage ?? '';
-$username = (string)($_SESSION['username'] ?? '');
+$userEmail = (string)($_SESSION['email'] ?? '');
 $currentShopId = (int)($_SESSION['current_shop_id'] ?? 0);
 $currentShopName = (string)($_SESSION['current_shop_name'] ?? 'ร้านค้าของฉัน');
 $headerShops = [];
@@ -546,7 +546,7 @@ $flashError = get_flash('error');
                     <span class="text-gradient text-sm sm:text-lg font-bold tracking-tight">วิเคราะห์ยอดขาย</span>
                 </a>
                 <div class="flex items-center gap-1.5 sm:gap-2 text-xs">
-                    <span class="hidden sm:inline-block rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-400 shadow-sm">👤 <?= e($username) ?></span>
+                    <span class="hidden sm:inline-block rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-400 shadow-sm">👤 <?= e($userEmail) ?></span>
                     <?php if ($currentPage === 'shops'): ?>
                         <a href="<?= e(app_url('/dashboard.php')) ?>" class="btn-ghost px-2.5 py-1.5 text-xs" data-loading-link="true">← กลับ</a>
                     <?php else: ?>

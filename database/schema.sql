@@ -8,6 +8,7 @@ CREATE DATABASE IF NOT EXISTS ad_profit
 USE ad_profit;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS password_reset_tokens;
 DROP TABLE IF EXISTS idempotency_requests;
 DROP TABLE IF EXISTS monthly_goals;
 DROP TABLE IF EXISTS daily_records;
@@ -18,13 +19,13 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    username VARCHAR(50) NOT NULL,
+    email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     last_login_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_users_username (username)
+    UNIQUE KEY uq_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS shops (
@@ -99,6 +100,23 @@ CREATE TABLE IF NOT EXISTS idempotency_requests (
     UNIQUE KEY uq_idempotency_scope (user_id, action_type, idempotency_key),
     KEY idx_idempotency_expire (expires_at),
     CONSTRAINT fk_idempotency_user
+        FOREIGN KEY (user_id)
+        REFERENCES users (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_password_reset_user (user_id),
+    KEY idx_password_reset_token (token_hash),
+    KEY idx_password_reset_expires (expires_at),
+    CONSTRAINT fk_password_reset_user
         FOREIGN KEY (user_id)
         REFERENCES users (id)
         ON DELETE CASCADE

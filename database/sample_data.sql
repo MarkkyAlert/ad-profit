@@ -6,18 +6,19 @@ USE ad_profit;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-TRUNCATE TABLE idempotency_requests;
-TRUNCATE TABLE monthly_goals;
-TRUNCATE TABLE daily_records;
-TRUNCATE TABLE shops;
-TRUNCATE TABLE users;
+DELETE FROM password_reset_tokens;
+DELETE FROM idempotency_requests;
+DELETE FROM monthly_goals;
+DELETE FROM daily_records;
+DELETE FROM shops;
+DELETE FROM users;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
-INSERT INTO users (id, username, password_hash, last_login_at, created_at, updated_at)
+INSERT INTO users (id, email, password_hash, last_login_at, created_at, updated_at)
 VALUES
-    (1, 'demo_owner', '$2y$10$WmdX4spwmdeVN4QE/BvMoe4QhxkFwzkjS7XSS9SYIITS557Ved1je', NOW(), NOW(), NOW()),
-    (2, 'demo_team', '$2y$10$0iCU/csDnPzAfxGgUbYHeeZXP7ncvn53Q0btNmlg9uF87P6jAAyL.', NOW(), NOW(), NOW());
+    (1, 'demo@example.com', '$2y$10$WmdX4spwmdeVN4QE/BvMoe4QhxkFwzkjS7XSS9SYIITS557Ved1je', NOW(), NOW(), NOW()),
+    (2, 'team@example.com', '$2y$10$0iCU/csDnPzAfxGgUbYHeeZXP7ncvn53Q0btNmlg9uF87P6jAAyL.', NOW(), NOW(), NOW());
 
 INSERT INTO shops (id, user_id, name, created_at, updated_at)
 VALUES

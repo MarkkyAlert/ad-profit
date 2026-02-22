@@ -13,7 +13,7 @@ class UserRepository
 
     public function findById(int $userId): ?array
     {
-        $sql = 'SELECT id, username, password_hash, last_login_at, created_at, updated_at
+        $sql = 'SELECT id, email, password_hash, last_login_at, created_at, updated_at
                 FROM users
                 WHERE id = :id
                 LIMIT 1';
@@ -25,28 +25,28 @@ class UserRepository
         return $user ?: null;
     }
 
-    public function findByUsername(string $username): ?array
+    public function findByEmail(string $email): ?array
     {
-        $sql = 'SELECT id, username, password_hash, last_login_at, created_at, updated_at
+        $sql = 'SELECT id, email, password_hash, last_login_at, created_at, updated_at
                 FROM users
-                WHERE username = :username
+                WHERE email = :email
                 LIMIT 1';
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':username' => $username]);
+        $stmt->execute([':email' => $email]);
         $user = $stmt->fetch();
 
         return $user ?: null;
     }
 
-    public function create(string $username, string $passwordHash): int
+    public function create(string $email, string $passwordHash): int
     {
-        $sql = 'INSERT INTO users (username, password_hash)
-                VALUES (:username, :password_hash)';
+        $sql = 'INSERT INTO users (email, password_hash)
+                VALUES (:email, :password_hash)';
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
-            ':username' => $username,
+            ':email' => $email,
             ':password_hash' => $passwordHash,
         ]);
 
@@ -61,5 +61,20 @@ class UserRepository
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':id' => $userId]);
+    }
+
+    public function updatePasswordHash(int $userId, string $passwordHash): bool
+    {
+        $sql = 'UPDATE users
+                SET password_hash = :password_hash
+                WHERE id = :id';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':id' => $userId,
+            ':password_hash' => $passwordHash,
+        ]);
+
+        return $stmt->rowCount() > 0;
     }
 }

@@ -2,6 +2,20 @@
 
 declare(strict_types=1);
 
+// เริ่มต้น Session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// โหลด Composer Autoloader
+$composerAutoload = dirname(__DIR__) . '/vendor/autoload.php';
+if (file_exists($composerAutoload)) {
+    require_once $composerAutoload;
+}
+
+// โหลดการตั้งค่า
+require_once __DIR__ . '/config.php';
+
 $httpsEnabled = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {

@@ -249,10 +249,10 @@ $flashError = get_flash('error');
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="login">
                         <div>
-                            <label for="login-username" class="mb-1.5 block text-sm font-medium text-slate-300">ชื่อผู้ใช้</label>
-                            <input id="login-username" name="username" type="text" required maxlength="50"
+                            <label for="login-email" class="mb-1.5 block text-sm font-medium text-slate-300">อีเมล</label>
+                            <input id="login-email" name="email" type="email" required maxlength="255"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
-                                placeholder="กรอกชื่อผู้ใช้">
+                                placeholder="your@email.com">
                         </div>
                         <div>
                             <label for="login-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>
@@ -261,6 +261,9 @@ $flashError = get_flash('error');
                                 placeholder="••••••••">
                         </div>
                         <button type="submit" class="btn-orange mt-2">เข้าสู่ระบบ →</button>
+                        <div class="mt-3 text-center">
+                            <a href="<?= e(app_url('/forgot-password.php')) ?>" class="text-sm text-indigo-400 hover:text-indigo-300 transition-colors">ลืมรหัสผ่าน?</a>
+                        </div>
                     </form>
                 </section>
 
@@ -269,10 +272,10 @@ $flashError = get_flash('error');
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="register">
                         <div>
-                            <label for="register-username" class="mb-1.5 block text-sm font-medium text-slate-300">ชื่อผู้ใช้</label>
-                            <input id="register-username" name="username" type="text" required maxlength="50"
+                            <label for="register-email" class="mb-1.5 block text-sm font-medium text-slate-300">อีเมล</label>
+                            <input id="register-email" name="email" type="email" required maxlength="255"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
-                                placeholder="ตั้งชื่อผู้ใช้">
+                                placeholder="your@email.com">
                         </div>
                         <div>
                             <label for="register-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>

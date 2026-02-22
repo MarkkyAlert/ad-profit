@@ -46,16 +46,21 @@
 
 ## 6) ทดสอบ Auth
 
-- สมัครสมาชิกใหม่ 1 บัญชี
+- สมัครสมาชิกใหม่ 1 บัญชี (ใช้อีเมลแทน username)
 - ตรวจว่าระบบพาไป `dashboard.php`
 - ลอง logout แล้ว login ใหม่
+- ทดสอบ"ลืมรหัสผ่าน" (Dev mode: แสดง reset link บนหน้าจอ)
+
+**Demo accounts** (หลังรัน sample_data.sql):
+- `demo@example.com` / `password`
+- `team@example.com` / `password`
 
 ## 7) Smoke Checklist (Phase 9)
 
 หลังจาก login แล้วให้ทดสอบอย่างน้อย:
 
 1. **Shops**
-   - สร้างร้านที่ 2 จาก header modal
+   - สร้างร้านที่ 2 จากหน้าจัดการร้าน
    - สลับร้านจาก dropdown แล้วข้อมูลต้องแยกกัน
    - ถ้าเหลือร้านเดียว ปุ่มลบร้านต้อง disabled
 
