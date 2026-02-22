@@ -1,0 +1,305 @@
+<?php
+
+declare(strict_types=1);
+
+class ProfileService
+{
+    private UserRepository $userRepository;
+
+    public function __construct(UserRepository $userRepository)
+    {
+        $this->userRepository = $userRepository;
+    }
+
+    public function getProfile(int $userId): array
+    {
+        if ($userId <= 0) {
+            return [
+                'success' => false,
+                'error' => 'Unauthorized',
+            ];
+        }
+
+        $user = $this->userRepository->findProfileById($userId);
+        if ($user === null) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบผู้ใช้งาน',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'id' => (int)$user['id'],
+                'display_name' => trim((string)($user['display_name'] ?? '')),
+                'email' => (string)($user['email'] ?? ''),
+            ],
+        ];
+    }
+
+    public function updateProfile(int $userId, string $displayName): array
+    {
+        if ($userId <= 0) {
+            return [
+                'success' => false,
+                'error' => 'Unauthorized',
+            ];
+        }
+
+        $normalizedDisplayName = trim($displayName);
+        if ($normalizedDisplayName === '') {
+            return [
+                'success' => false,
+                'error' => 'กรุณากรอกชื่อที่แสดง',
+            ];
+        }
+
+        $nameLength = function_exists('mb_strlen') ? mb_strlen($normalizedDisplayName) : strlen($normalizedDisplayName);
+        if ($nameLength > 120) {
+            return [
+                'success' => false,
+                'error' => 'ชื่อที่แสดงยาวเกิน 120 ตัวอักษร',
+            ];
+        }
+
+        $user = $this->userRepository->findProfileById($userId);
+        if ($user === null) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบผู้ใช้งาน',
+            ];
+        }
+
+        $currentDisplayName = trim((string)($user['display_name'] ?? ''));
+        if ($currentDisplayName === $normalizedDisplayName) {
+            return [
+                'success' => true,
+                'data' => [
+                    'display_name' => $currentDisplayName,
+                ],
+            ];
+        }
+
+        try {
+            $updated = $this->userRepository->updateDisplayName($userId, $normalizedDisplayName);
+        } catch (Throwable $exception) {
+            error_log('[profile] updateProfile failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถอัปเดตข้อมูลส่วนตัวได้',
+            ];
+        }
+
+        if (!$updated) {
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถอัปเดตข้อมูลส่วนตัวได้',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'display_name' => $normalizedDisplayName,
+            ],
+        ];
+    }
+
+    public function changeEmail(int $userId, string $newEmail, string $currentPassword): array
+    {
+        if ($userId <= 0) {
+            return [
+                'success' => false,
+                'error' => 'Unauthorized',
+            ];
+        }
+
+        $normalizedEmail = $this->normalizeEmail($newEmail);
+        if ($normalizedEmail === '' || !$this->isValidEmail($normalizedEmail)) {
+            return [
+                'success' => false,
+                'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
+            ];
+        }
+
+        if (strlen($normalizedEmail) > 255) {
+            return [
+                'success' => false,
+                'error' => 'อีเมลยาวเกินไป',
+            ];
+        }
+
+        if ($currentPassword === '') {
+            return [
+                'success' => false,
+                'error' => 'กรุณากรอกรหัสผ่านปัจจุบัน',
+            ];
+        }
+
+        $user = $this->userRepository->findById($userId);
+        if ($user === null) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบผู้ใช้งาน',
+            ];
+        }
+
+        $passwordHash = (string)($user['password_hash'] ?? '');
+        if (!password_verify($currentPassword, $passwordHash)) {
+            return [
+                'success' => false,
+                'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
+            ];
+        }
+
+        $currentEmail = $this->normalizeEmail((string)($user['email'] ?? ''));
+        if ($currentEmail === $normalizedEmail) {
+            return [
+                'success' => true,
+                'data' => [
+                    'email' => $currentEmail,
+                ],
+            ];
+        }
+
+        $existingUser = $this->userRepository->findByEmail($normalizedEmail);
+        if ($existingUser !== null && (int)$existingUser['id'] !== $userId) {
+            return [
+                'success' => false,
+                'error' => 'อีเมลนี้ถูกใช้งานแล้ว',
+            ];
+        }
+
+        try {
+            $updated = $this->userRepository->updateEmail($userId, $normalizedEmail);
+        } catch (Throwable $exception) {
+            error_log('[profile] changeEmail failed: ' . $exception->getMessage());
+
+            $isDuplicateUser = $exception instanceof PDOException && $exception->getCode() === '23000';
+            if ($isDuplicateUser) {
+                return [
+                    'success' => false,
+                    'error' => 'อีเมลนี้ถูกใช้งานแล้ว',
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
+            ];
+        }
+
+        if (!$updated) {
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'email' => $normalizedEmail,
+            ],
+        ];
+    }
+
+    public function changePassword(
+        int $userId,
+        string $currentPassword,
+        string $newPassword,
+        string $passwordConfirm
+    ): array {
+        if ($userId <= 0) {
+            return [
+                'success' => false,
+                'error' => 'Unauthorized',
+            ];
+        }
+
+        if ($currentPassword === '') {
+            return [
+                'success' => false,
+                'error' => 'กรุณากรอกรหัสผ่านปัจจุบัน',
+            ];
+        }
+
+        if (strlen($newPassword) < 4) {
+            return [
+                'success' => false,
+                'error' => 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร',
+            ];
+        }
+
+        if ($newPassword !== $passwordConfirm) {
+            return [
+                'success' => false,
+                'error' => 'รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน',
+            ];
+        }
+
+        if ($newPassword === $currentPassword) {
+            return [
+                'success' => false,
+                'error' => 'รหัสผ่านใหม่ต้องไม่ซ้ำรหัสผ่านปัจจุบัน',
+            ];
+        }
+
+        $user = $this->userRepository->findById($userId);
+        if ($user === null) {
+            return [
+                'success' => false,
+                'error' => 'ไม่พบผู้ใช้งาน',
+            ];
+        }
+
+        $passwordHash = (string)($user['password_hash'] ?? '');
+        if (!password_verify($currentPassword, $passwordHash)) {
+            return [
+                'success' => false,
+                'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
+            ];
+        }
+
+        $newPasswordHash = password_hash($newPassword, PASSWORD_DEFAULT);
+        if (!is_string($newPasswordHash) || $newPasswordHash === '') {
+            error_log('[profile] Unable to create password hash for changePassword');
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถเปลี่ยนรหัสผ่านได้ในขณะนี้',
+            ];
+        }
+
+        try {
+            $updated = $this->userRepository->updatePasswordHash($userId, $newPasswordHash);
+        } catch (Throwable $exception) {
+            error_log('[profile] changePassword failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
+            ];
+        }
+
+        if (!$updated) {
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
+            ];
+        }
+
+        return [
+            'success' => true,
+        ];
+    }
+
+    private function normalizeEmail(string $email): string
+    {
+        return strtolower(trim($email));
+    }
+
+    private function isValidEmail(string $email): bool
+    {
+        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    }
+}

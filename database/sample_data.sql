@@ -15,10 +15,10 @@ DELETE FROM users;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
-INSERT INTO users (id, email, password_hash, last_login_at, created_at, updated_at)
+INSERT INTO users (id, email, display_name, password_hash, last_login_at, created_at, updated_at)
 VALUES
-    (1, 'demo@example.com', '$2y$10$WmdX4spwmdeVN4QE/BvMoe4QhxkFwzkjS7XSS9SYIITS557Ved1je', NOW(), NOW(), NOW()),
-    (2, 'team@example.com', '$2y$10$0iCU/csDnPzAfxGgUbYHeeZXP7ncvn53Q0btNmlg9uF87P6jAAyL.', NOW(), NOW(), NOW());
+    (1, 'demo@example.com', 'ผู้ใช้เดโม', '$2y$10$WmdX4spwmdeVN4QE/BvMoe4QhxkFwzkjS7XSS9SYIITS557Ved1je', NOW(), NOW(), NOW()),
+    (2, 'team@example.com', 'ทีมงาน', '$2y$10$0iCU/csDnPzAfxGgUbYHeeZXP7ncvn53Q0btNmlg9uF87P6jAAyL.', NOW(), NOW(), NOW());
 
 INSERT INTO shops (id, user_id, name, created_at, updated_at)
 VALUES

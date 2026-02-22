@@ -77,4 +77,85 @@ class UserRepository
 
         return $stmt->rowCount() > 0;
     }
+
+    public function findProfileById(int $userId): ?array
+    {
+        $sql = 'SELECT id, email, display_name, password_hash, last_login_at, created_at, updated_at
+                FROM users
+                WHERE id = :id
+                LIMIT 1';
+
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => $userId]);
+            $user = $stmt->fetch();
+            return $user ?: null;
+        } catch (PDOException $exception) {
+            if (!$this->isMissingDisplayNameColumnError($exception)) {
+                throw $exception;
+            }
+
+            $legacySql = 'SELECT id, email, password_hash, last_login_at, created_at, updated_at
+                          FROM users
+                          WHERE id = :id
+                          LIMIT 1';
+
+            $stmt = $this->db->prepare($legacySql);
+            $stmt->execute([':id' => $userId]);
+            $user = $stmt->fetch();
+            if (!$user) {
+                return null;
+            }
+
+            $user['display_name'] = '';
+            return $user;
+        }
+    }
+
+    public function updateDisplayName(int $userId, string $displayName): bool
+    {
+        $sql = 'UPDATE users
+                SET display_name = :display_name
+                WHERE id = :id';
+
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':id' => $userId,
+                ':display_name' => $displayName,
+            ]);
+        } catch (PDOException $exception) {
+            if ($this->isMissingDisplayNameColumnError($exception)) {
+                return false;
+            }
+
+            throw $exception;
+        }
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public function updateEmail(int $userId, string $email): bool
+    {
+        $sql = 'UPDATE users
+                SET email = :email
+                WHERE id = :id';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':id' => $userId,
+            ':email' => $email,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    private function isMissingDisplayNameColumnError(PDOException $exception): bool
+    {
+        if ((string)$exception->getCode() !== '42S22') {
+            return false;
+        }
+
+        return str_contains(strtolower($exception->getMessage()), 'display_name');
+    }
 }
