@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 function requireAuth(bool $jsonResponse = false): void
 {
+    $wantsJson = $jsonResponse || (function_exists('wants_json_response') && wants_json_response());
     $isLoggedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
 
     if ($isLoggedIn) {
         if (!isAuthSessionAlive() || !isSessionVersionValid()) {
             clearAuthSession();
 
-            if ($jsonResponse || is_api_request()) {
+            if ($wantsJson) {
                 jsonResponse([
                     'success' => false,
                     'error' => 'Session expired',
@@ -25,7 +26,7 @@ function requireAuth(bool $jsonResponse = false): void
         return;
     }
 
-    if ($jsonResponse || is_api_request()) {
+    if ($wantsJson) {
         jsonResponse([
             'success' => false,
             'error' => 'Unauthorized',

@@ -141,6 +141,20 @@ class DashboardService
                 ];
             }
 
+            $startDateObject = DateTimeImmutable::createFromFormat('Y-m-d', $startDate);
+            $endDateObject = DateTimeImmutable::createFromFormat('Y-m-d', $endDate);
+            if ($startDateObject && $endDateObject) {
+                $maxRangeDays = 366;
+                $daysCount = (int)($startDateObject->diff($endDateObject)->days ?? 0) + 1;
+
+                if ($daysCount > $maxRangeDays) {
+                    return [
+                        'success' => false,
+                        'error' => 'ช่วงวันที่กำหนดเองยาวเกินไป (สูงสุด ' . $maxRangeDays . ' วัน)',
+                    ];
+                }
+            }
+
             return [
                 'success' => true,
                 'data' => [

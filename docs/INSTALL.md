@@ -37,12 +37,16 @@
 - DB_USER = `root`
 - DB_PASS = ``
 
-หาก deploy ใน subdirectory ให้ตั้ง `APP_URL` (หรือปล่อยให้ระบบ detect จาก `DOCUMENT_ROOT`)
+หากรันในเครื่อง (แนะนำ `APP_ENV=development`) สามารถปล่อย `APP_URL` ว่างได้ ระบบจะ detect path จาก `DOCUMENT_ROOT` ให้เอง (เช่น `/ad-profit`)
+
+หากเป็น production (`APP_ENV=production`) **ต้องตั้ง `APP_URL` เองเป็น absolute URL** เช่น `https://example.com/ad-profit` (ระบบจะไม่ auto-detect เพื่อกัน Host header poisoning)
+
+> **สำคัญ (Production)**: ต้องใช้งานผ่าน **HTTPS** เท่านั้น เพราะระบบบังคับ session cookie เป็น `Secure` หากเข้าด้วย HTTP จะเกิดอาการ login ไม่ติด/เซสชันหาย
 
 ## 5) รันระบบ
 
 1. เปิด Apache + MySQL ใน XAMPP Control Panel
-2. เข้า URL: `http://localhost/ad-profit/`
+2. เข้า URL: `http://localhost/ad-profit/` (สำหรับ local/dev)
 
 ## 6) ทดสอบ Auth
 
@@ -110,7 +114,7 @@ SELECT 'password_reset_tokens.uq_password_reset_token_hash' AS item, COUNT(*) AS
 | Variable | Default | คำอธิบาย |
 |----------|---------|---------|
 | `APP_ENV` | development | ตั้งเป็น `production` สำหรับ prod |
-| `APP_URL` | (empty) | **ต้องตั้งค่าใน production** เช่น `https://example.com` |
+| `APP_URL` | (empty) | **ต้องตั้งค่าใน production** เช่น `https://example.com/ad-profit` |
 | `SESSION_IDLE_TIMEOUT_SECONDS` | 14400 (4 ชม.) | หมดอายุหากไม่มีการใช้งาน |
 | `SESSION_ABSOLUTE_TIMEOUT_SECONDS` | 86400 (24 ชม.) | หมดอายุหลัง login |
 | `SCHEMA_GUARD_ENABLED` | true | ตรวจ schema ก่อนใช้งาน (ปิดได้ชั่วคราว) |
