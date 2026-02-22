@@ -146,11 +146,11 @@ $currentPage = 'annual';
 
 require __DIR__ . '/includes/header.php';
 ?>
-<section class="section-card p-5">
-    <div class="flex flex-wrap items-end justify-between gap-4">
+<section class="section-card p-4 sm:p-5">
+    <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>
-            <h1 class="text-xl font-semibold text-slate-100">สรุปประจำปี</h1>
-            <p class="mt-2 text-sm text-slate-500">ภาพรวมรายปีของร้านที่เลือก พร้อมตาราง 12 เดือนและกราฟเปรียบเทียบ</p>
+            <h1 class="text-lg sm:text-xl font-semibold text-slate-100">สรุปประจำปี</h1>
+            <p class="mt-1 text-xs sm:text-sm text-slate-500">ภาพรวมรายปีของร้านที่เลือก พร้อมตาราง 12 เดือนและกราฟเปรียบเทียบ</p>
         </div>
 
         <form method="get" action="<?= e(app_url('/annual.php')) ?>" class="flex flex-wrap items-center gap-2">
@@ -179,22 +179,22 @@ require __DIR__ . '/includes/header.php';
     <?php endif; ?>
 </section>
 
-<section class="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
+<section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
     <article class="stat-card s-revenue">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวมทั้งปี</p>
-        <p class="mt-2 text-xl font-bold text-orange-400"><?= e(formatMoney($totalRevenue)) ?></p>
+        <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e(formatMoney($totalRevenue)) ?></p>
     </article>
     <article class="stat-card s-adcost">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ค่าแอดรวมทั้งปี</p>
-        <p class="mt-2 text-xl font-bold text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></p>
+        <p class="mt-2 text-lg sm:text-xl font-bold text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></p>
     </article>
     <article class="stat-card s-profit">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">กำไรรวมทั้งปี</p>
-        <p class="mt-2 text-xl font-bold <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></p>
+        <p class="mt-2 text-lg sm:text-xl font-bold <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></p>
     </article>
     <article class="stat-card s-roas">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ROAS เฉลี่ยทั้งปี</p>
-        <p class="mt-2 text-xl font-bold text-violet-400"><?= e(formatRoas($totalRoas)) ?></p>
+        <p class="mt-2 text-lg sm:text-xl font-bold text-violet-400"><?= e(formatRoas($totalRoas)) ?></p>
     </article>
     <article class="stat-card s-best">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">เดือนขายดีสุด</p>
@@ -206,8 +206,8 @@ require __DIR__ . '/includes/header.php';
     </article>
 </section>
 
-<section class="section-card mt-6 p-5">
-    <h2 class="mb-3 text-lg font-semibold text-slate-100">ตารางเทียบรายเดือน (12 เดือน)</h2>
+<section class="section-card mt-6 p-4 sm:p-5">
+    <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางเทียบรายเดือน (12 เดือน)</h2>
     <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
             <thead>
@@ -229,7 +229,7 @@ require __DIR__ . '/includes/header.php';
                     $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                     $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                     ?>
-                    <tr class="border-b border-white/[0.06] table-row-hover">
+                    <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
                         <td class="px-3 py-2 text-slate-300 font-medium"><?= e($monthLabel($row)) ?></td>
                         <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
                         <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
@@ -253,12 +253,12 @@ require __DIR__ . '/includes/header.php';
     </div>
 </section>
 
-<section class="section-card mt-6 p-5">
-    <div class="mb-3 flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (12 เดือน)</h2>
+<section class="section-card mt-6 p-4 sm:p-5">
+    <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+        <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (12 เดือน)</h2>
         <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
     </div>
-    <div class="h-80">
+    <div class="h-52 sm:h-64 lg:h-80">
         <canvas id="annual-bar-chart"></canvas>
     </div>
 </section>

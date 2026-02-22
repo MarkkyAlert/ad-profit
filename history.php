@@ -43,11 +43,11 @@ $currentPage = 'history';
 
 require __DIR__ . '/includes/header.php';
 ?>
-<section class="section-card p-5">
-    <div class="flex flex-wrap items-end justify-between gap-4">
+<section class="section-card p-4 sm:p-5">
+    <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>
-            <h1 class="text-xl font-semibold text-slate-100">ประวัติรายการ</h1>
-            <p class="mt-2 text-sm text-slate-500">ตารางรายการของเดือนที่เลือก พร้อมแก้ไข/ลบได้ทันที</p>
+            <h1 class="text-lg sm:text-xl font-semibold text-slate-100">ประวัติรายการ</h1>
+            <p class="mt-1 text-xs sm:text-sm text-slate-500">ตารางรายการของเดือนที่เลือก พร้อมแก้ไข/ลบได้ทันที</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
@@ -101,7 +101,7 @@ require __DIR__ . '/includes/header.php';
                             : null;
                         $note = (string)($record['note'] ?? '');
                         ?>
-                        <tr class="border-b border-white/[0.06] table-row-hover">
+                        <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
                             <td class="px-3 py-2 text-slate-300 font-medium"><?= e(formatThaiDate($recordDate)) ?></td>
                             <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($revenue)) ?></td>
                             <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($adCost)) ?></td>

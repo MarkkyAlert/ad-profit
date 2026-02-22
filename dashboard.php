@@ -233,14 +233,14 @@ $currentPage = 'dashboard';
 
 require __DIR__ . '/includes/header.php';
 ?>
-<section class="section-card mb-6 p-5">
-    <div class="flex flex-wrap items-end justify-between gap-4">
+<section class="section-card mb-6 p-4 sm:p-5">
+    <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-slate-100">แดชบอร์ด</h1>
-            <p class="mt-1 text-sm text-slate-500">ช่วงข้อมูล: <?= e(formatThaiDate($rangeStart)) ?> - <?= e(formatThaiDate($rangeEnd)) ?></p>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-100">แดชบอร์ด</h1>
+            <p class="mt-1 text-xs sm:text-sm text-slate-500">ช่วงข้อมูล: <?= e(formatThaiDate($rangeStart)) ?> - <?= e(formatThaiDate($rangeEnd)) ?></p>
         </div>
 
-        <form id="dashboard-range-form" method="get" action="<?= e(app_url('/dashboard.php')) ?>" class="flex flex-wrap items-end gap-3">
+        <form id="dashboard-range-form" method="get" action="<?= e(app_url('/dashboard.php')) ?>" class="flex flex-wrap items-end gap-2 sm:gap-3">
             <div>
                 <label for="range-type" class="mb-1 block text-xs text-slate-400">ช่วงเวลา</label>
                 <select id="range-type" name="range" class="rounded-xl px-3 py-2 text-sm transition-all">
@@ -280,31 +280,31 @@ require __DIR__ . '/includes/header.php';
     <?php endif; ?>
 </section>
 
-<section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+<section class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <article class="stat-card s-revenue">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวม</p>
-        <p class="mt-2 text-2xl font-bold text-orange-400"><?= e(formatMoney((float)$summary['total_revenue'])) ?></p>
+        <p class="mt-2 text-xl sm:text-2xl font-bold text-orange-400"><?= e(formatMoney((float)$summary['total_revenue'])) ?></p>
         <?php if ($comparisonEnabled): ?>
             <p class="mt-1 text-xs <?= e($comparisonText['total_revenue']['class']) ?>"><?= e($comparisonText['total_revenue']['text']) ?></p>
         <?php endif; ?>
     </article>
     <article class="stat-card s-adcost">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ค่าแอดรวม</p>
-        <p class="mt-2 text-2xl font-bold text-cyan-400"><?= e(formatMoney((float)$summary['total_ad_cost'])) ?></p>
+        <p class="mt-2 text-xl sm:text-2xl font-bold text-cyan-400"><?= e(formatMoney((float)$summary['total_ad_cost'])) ?></p>
         <?php if ($comparisonEnabled): ?>
             <p class="mt-1 text-xs <?= e($comparisonText['total_ad_cost']['class']) ?>"><?= e($comparisonText['total_ad_cost']['text']) ?></p>
         <?php endif; ?>
     </article>
     <article class="stat-card s-profit">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">กำไร</p>
-        <p class="mt-2 text-2xl font-bold <?= (float)$summary['profit'] >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney((float)$summary['profit'])) ?></p>
+        <p class="mt-2 text-xl sm:text-2xl font-bold <?= (float)$summary['profit'] >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney((float)$summary['profit'])) ?></p>
         <?php if ($comparisonEnabled): ?>
             <p class="mt-1 text-xs <?= e($comparisonText['profit']['class']) ?>"><?= e($comparisonText['profit']['text']) ?></p>
         <?php endif; ?>
     </article>
     <article class="stat-card s-roas">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ROAS</p>
-        <p class="mt-2 text-2xl font-bold text-violet-400"><?= e(formatRoas($summary['roas'])) ?></p>
+        <p class="mt-2 text-xl sm:text-2xl font-bold text-violet-400"><?= e(formatRoas($summary['roas'])) ?></p>
         <?php if ($comparisonEnabled): ?>
             <p class="mt-1 text-xs <?= e($comparisonText['roas']['class']) ?>"><?= e($comparisonText['roas']['text']) ?></p>
         <?php endif; ?>
@@ -318,7 +318,7 @@ require __DIR__ . '/includes/header.php';
     </section>
 <?php endif; ?>
 
-<section class="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+<section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <article class="stat-card s-neutral">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">เฉลี่ยรายได้ต่อวัน</p>
         <p class="mt-1 text-lg font-semibold text-slate-100"><?= $statistics['avg_revenue_per_day'] !== null ? e(formatMoney((float)$statistics['avg_revenue_per_day']) . '/วัน') : '–' ?></p>
@@ -460,28 +460,28 @@ require __DIR__ . '/includes/header.php';
     </div>
 </div>
 
-<section class="section-card mt-6 p-5">
-    <div class="mb-3 flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งรายวัน (รายได้ vs ค่าแอด)</h2>
+<section class="section-card mt-6 p-4 sm:p-5">
+    <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+        <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายวัน (รายได้ vs ค่าแอด)</h2>
         <span class="text-xs text-slate-400">เฉพาะวันที่มีข้อมูล</span>
     </div>
     <?php if (!$hasDailyData): ?>
         <p class="mb-3 text-sm text-slate-400">ยังไม่มีข้อมูลรายวันในช่วงเวลาที่เลือก</p>
     <?php endif; ?>
-    <div class="h-80">
+    <div class="h-52 sm:h-64 lg:h-80">
         <canvas id="daily-bar-chart"></canvas>
     </div>
 </section>
 
-<section class="section-card mt-6 p-5">
-    <div class="mb-3 flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold text-slate-100">แนวโน้มย้อนหลัง 6 เดือน</h2>
+<section class="section-card mt-6 p-4 sm:p-5">
+    <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+        <h2 class="text-base sm:text-lg font-semibold text-slate-100">แนวโน้มย้อนหลัง 6 เดือน</h2>
         <span class="text-xs text-slate-400">แสดงรายเดือนเสมอ</span>
     </div>
     <?php if (!$hasSixMonthData): ?>
         <p class="mb-3 text-sm text-slate-400">ยังไม่มีข้อมูลย้อนหลัง 6 เดือน</p>
     <?php endif; ?>
-    <div class="h-80">
+    <div class="h-52 sm:h-64 lg:h-80">
         <canvas id="six-month-line-chart"></canvas>
     </div>
 </section>

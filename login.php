@@ -50,13 +50,25 @@ $flashError = get_flash('error');
         }
 
         @keyframes float {
-            0%, 100% { transform: translateY(0px) }
-            50% { transform: translateY(-10px) }
+
+            0%,
+            100% {
+                transform: translateY(0px)
+            }
+
+            50% {
+                transform: translateY(-10px)
+            }
         }
 
         @keyframes shimmer {
-            0% { background-position: -200% center }
-            100% { background-position: 200% center }
+            0% {
+                background-position: -200% center
+            }
+
+            100% {
+                background-position: 200% center
+            }
         }
 
         .glass-card {
@@ -64,8 +76,8 @@ $flashError = get_flash('error');
             border: 1px solid rgba(99, 102, 241, 0.2);
             border-radius: 20px;
             box-shadow: rgba(1, 5, 17, 0.5) 0px 20px 60px 0px,
-                        0 0 40px rgba(99, 102, 241, 0.1),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+                0 0 40px rgba(99, 102, 241, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             position: relative;
@@ -114,7 +126,7 @@ $flashError = get_flash('error');
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.25) 50%, transparent 70%);
+            background: linear-gradient(135deg, transparent 30%, rgba(255, 255, 255, 0.25) 50%, transparent 70%);
             transform: translateX(-100%);
             transition: transform 0.5s ease
         }
@@ -148,7 +160,7 @@ $flashError = get_flash('error');
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.25) 50%, transparent 70%);
+            background: linear-gradient(135deg, transparent 30%, rgba(255, 255, 255, 0.25) 50%, transparent 70%);
             transform: translateX(-100%);
             transition: transform 0.5s ease
         }
@@ -262,6 +274,9 @@ $flashError = get_flash('error');
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="ตั้งชื่อผู้ใช้">
                         </div>
+                        <div>
+                            <label for="register-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>
+                            <input id="register-password" name="password" type="password" required minlength="4"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="อย่างน้อย 4 ตัวอักษร">
                         </div>

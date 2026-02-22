@@ -54,23 +54,49 @@ $flashError = get_flash('error');
         }
 
         @keyframes shimmer {
-            0% { background-position: -200% center }
-            100% { background-position: 200% center }
+            0% {
+                background-position: -200% center
+            }
+
+            100% {
+                background-position: 200% center
+            }
         }
 
         @keyframes pulse-glow {
-            0%, 100% { opacity: 1 }
-            50% { opacity: 0.7 }
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: 0.7
+            }
         }
 
         @keyframes float {
-            0%, 100% { transform: translateY(0px) }
-            50% { transform: translateY(-8px) }
+
+            0%,
+            100% {
+                transform: translateY(0px)
+            }
+
+            50% {
+                transform: translateY(-8px)
+            }
         }
 
         @keyframes border-glow {
-            0%, 100% { border-color: rgba(99, 102, 241, 0.3) }
-            50% { border-color: rgba(139, 92, 246, 0.5) }
+
+            0%,
+            100% {
+                border-color: rgba(99, 102, 241, 0.3)
+            }
+
+            50% {
+                border-color: rgba(139, 92, 246, 0.5)
+            }
         }
 
         .glass {
@@ -93,7 +119,7 @@ $flashError = get_flash('error');
             border: 1px solid rgba(99, 102, 241, 0.15);
             border-radius: 16px;
             box-shadow: rgba(1, 5, 17, 0.4) 0px 8px 32px 0px,
-                        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
             position: relative;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)
         }
@@ -117,7 +143,7 @@ $flashError = get_flash('error');
         .section-card:hover {
             transform: translateY(-2px);
             box-shadow: rgba(1, 5, 17, 0.5) 0px 12px 40px 0px,
-                        0 0 30px rgba(99, 102, 241, 0.1);
+                0 0 30px rgba(99, 102, 241, 0.1);
             border-color: rgba(99, 102, 241, 0.3)
         }
 
@@ -134,7 +160,7 @@ $flashError = get_flash('error');
             padding: 20px;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: rgba(1, 5, 17, 0.4) 0px 8px 32px 0px,
-                        inset 0 1px 0 rgba(255, 255, 255, 0.05)
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
         }
 
         .stat-card::before {
@@ -162,7 +188,7 @@ $flashError = get_flash('error');
         .stat-card:hover {
             transform: translateY(-6px) scale(1.02);
             box-shadow: rgba(1, 5, 17, 0.5) 0px 20px 50px 0px,
-                        0 0 40px var(--card-glow, rgba(99, 102, 241, 0.15));
+                0 0 40px var(--card-glow, rgba(99, 102, 241, 0.15));
             border-color: rgba(255, 255, 255, 0.15)
         }
 
@@ -281,7 +307,7 @@ $flashError = get_flash('error');
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+            background: linear-gradient(135deg, transparent 30%, rgba(255, 255, 255, 0.2) 50%, transparent 70%);
             transform: translateX(-100%);
             transition: transform 0.5s ease
         }
@@ -315,7 +341,7 @@ $flashError = get_flash('error');
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+            background: linear-gradient(135deg, transparent 30%, rgba(255, 255, 255, 0.2) 50%, transparent 70%);
             transform: translateX(-100%);
             transition: transform 0.5s ease
         }
@@ -513,46 +539,49 @@ $flashError = get_flash('error');
 <body class="text-slate-200">
 
     <header class="sticky top-0 z-40 border-b border-white/[0.07] bg-[rgb(8,16,40)]/95 backdrop-blur-xl">
-        <div class="mx-auto flex w-full max-w-6xl flex-wrap items-start justify-between gap-3 px-4 py-3 sm:items-center">
-            <a href="<?= e(app_url('/dashboard.php')) ?>" class="flex items-center gap-2">
-                <span class="text-xl">📊</span>
-                <span class="text-gradient text-lg font-bold tracking-tight">วิเคราะห์ยอดขาย</span>
-            </a>
-            <div class="flex w-full flex-wrap items-center justify-end gap-2 text-xs sm:w-auto sm:text-sm">
-                <?php if (!empty($headerShops)): ?>
-                    <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" data-no-loading>
+        <div class="mx-auto w-full max-w-6xl px-3 py-2.5 sm:px-4 sm:py-3">
+            <div class="flex items-center justify-between gap-2">
+                <a href="<?= e(app_url('/dashboard.php')) ?>" class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-lg sm:text-xl">📊</span>
+                    <span class="text-gradient text-sm sm:text-lg font-bold tracking-tight">วิเคราะห์ยอดขาย</span>
+                </a>
+                <div class="flex items-center gap-1.5 sm:gap-2 text-xs">
+                    <span class="hidden sm:inline-block rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-400 shadow-sm">👤 <?= e($username) ?></span>
+                    <?php if ($currentPage === 'shops'): ?>
+                        <a href="<?= e(app_url('/dashboard.php')) ?>" class="btn-ghost px-2.5 py-1.5 text-xs" data-loading-link="true">← กลับ</a>
+                    <?php else: ?>
+                        <a href="<?= e(app_url('/shops.php')) ?>" class="btn-primary px-2.5 py-1.5 text-xs" data-loading-link="true">🏪 จัดการร้าน</a>
+                    <?php endif; ?>
+                    <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" data-confirm="ยืนยันการออกจากระบบใช่หรือไม่?">
                         <?= csrf_field() ?>
-                        <input type="hidden" name="action" value="switch">
-                        <input type="hidden" name="redirect_to" value="<?= e($redirectTo) ?>">
-                        <select name="shop_id" aria-label="เลือกร้านค้า" onchange="this.form.submit()" class="rounded-xl border border-white/10 bg-[#070c18] px-3 py-1.5 text-sm text-slate-300 font-medium shadow-sm hover:border-indigo-500/50 transition-colors">
-                            <?php foreach ($headerShops as $shop): ?>
-                                <?php $shopId = (int)($shop['id'] ?? 0); ?>
-                                <option value="<?= e((string)$shopId) ?>" <?= $shopId === $currentShopId ? 'selected' : '' ?>>
-                                    🏪 <?= e((string)($shop['name'] ?? 'ร้านค้า')) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <input type="hidden" name="action" value="logout">
+                        <button type="submit" class="btn-ghost px-2.5 py-1.5 text-xs">ออกจากระบบ</button>
                     </form>
-                <?php else: ?>
-                    <span class="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-slate-300 shadow-sm">🏪 <?= e($currentShopName) ?></span>
-                <?php endif; ?>
-
-                <?php if ($currentPage === 'shops'): ?>
-                    <a href="<?= e(app_url('/dashboard.php')) ?>" class="btn-ghost px-3 py-1.5 text-sm" data-loading-link="true">← กลับแดชบอร์ด</a>
-                <?php else: ?>
-                    <a href="<?= e(app_url('/shops.php')) ?>" class="btn-primary px-3 py-1.5 text-sm" data-loading-link="true">🏪 จัดการร้าน</a>
-                <?php endif; ?>
-                <span class="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-400 shadow-sm">👤 <?= e($username) ?></span>
-                <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" data-confirm="ยืนยันการออกจากระบบใช่หรือไม่?">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="logout">
-                    <button type="submit" class="btn-ghost px-3 py-1.5 text-sm">ออกจากระบบ</button>
-                </form>
+                </div>
             </div>
+            <?php if (!empty($headerShops)): ?>
+                <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" data-no-loading class="mt-2">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="switch">
+                    <input type="hidden" name="redirect_to" value="<?= e($redirectTo) ?>">
+                    <select name="shop_id" aria-label="เลือกร้านค้า" onchange="this.form.submit()" class="w-full rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 text-sm text-slate-300 font-medium shadow-sm hover:border-indigo-500/50 transition-colors">
+                        <?php foreach ($headerShops as $shop): ?>
+                            <?php $shopId = (int)($shop['id'] ?? 0); ?>
+                            <option value="<?= e((string)$shopId) ?>" <?= $shopId === $currentShopId ? 'selected' : '' ?>>
+                                🏪 <?= e((string)($shop['name'] ?? 'ร้านค้า')) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </form>
+            <?php else: ?>
+                <div class="mt-2">
+                    <span class="inline-block w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-300 shadow-sm">🏪 <?= e($currentShopName) ?></span>
+                </div>
+            <?php endif; ?>
         </div>
     </header>
 
-    <main class="mx-auto min-h-[calc(100vh-160px)] w-full max-w-6xl px-4 py-6 pb-24">
+    <main class="mx-auto min-h-[calc(100vh-160px)] w-full max-w-6xl px-3 py-4 pb-24 sm:px-4 sm:py-6">
         <?php if ($flashSuccess !== null): ?>
             <div id="app-toast" class="toast-anim fixed right-4 top-4 z-50 flex items-center gap-2 rounded-2xl border border-green-500/30 bg-[#071510] px-4 py-3 text-sm font-medium text-green-400 shadow-xl shadow-black/50 backdrop-blur-md">
                 <span>✅</span><?= e($flashSuccess) ?>

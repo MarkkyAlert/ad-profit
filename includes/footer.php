@@ -8,8 +8,8 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
 ?>
 </main>
 
-<nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#0d1526]/95 px-2 py-2 backdrop-blur-md">
-    <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-1 text-center text-[11px] text-slate-400 sm:text-xs">
+<nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#0d1526]/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
+    <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-0.5 py-1.5 text-center text-[10px] text-slate-400 sm:gap-1 sm:py-2 sm:text-xs">
         <?php
         $navLinks = [
             ['href' => '/dashboard.php', 'page' => 'dashboard',   'icon' => '📈', 'label' => 'แดชบอร์ด'],
@@ -24,9 +24,9 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
             $isActive = $currentPage === $link['page'];
         ?>
             <a href="<?= e(app_url($link['href'])) ?>"
-                class="flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 transition-all duration-150 <?= $isActive ? 'nav-active' : 'hover:bg-white/5 hover:text-slate-300' ?>">
+                class="flex flex-col items-center gap-0.5 rounded-xl px-1 py-2.5 transition-all duration-150 <?= $isActive ? 'nav-active' : 'hover:bg-white/5 hover:text-slate-300' ?>">
                 <span class="text-base leading-none"><?= $link['icon'] ?></span>
-                <span class="mt-0.5"><?= $link['label'] ?></span>
+                <span class="mt-0.5 leading-tight"><?= $link['label'] ?></span>
             </a>
         <?php endforeach; ?>
     </div>
