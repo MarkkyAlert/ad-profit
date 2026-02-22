@@ -14,9 +14,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
     ], 405);
 }
 
-$acceptHeader = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
-$requestedWith = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''));
-$wantsJson = str_contains($acceptHeader, 'application/json') || $requestedWith === 'xmlhttprequest';
+$wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);

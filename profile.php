@@ -101,7 +101,7 @@ require __DIR__ . '/includes/header.php';
                     id="email-current-password"
                     name="current_password"
                     type="password"
-                    minlength="4"
+                    minlength="<?= PASSWORD_MIN_LENGTH ?>"
                     required
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
                     placeholder="กรอกรหัสผ่านเพื่อยืนยัน"
@@ -127,7 +127,7 @@ require __DIR__ . '/includes/header.php';
                     id="password-current"
                     name="current_password"
                     type="password"
-                    minlength="4"
+                    minlength="<?= PASSWORD_MIN_LENGTH ?>"
                     required
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
                     placeholder="รหัสผ่านปัจจุบัน"
@@ -140,10 +140,10 @@ require __DIR__ . '/includes/header.php';
                     id="password-new"
                     name="password"
                     type="password"
-                    minlength="4"
+                    minlength="<?= PASSWORD_MIN_LENGTH ?>"
                     required
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
-                    placeholder="อย่างน้อย 4 ตัวอักษร"
+                    placeholder="อย่างน้อย <?= PASSWORD_MIN_LENGTH ?> ตัวอักษร"
                     autocomplete="new-password">
             </div>
 
@@ -153,7 +153,7 @@ require __DIR__ . '/includes/header.php';
                     id="password-confirm"
                     name="password_confirm"
                     type="password"
-                    minlength="4"
+                    minlength="<?= PASSWORD_MIN_LENGTH ?>"
                     required
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
                     placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"

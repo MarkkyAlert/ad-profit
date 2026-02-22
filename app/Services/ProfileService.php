@@ -225,10 +225,10 @@ class ProfileService
             ];
         }
 
-        if (strlen($newPassword) < 8) {
+        if (strlen($newPassword) < PASSWORD_MIN_LENGTH) {
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร',
+                'error' => 'รหัสผ่านใหม่ต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร',
             ];
         }
 

@@ -8,107 +8,26 @@ require_once __DIR__ . '/../includes/auth.php';
 requireAuth(true);
 
 $action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
-$acceptHeader = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
-$requestedWith = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''));
-$wantsJson = str_contains($acceptHeader, 'application/json') || $requestedWith === 'xmlhttprequest';
+$wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $userRepository = new UserRepository($pdo);
 $profileService = new ProfileService($userRepository);
 
-$resolveRedirectPath = static function (string $fallback = '/profile.php'): string {
-    $basePath = (string)(parse_url(APP_URL, PHP_URL_PATH) ?? '');
-    $basePath = $basePath === '/' ? '' : rtrim($basePath, '/');
-
-    $candidates = [];
-    if (isset($_POST['redirect_to'])) {
-        $candidates[] = (string)$_POST['redirect_to'];
-    }
-    if (isset($_SERVER['HTTP_REFERER'])) {
-        $candidates[] = (string)$_SERVER['HTTP_REFERER'];
-    }
-
-    foreach ($candidates as $candidateRaw) {
-        $candidate = trim($candidateRaw);
-        if ($candidate === '') {
-            continue;
-        }
-
-        if (preg_match('#^https?://#i', $candidate) === 1) {
-            $parsedUrl = parse_url($candidate);
-            if (!is_array($parsedUrl)) {
-                continue;
-            }
-
-            $path = (string)($parsedUrl['path'] ?? '');
-            if ($path === '') {
-                continue;
-            }
-
-            $query = (string)($parsedUrl['query'] ?? '');
-            $candidate = $path . ($query !== '' ? '?' . $query : '');
-        }
-
-        if (!str_starts_with($candidate, '/')) {
-            continue;
-        }
-
-        if (str_starts_with($candidate, '//')) {
-            continue;
-        }
-
-        if ($basePath !== '') {
-            if ($candidate === $basePath) {
-                return $fallback;
-            }
-
-            if (str_starts_with($candidate, $basePath . '/')) {
-                $candidate = substr($candidate, strlen($basePath));
-                if ($candidate === '') {
-                    return $fallback;
-                }
-            }
-        }
-
-        return $candidate;
-    }
-
-    return $fallback;
-};
-
-$redirectPath = $resolveRedirectPath('/profile.php');
+$redirectPath = resolve_safe_redirect_path(
+    '/profile.php',
+    isset($_POST['redirect_to']) ? (string)$_POST['redirect_to'] : null,
+    isset($_SERVER['HTTP_REFERER']) ? (string)$_SERVER['HTTP_REFERER'] : null
+);
 
 $respond = static function (array $payload, int $statusCode, string $redirectUrl) use ($wantsJson): never {
-    if ($wantsJson) {
-        jsonResponse($payload, $statusCode);
-    }
-
-    if (($payload['success'] ?? false) === true) {
-        if (isset($payload['message'])) {
-            set_flash('success', (string)$payload['message']);
-        }
-    } elseif (isset($payload['error'])) {
-        set_flash('error', (string)$payload['error']);
-    }
-
-    redirect($redirectUrl);
+    api_respond($payload, $statusCode, $redirectUrl, $wantsJson);
 };
 
 if ($action === 'update_profile') {
-    if (!is_post_request()) {
-        $respond([
-            'success' => false,
-            'error' => 'Method Not Allowed',
-        ], 405, $redirectPath);
-    }
-
-    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
-        $respond([
-            'success' => false,
-            'error' => 'Invalid CSRF token',
-        ], 403, $redirectPath);
-    }
+    ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $result = $profileService->updateProfile($userId, (string)($_POST['display_name'] ?? ''));
 
@@ -131,19 +50,8 @@ if ($action === 'update_profile') {
 }
 
 if ($action === 'change_email') {
-    if (!is_post_request()) {
-        $respond([
-            'success' => false,
-            'error' => 'Method Not Allowed',
-        ], 405, $redirectPath);
-    }
-
-    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
-        $respond([
-            'success' => false,
-            'error' => 'Invalid CSRF token',
-        ], 403, $redirectPath);
-    }
+    ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $result = $profileService->changeEmail(
         $userId,
@@ -173,19 +81,8 @@ if ($action === 'change_email') {
 }
 
 if ($action === 'change_password') {
-    if (!is_post_request()) {
-        $respond([
-            'success' => false,
-            'error' => 'Method Not Allowed',
-        ], 405, $redirectPath);
-    }
-
-    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
-        $respond([
-            'success' => false,
-            'error' => 'Invalid CSRF token',
-        ], 403, $redirectPath);
-    }
+    ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $result = $profileService->changePassword(
         $userId,

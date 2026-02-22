@@ -112,6 +112,10 @@ if (!defined('RATE_LIMIT_WINDOW_SECONDS')) {
     define('RATE_LIMIT_WINDOW_SECONDS', 60);
 }
 
+if (!defined('PASSWORD_MIN_LENGTH')) {
+    define('PASSWORD_MIN_LENGTH', max(4, (int)(getenv('PASSWORD_MIN_LENGTH') ?: 8)));
+}
+
 if (!defined('SESSION_IDLE_TIMEOUT_SECONDS')) {
     define('SESSION_IDLE_TIMEOUT_SECONDS', (int)(getenv('SESSION_IDLE_TIMEOUT_SECONDS') ?: 14400));
 }

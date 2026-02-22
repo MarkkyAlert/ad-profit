@@ -54,11 +54,11 @@ class AuthService
             ];
         }
 
-        if (strlen($password) < 8) {
+        if (strlen($password) < PASSWORD_MIN_LENGTH) {
             $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร',
+                'error' => 'รหัสผ่านต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร',
             ];
         }
 
@@ -317,10 +317,10 @@ class AuthService
             ];
         }
 
-        if (strlen($newPassword) < 8) {
+        if (strlen($newPassword) < PASSWORD_MIN_LENGTH) {
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร',
+                'error' => 'รหัสผ่านต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร',
             ];
         }
 

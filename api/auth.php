@@ -6,9 +6,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/auth.php';
 
 $action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
-$acceptHeader = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
-$requestedWith = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''));
-$wantsJson = str_contains($acceptHeader, 'application/json') || $requestedWith === 'xmlhttprequest';
+$wantsJson = wants_json_response();
 
 $userRepository = new UserRepository($pdo);
 $shopRepository = new ShopRepository($pdo);
@@ -17,35 +15,12 @@ $emailService = new EmailService();
 $authService = new AuthService($pdo, $userRepository, $shopRepository, $passwordResetRepository, $emailService);
 
 $respond = static function (array $payload, int $statusCode, string $redirectUrl) use ($wantsJson): never {
-    if ($wantsJson) {
-        jsonResponse($payload, $statusCode);
-    }
-
-    if (($payload['success'] ?? false) === true) {
-        if (isset($payload['message'])) {
-            set_flash('success', (string)$payload['message']);
-        }
-    } elseif (isset($payload['error'])) {
-        set_flash('error', (string)$payload['error']);
-    }
-
-    redirect($redirectUrl);
+    api_respond($payload, $statusCode, $redirectUrl, $wantsJson);
 };
 
 if ($action === 'register') {
-    if (!is_post_request()) {
-        $respond([
-            'success' => false,
-            'error' => 'Method Not Allowed',
-        ], 405, '/login.php?tab=register');
-    }
-
-    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
-        $respond([
-            'success' => false,
-            'error' => 'Invalid CSRF token',
-        ], 403, '/login.php?tab=register');
-    }
+    ensure_post_request_or_respond($wantsJson, '/login.php?tab=register');
+    ensure_valid_csrf_or_respond($wantsJson, '/login.php?tab=register', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->register(
         (string)($_POST['email'] ?? ''),
@@ -72,19 +47,8 @@ if ($action === 'register') {
 }
 
 if ($action === 'login') {
-    if (!is_post_request()) {
-        $respond([
-            'success' => false,
-            'error' => 'Method Not Allowed',
-        ], 405, '/login.php?tab=login');
-    }
-
-    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
-        $respond([
-            'success' => false,
-            'error' => 'Invalid CSRF token',
-        ], 403, '/login.php?tab=login');
-    }
+    ensure_post_request_or_respond($wantsJson, '/login.php?tab=login');
+    ensure_valid_csrf_or_respond($wantsJson, '/login.php?tab=login', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->login(
         (string)($_POST['email'] ?? ''),
@@ -110,12 +74,7 @@ if ($action === 'login') {
 }
 
 if ($action === 'logout') {
-    if (!is_post_request()) {
-        $respond([
-            'success' => false,
-            'error' => 'Method Not Allowed',
-        ], 405, '/dashboard.php');
-    }
+    ensure_post_request_or_respond($wantsJson, '/dashboard.php');
 
     if (!isset($_SESSION['user_id']) || (int)$_SESSION['user_id'] <= 0) {
         $respond([
@@ -124,12 +83,7 @@ if ($action === 'logout') {
         ], 401, '/login.php');
     }
 
-    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
-        $respond([
-            'success' => false,
-            'error' => 'Invalid CSRF token',
-        ], 403, '/dashboard.php');
-    }
+    ensure_valid_csrf_or_respond($wantsJson, '/dashboard.php', (string)($_POST['csrf_token'] ?? ''));
 
     $authService->logout();
 
@@ -140,19 +94,8 @@ if ($action === 'logout') {
 }
 
 if ($action === 'forgot_password') {
-    if (!is_post_request()) {
-        $respond([
-            'success' => false,
-            'error' => 'Method Not Allowed',
-        ], 405, '/forgot-password.php');
-    }
-
-    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
-        $respond([
-            'success' => false,
-            'error' => 'Invalid CSRF token',
-        ], 403, '/forgot-password.php');
-    }
+    ensure_post_request_or_respond($wantsJson, '/forgot-password.php');
+    ensure_valid_csrf_or_respond($wantsJson, '/forgot-password.php', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->requestPasswordReset(
         (string)($_POST['email'] ?? ''),
@@ -181,19 +124,8 @@ if ($action === 'forgot_password') {
 }
 
 if ($action === 'reset_password') {
-    if (!is_post_request()) {
-        $respond([
-            'success' => false,
-            'error' => 'Method Not Allowed',
-        ], 405, '/reset-password.php');
-    }
-
-    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
-        $respond([
-            'success' => false,
-            'error' => 'Invalid CSRF token',
-        ], 403, '/reset-password.php');
-    }
+    ensure_post_request_or_respond($wantsJson, '/reset-password.php');
+    ensure_valid_csrf_or_respond($wantsJson, '/reset-password.php', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->resetPassword(
         (string)($_POST['token'] ?? ''),

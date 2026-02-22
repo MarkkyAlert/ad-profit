@@ -256,7 +256,7 @@ $flashError = get_flash('error');
                         </div>
                         <div>
                             <label for="login-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>
-                            <input id="login-password" name="password" type="password" required minlength="4"
+                            <input id="login-password" name="password" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="••••••••">
                         </div>
@@ -279,13 +279,13 @@ $flashError = get_flash('error');
                         </div>
                         <div>
                             <label for="register-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>
-                            <input id="register-password" name="password" type="password" required minlength="4"
+                            <input id="register-password" name="password" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
-                                placeholder="อย่างน้อย 4 ตัวอักษร">
+                                placeholder="อย่างน้อย <?= PASSWORD_MIN_LENGTH ?> ตัวอักษร">
                         </div>
                         <div>
                             <label for="register-password-confirm" class="mb-1.5 block text-sm font-medium text-slate-300">ยืนยันรหัสผ่าน</label>
-                            <input id="register-password-confirm" name="password_confirm" type="password" required minlength="4"
+                            <input id="register-password-confirm" name="password_confirm" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="••••••••">
                         </div>

@@ -155,12 +155,181 @@ function is_api_request(): bool
     return str_contains($scriptName, '/api/');
 }
 
+function wants_json_response(): bool
+{
+    $acceptHeader = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
+    $requestedWith = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''));
+
+    return str_contains($acceptHeader, 'application/json') || $requestedWith === 'xmlhttprequest';
+}
+
 function jsonResponse(array $payload, int $statusCode = 200): never
 {
     http_response_code($statusCode);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+function api_respond(array $payload, int $statusCode, string $redirectUrl, bool $wantsJson): never
+{
+    if ($wantsJson) {
+        jsonResponse($payload, $statusCode);
+    }
+
+    if (($payload['success'] ?? false) === true) {
+        if (isset($payload['message'])) {
+            set_flash('success', (string)$payload['message']);
+        }
+    } elseif (isset($payload['error'])) {
+        set_flash('error', (string)$payload['error']);
+    }
+
+    redirect($redirectUrl);
+}
+
+function resolve_safe_redirect_path(string $fallback, ?string $postRedirectTo = null, ?string $referer = null): string
+{
+    $basePath = (string)(parse_url(APP_URL, PHP_URL_PATH) ?? '');
+    $basePath = $basePath === '/' ? '' : rtrim($basePath, '/');
+
+    $candidates = [];
+    if (is_string($postRedirectTo) && trim($postRedirectTo) !== '') {
+        $candidates[] = $postRedirectTo;
+    }
+    if (is_string($referer) && trim($referer) !== '') {
+        $candidates[] = $referer;
+    }
+
+    foreach ($candidates as $candidateRaw) {
+        $candidate = trim($candidateRaw);
+        if ($candidate === '') {
+            continue;
+        }
+
+        if (preg_match('#^https?://#i', $candidate) === 1) {
+            $parsedUrl = parse_url($candidate);
+            if (!is_array($parsedUrl)) {
+                continue;
+            }
+
+            $path = (string)($parsedUrl['path'] ?? '');
+            if ($path === '') {
+                continue;
+            }
+
+            $query = (string)($parsedUrl['query'] ?? '');
+            $candidate = $path . ($query !== '' ? '?' . $query : '');
+        }
+
+        if (!str_starts_with($candidate, '/')) {
+            continue;
+        }
+
+        if (str_starts_with($candidate, '//')) {
+            continue;
+        }
+
+        if ($basePath !== '') {
+            if ($candidate === $basePath) {
+                return $fallback;
+            }
+
+            if (str_starts_with($candidate, $basePath . '/')) {
+                $candidate = substr($candidate, strlen($basePath));
+                if ($candidate === '') {
+                    return $fallback;
+                }
+            }
+        }
+
+        return $candidate;
+    }
+
+    return $fallback;
+}
+
+function ensure_post_request_or_respond(bool $wantsJson, string $redirectUrl): void
+{
+    if (!is_post_request()) {
+        api_respond([
+            'success' => false,
+            'error' => 'Method Not Allowed',
+        ], 405, $redirectUrl, $wantsJson);
+    }
+}
+
+function ensure_valid_csrf_or_respond(bool $wantsJson, string $redirectUrl, ?string $token = null): void
+{
+    if (!verify_csrf($token)) {
+        api_respond([
+            'success' => false,
+            'error' => 'Invalid CSRF token',
+        ], 403, $redirectUrl, $wantsJson);
+    }
+}
+
+function normalize_month_input(?string $month, ?string $fallback = null): string
+{
+    $normalizedFallback = is_string($fallback) && preg_match('/^\d{4}-\d{2}$/', $fallback) === 1
+        ? $fallback
+        : date('Y-m');
+
+    if (!is_string($month) || preg_match('/^\d{4}-\d{2}$/', $month) !== 1) {
+        return $normalizedFallback;
+    }
+
+    return $month;
+}
+
+function parse_decimal_input(mixed $raw, bool $allowEmpty = false): array
+{
+    $normalized = trim((string)$raw);
+    if ($normalized === '') {
+        return [
+            'valid' => $allowEmpty,
+            'value' => null,
+        ];
+    }
+
+    $normalized = str_replace(',', '', $normalized);
+    if (!is_numeric($normalized)) {
+        return [
+            'valid' => false,
+            'value' => null,
+        ];
+    }
+
+    return [
+        'valid' => true,
+        'value' => (float)$normalized,
+    ];
+}
+
+function infer_http_status_from_error(string $errorMessage, int $defaultStatus = 422): int
+{
+    $normalized = strtolower(trim($errorMessage));
+    if ($normalized === '') {
+        return $defaultStatus;
+    }
+
+    if (str_contains($normalized, 'unauthorized') || str_contains($normalized, 'session expired')) {
+        return 401;
+    }
+
+    if (str_contains($normalized, 'ไม่มีสิทธิ์') || str_contains($normalized, 'forbidden')) {
+        return 403;
+    }
+
+    if (str_contains($normalized, 'method not allowed')) {
+        return 405;
+    }
+
+    if (str_contains($normalized, 'invalid csrf token')) {
+        return 403;
+    }
+
+    return $defaultStatus;
 }
 
 function set_flash(string $key, string $message): void
