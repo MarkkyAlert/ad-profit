@@ -2,6 +2,12 @@
 
 declare(strict_types=1);
 
+// Security: QA runner must never be executed via web requests.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('Forbidden');
+}
+
 date_default_timezone_set('Asia/Bangkok');
 
 final class HttpClient

@@ -209,7 +209,11 @@ class AuthService
             error_log('[auth][login] Unable to load session_version: ' . $exception->getMessage());
         }
 
-        $this->userRepository->updateLastLoginAt($userId);
+        try {
+            $this->userRepository->updateLastLoginAt($userId);
+        } catch (Throwable $exception) {
+            error_log('[auth][login] updateLastLoginAt failed: ' . $exception->getMessage());
+        }
         $this->establishSession($userId, $userEmail, $shopId, $shopName, $sessionVersion);
         $this->clearRateLimit('login', $clientIp, $normalizedEmail);
 
@@ -475,7 +479,7 @@ class AuthService
 
         $bucket = $this->getRateLimitBucket($action, $clientIp, $subject);
 
-        return (int)$bucket['attempts'] >= RATE_LIMIT_MAX_ATTEMPTS;
+        return (int)$bucket['attempts'] >= $this->getMaxAttemptsForAction($action);
     }
 
     private function markFailedAttempt(string $action, string $clientIp, string $subject = ''): void
@@ -611,7 +615,16 @@ class AuthService
             return false;
         }
 
-        return $attempts >= RATE_LIMIT_MAX_ATTEMPTS;
+        return $attempts >= $this->getMaxAttemptsForAction($action);
+    }
+
+    private function getMaxAttemptsForAction(string $action): int
+    {
+        if ($action === 'password_reset') {
+            return 1;
+        }
+
+        return (int)RATE_LIMIT_MAX_ATTEMPTS;
     }
 
     private function markFailedAttemptInDatabase(string $action, string $clientIp, string $subject = ''): void

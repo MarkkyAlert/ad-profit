@@ -1,410 +1,359 @@
-# 🏗️ Architecture & Coding Standards
+# ARCHITECTURE.md — โครงสร้างระบบ (Ad‑Profit)
 
-> ไฟล์นี้กำหนดสถาปัตยกรรม มาตรฐานโค้ด และคุณภาพของระบบ  
-> **ต้องยึดตามเอกสารนี้ทุกไฟล์ที่สร้าง ห้ามข้ามข้อใดข้อหนึ่ง**
+เอกสารนี้อธิบาย “สถาปัตยกรรมและการแบ่งชั้นของโค้ด” ในโปรเจกต์นี้แบบอ่านง่าย เหมาะกับมือใหม่ที่อยากเข้าใจว่า:
+- โค้ดถูกแบ่งชั้นยังไง
+- แต่ละไฟล์/แต่ละโฟลเดอร์มีหน้าที่อะไร
+- ทำไมถึงออกแบบแบบนี้
 
----
-
-## 1. บทบาทของคุณ
-
-คุณเป็น **Senior PHP Developer + System Architect**
-- เป้าหมาย: โค้ดอ่านง่าย แยกชั้นชัด เอาไปพัฒนาต่อ/ทำขายได้
-- ใช้ Pure PHP เท่านั้น (ห้ามใช้ Framework: Laravel, Symfony, CodeIgniter ฯลฯ)
-- ห้ามใช้ React, Vue, Angular, jQuery
+> 📌 ถ้าคุณต้องการ “ลำดับการทำงานของแต่ละฟีเจอร์” แนะนำอ่าน `FLOW.md` ควบคู่กัน
 
 ---
 
-## 2. สถาปัตยกรรม (บังคับ)
+## 1) 🏗️ ภาพรวมสถาปัตยกรรมระบบ
 
-### Design Pattern: Controller → Service → Repository
+### สถาปัตยกรรมที่ใช้คืออะไร
+โปรเจกต์นี้ใช้แนวคิดแบบ **Layered Architecture (แบ่งชั้น)** และมีหน้าตาคล้าย **MVC‑style** แต่ไม่ได้ใช้ framework
 
-```
-Controller (หน้าเว็บ / API endpoint)
-    ↓  เรียก
-Service (Business logic, validation, transaction)
-    ↓  เรียก
-Repository (SQL ทั้งหมดอยู่ที่นี่ที่เดียว)
-    ↓  ใช้
-PDO (Database)
-```
-
-### กฎแต่ละชั้น
-
-| ชั้น | หน้าที่ | ห้ามทำ |
-|------|---------|--------|
-| **Controller** (ไฟล์ .php ใน root, /admin, /api) | รับ request → เรียก Service → ส่งข้อมูลให้ View หรือ return JSON | ห้ามมี SQL, ห้ามมี business logic |
-| **Service** (/app/Services) | Business rules, validation, transaction, คำนวณ | ห้ามมี SQL ตรงๆ (ต้องเรียกผ่าน Repository) |
-| **Repository** (/app/Repositories) | รวม SQL ทั้งหมด, prepared statements | ห้ามมี business logic, ห้ามมี validation |
-| **View** (ส่วน HTML ของหน้าเว็บ) | แสดงผลเท่านั้น ใช้ตัวแปรที่ Controller ส่งมา | ห้ามมี SQL, ห้ามเรียก Service/Repository ตรง |
-
-### ตัวอย่าง flow
+ภาพรวมการไหลของโค้ดจะประมาณนี้:
 
 ```
-dashboard.php (Controller)
-  → $dashboardService->getMonthlySummary($shopId, $month)
-      → $recordRepository->getSumByMonth($shopId, $startDate, $endDate)
-      → $recordRepository->getBestDay($shopId, $startDate, $endDate)
-      → $goalRepository->getByShopAndMonth($shopId, $month)
-      → คำนวณ ROAS, profit margin, change % (ใน Service)
-  → ส่งผลลัพธ์ให้ View แสดง
+Browser
+  ↓
+หน้าเว็บ (*.php) หรือ API (/api/*.php)
+  ↓
+Service (app/Services/*)
+  ↓
+Repository (app/Repositories/*)
+  ↓
+Database (MySQL/MariaDB)
 ```
+
+> จุดสำคัญ: โปรเจกต์นี้เป็น PHP แบบ “เปิดไฟล์ .php ตามหน้า” (page-based) จึงไม่มี router/middleware แบบ framework
+
+### ทำไมถึงเลือกแนวนี้
+เหมาะกับการทำเทมเพลต/งานขนาดเล็ก เพราะ:
+- ✅ อ่านตามได้ง่าย (เปิดไฟล์แล้วเห็นการทำงาน)
+- ✅ แยกส่วนที่ “เปลี่ยนบ่อย” ออกจากกัน (หน้าเว็บ / กฎธุรกิจ / SQL)
+- ✅ มือใหม่ค่อย ๆ เรียนรู้ได้โดยไม่ต้องรู้ framework ก่อน
+- ✅ ลดโค้ดซ้ำด้วยการรวม logic ไว้ที่ Service/Repository
+
+### เหมาะกับระบบประเภทไหน
+- ระบบขนาดเล็ก–กลาง
+- เดโม/สอน/ส่งงาน
+- ระบบภายในทีมเล็ก
+- เทมเพลตที่ต้องการโครงสร้าง “เป็นระเบียบ” แต่ยังไม่ซับซ้อนเกินไป
 
 ---
 
-## 3. โครงสร้างโฟลเดอร์ (บังคับ)
+## 2) 🧱 แนวคิดหลักที่ใช้ในการออกแบบ
 
-```
-project/
-├── index.php                    # หน้าแรก → redirect
-├── login.php                    # หน้าล็อกอิน / สมัคร
-├── dashboard.php                # แดชบอร์ด
-├── add-record.php               # บันทึกข้อมูล
-├── history.php                  # ประวัติรายการ
-├── overview.php                 # รวมทุกร้าน
-├── annual.php                   # สรุปประจำปี
-│
-├── api/                         # AJAX / JSON endpoints
-│   ├── auth.php
-│   ├── records.php
-│   ├── shops.php
-│   ├── goals.php
-│   ├── dashboard-data.php
-│   ├── overview-data.php
-│   ├── annual-data.php
-│   └── export.php
-│
-├── app/
-│   ├── Services/
-│   │   ├── AuthService.php
-│   │   ├── RecordService.php
-│   │   ├── ShopService.php
-│   │   ├── GoalService.php
-│   │   ├── DashboardService.php
-│   │   ├── OverviewService.php
-│   │   └── AnnualService.php
-│   │
-│   └── Repositories/
-│       ├── UserRepository.php
-│       ├── ShopRepository.php
-│       ├── RecordRepository.php
-│       └── GoalRepository.php
-│
-├── includes/
-│   ├── bootstrap.php            # autoload, session start, error handler
-│   ├── config.php               # DB credentials, app settings
-│   ├── database.php             # PDO connection (singleton)
-│   ├── functions.php            # Helper functions: e(), formatMoney(), csrf()
-│   ├── auth.php                 # Session check middleware
-│   ├── header.php               # HTML header + nav (View partial)
-│   └── footer.php               # HTML footer + bottom nav (View partial)
-│
-├── database/
-│   ├── schema.sql               # สร้างตาราง (รันครั้งเดียว)
-│   └── sample_data.sql          # ข้อมูลตัวอย่างสำหรับทดสอบ
-│
-├── docs/
-│   ├── README.md                # ภาพรวมโปรเจกต์
-│   ├── INSTALL.md               # วิธีติดตั้ง step-by-step
-│   ├── ARCHITECTURE.md          # อธิบาย pattern + โครงสร้าง
-│   ├── FLOW.md                  # Flow ราย use case
-│   └── WHERE_TO_EDIT.md         # จะแก้อะไร ไปแก้ไฟล์ไหน
-│
-├── uploads/                     # ไฟล์ที่ user upload (ถ้ามีในอนาคต)
-├── logs/                        # Error logs
-└── cron/                        # งานอัตโนมัติ (ถ้ามีในอนาคต)
-```
+### ✅ Separation of Concerns (แยกหน้าที่)
+แนวคิดคือ “ไฟล์หนึ่ง/ชั้นหนึ่ง ควรรับผิดชอบเรื่องเดียวหลัก ๆ”
+
+ตัวอย่างในโปรเจกต์นี้:
+- หน้าเว็บ/ไฟล์ API: รับ request → ส่ง response
+- Service: ตรวจข้อมูล + กฎธุรกิจ + สรุปผล
+- Repository: คุย DB ด้วย SQL
+
+ผลลัพธ์:
+- แก้ไขง่ายขึ้น
+- โค้ดอ่านง่ายขึ้น
+- ลดโอกาสแก้จุดหนึ่งแล้วกระทบอีกจุดแบบไม่ตั้งใจ
+
+### ✅ Single Source of Truth (มีแหล่งจริงของกฎอยู่ที่เดียว)
+ตัวอย่าง “แหล่งจริง” ในโปรเจกต์นี้:
+- กฎ validation/การคำนวณ: อยู่ใน Service
+- SQL/query: อยู่ใน Repository
+- config/environment: อยู่ใน `.env` + `includes/config.php`
+
+ข้อดี:
+- ไม่ต้องไล่แก้หลายไฟล์เวลาเปลี่ยนกฎ
+- ลด bug จากการที่หน้า A เช็คแบบหนึ่ง หน้า B เช็คอีกแบบ
+
+### ✅ Boundary / Responsibility (เส้นแบ่งความรับผิดชอบ)
+โปรเจกต์นี้พยายามวาง “เส้นแบ่ง” ชัด ๆ ว่าใครทำอะไร เช่น:
+- Controller ไม่ควรเขียน SQL เอง
+- Repository ไม่ควรรู้เรื่อง session/redirect
+- Service ไม่ควร `echo` HTML หรือ `header()`
+
+### ✅ Thin Controller / Fat Service (Controller บาง, Service หนา)
+- **Controller (หน้าเว็บ/ไฟล์ API)**: ทำงานเบา ๆ เช่น อ่าน `$_GET/$_POST`, เรียก service, แล้วตอบกลับ
+- **Service**: เป็นจุดรวม logic ที่สำคัญ เช่น ตรวจสิทธิ์, validation, transaction, สรุปผล
+
+ตัวอย่างที่เห็นชัด:
+- `api/*.php` จะเรียก service แล้วใช้ helper ตอบกลับ
+- `RecordService` มี logic เรื่องการล็อกแถว (lock) และกันข้อมูลชนกัน
+
+### ✅ Repository Pattern
+Repository คือ “คลาสที่รวม SQL” เพื่อให้:
+- หน้าเว็บไม่ต้องเห็น SQL เต็ม ๆ
+- ปรับ query ได้โดยไม่กระทบ flow ทั้งระบบ
+- ทำให้ service ทำงานกับ “ข้อมูล” แทนที่จะทำงานกับ SQL
 
 ---
 
-## 4. มาตรฐานโค้ด (บังคับทุกข้อ)
+## 3) 🗂️ โครงสร้างโฟลเดอร์ (ภาพรวม)
 
-### 4.1 Database & SQL
+> โฟลเดอร์หลัก ๆ ที่ควรรู้
 
-| กฎ | รายละเอียด |
-|----|-----------|
-| ใช้ PDO เท่านั้น | ห้ามใช้ mysqli |
-| Prepared Statements จริง | ตั้ง `EMULATE_PREPARES = false` ใน PDO options |
-| SQL อยู่ใน Repository เท่านั้น | ห้ามเขียน SQL ใน Controller, Service, หรือ View |
-| Transaction | ใช้ `beginTransaction()` / `commit()` / `rollBack()` ใน Service สำหรับ flow ที่แก้ไขหลายตาราง |
-| SELECT ... FOR UPDATE | ใช้ใน flow ที่ต้อง lock row ก่อนแก้ไข (เช่น เปลี่ยนสถานะ, ตัด stock) |
+- `/` (root)
+  - หน้าเว็บหลัก เช่น `dashboard.php`, `shops.php`, `add-record.php`, `history.php`, `profile.php`, `overview.php`, `annual.php`
+  - `index.php` เป็นจุดเริ่มต้น (redirect ไป login/dashboard)
 
-```php
-// ตัวอย่าง PDO config ใน includes/database.php
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
-```
+- `/api/`
+  - ไฟล์ที่ทำหน้าที่เป็น “API endpoint” สำหรับ action ต่าง ๆ
+  - ตัวอย่าง: `api/auth.php`, `api/records.php`, `api/shops.php`, `api/goals.php`, `api/export.php`
+  - หลาย endpoint รองรับทั้ง:
+    - form submit (ตอบเป็น redirect + flash message)
+    - XHR/Fetch (ตอบเป็น JSON)
 
-### 4.2 Security
+- `/app/Services/`
+  - กฎธุรกิจ/การสรุปผล/validation
+  - ตัวอย่าง: `AuthService.php`, `RecordService.php`, `DashboardService.php`, `ShopService.php`
 
-| กฎ | วิธีทำ |
-|----|--------|
-| XSS Prevention | ใช้ `e()` helper (wrapper ของ `htmlspecialchars`) ก่อนแสดงค่าจาก DB/user ทุกจุดใน HTML |
-| SQL Injection | Prepared statements เท่านั้น — ห้ามต่อ string เข้า query |
-| CSRF Protection | สร้าง token เก็บใน `$_SESSION` → ใส่ `<input type="hidden">` ทุก POST form → ตรวจก่อน process |
-| Password | `password_hash($pw, PASSWORD_DEFAULT)` + `password_verify()` — ห้ามใช้ md5/sha1 |
-| Session Hardening | `session_regenerate_id(true)` หลัง login สำเร็จ |
-| Rate Limiting | จำกัดจำนวนครั้งต่อ IP/session บน login, register (เช่น 5 ครั้ง/นาที) |
-| Upload (ถ้ามี) | ตรวจ MIME type จริง ด้วย `finfo_file()` + จำกัดชนิด/ขนาด |
+- `/app/Repositories/`
+  - คุยฐานข้อมูลด้วย PDO + prepared statements
+  - ตัวอย่าง: `UserRepository.php`, `RecordRepository.php`, `ShopRepository.php`
 
-```php
-// ตัวอย่าง helper functions ใน includes/functions.php
+- `/includes/`
+  - โค้ดแกนกลางที่ทุกหน้าใช้ร่วมกัน
+  - ตัวอย่าง:
+    - `bootstrap.php` (เริ่มระบบ, session, log, ต่อ DB, schema guard)
+    - `config.php` (อ่าน `.env` แล้วกำหนดค่าคงที่)
+    - `database.php` (สร้าง PDO)
+    - `functions.php` (helper เช่น CSRF/redirect/JSON response)
+    - `auth.php` (requireAuth/requireGuest + session timeout)
+    - `header.php`, `footer.php` (layout)
 
-function e(string $value): string {
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-}
+- `/database/`
+  - `schema.sql` โครงสร้าง DB
+  - `sample_data.sql` ข้อมูลตัวอย่าง
 
-function csrf_token(): string {
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf_token'];
-}
+- `/cron/`
+  - งานอัตโนมัติแบบ CLI (เช่น cleanup)
 
-function csrf_field(): string {
-    return '<input type="hidden" name="csrf_token" value="' . csrf_token() . '">';
-}
+- `/vendor/`
+  - dependency จาก Composer (เช่น PHPMailer)
 
-function verify_csrf(): void {
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        http_response_code(403);
-        die(json_encode(['error' => 'Invalid CSRF token']));
-    }
-}
-```
+### ใครควรเรียกใคร (Dependency ที่แนะนำ)
+- หน้าเว็บ/ไฟล์ API ✅ เรียก Service
+- Service ✅ เรียก Repository
+- Repository ✅ เรียก Database (PDO)
+- ทุกชั้น ✅ ใช้ helper ใน `includes/functions.php` ได้ “เท่าที่จำเป็น”
 
-### 4.3 Idempotency
-
-สำหรับ action ที่ user กดซ้ำได้ (บันทึกข้อมูล, ตั้งเป้า):
-
-```php
-// สร้าง idempotency key ฝั่ง client (hidden field)
-// ส่งมาพร้อม form → ตรวจใน Service ว่าเคย process แล้วหรือยัง
-// ถ้าเคย → return ผลลัพธ์เดิม ไม่ทำซ้ำ
-```
-
-- ระบบนี้ไม่มี payment แต่ flow upsert (กรอกวันซ้ำ → อัปเดตทับ) ต้อง handle gracefully
-- ห้ามสร้าง duplicate record จากการกด submit ซ้ำ
-
-### 4.4 Coding Style
-
-| กฎ | ตัวอย่าง |
-|----|---------|
-| Class: PascalCase | `RecordService`, `UserRepository` |
-| Method: camelCase | `getMonthlySummary()`, `upsertRecord()` |
-| Variable: camelCase | `$shopId`, `$totalRevenue` |
-| File: kebab-case (public) | `add-record.php`, `dashboard-data.php` |
-| File: PascalCase (class) | `RecordService.php`, `UserRepository.php` |
-| Indent: 4 spaces | ห้ามใช้ tab |
-| PHP tag | ใช้ `<?php` เท่านั้น ห้ามใช้ `<?` |
-
-### 4.5 Error Handling
-
-- API endpoints → return JSON: `{ "success": false, "error": "message" }` + HTTP status code
-- หน้าเว็บ → แสดง error ใน UI (toast / inline message) ไม่ใช่ die() หรือ blank page
-- Log errors ลง `/logs/` ด้วย `error_log()` ห้ามแสดง stack trace ให้ user
-- Production: `display_errors = Off`, `log_errors = On`
+### ใคร “ไม่ควร” เรียกใคร
+- Repository ❌ ไม่ควร `redirect()` / `jsonResponse()` / ใช้ `$_SESSION`
+- Service ❌ ไม่ควร `echo` HTML หรือยุ่งกับ `header()` โดยตรง
+- หน้าเว็บ/ไฟล์ API ❌ ไม่ควรเขียน SQL ตรง ๆ (ควรผ่าน Repository)
 
 ---
 
-## 5. ขั้นตอน Bootstrap
+## 4) 🧠 หน้าที่ของแต่ละ Layer
 
-ทุกไฟล์ .php ที่เป็น entry point ต้องเริ่มด้วย:
+### 4.1 Controller (หน้าเว็บ + API)
+**อยู่ที่:** `/` และ `/api/`
 
-```php
-<?php
-require_once __DIR__ . '/includes/bootstrap.php';
-```
+**ทำหน้าที่อะไร**
+- รับ input จากผู้ใช้ (`GET/POST`)
+- เรียก service ที่เหมาะสม
+- ตอบกลับผลลัพธ์เป็น:
+  - HTML page (หน้าเว็บ)
+  - หรือ JSON/redirect (ไฟล์ใน `/api/`)
 
-`bootstrap.php` ทำหน้าที่:
-1. `session_start()` พร้อม secure settings
-2. Set error reporting
-3. Require `config.php`, `database.php`, `functions.php`
-4. Autoload classes จาก `/app/` (ใช้ `spl_autoload_register`)
+**ควรมี logic ระดับไหน**
+- logic เบา ๆ เช่น parse ค่า, เลือก action, ส่งพารามิเตอร์เข้า service
 
-```php
-// includes/bootstrap.php
-<?php
-session_start([
-    'cookie_httponly' => true,
-    'cookie_secure'   => isset($_SERVER['HTTPS']),
-    'cookie_samesite' => 'Lax',
-]);
+**ควรอยู่ใน Controller**
+- การตรวจว่าเป็น POST/GET
+- การตรวจ CSRF (เรียก helper)
+- การเลือก redirect path
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/database.php';
-require_once __DIR__ . '/functions.php';
-
-spl_autoload_register(function ($class) {
-    // App\Services\RecordService → app/Services/RecordService.php
-    $path = dirname(__DIR__) . '/' . str_replace('\\', '/', $class) . '.php';
-    // Also try: app/Services/RecordService.php
-    $altPath = dirname(__DIR__) . '/app/' . str_replace('\\', '/', $class) . '.php';
-    if (file_exists($path)) {
-        require_once $path;
-    } elseif (file_exists($altPath)) {
-        require_once $altPath;
-    }
-});
-```
+**ไม่ควรอยู่ใน Controller**
+- SQL
+- การคำนวณ/สรุปผลที่ซับซ้อน
+- transaction/lock (ควรอยู่ใน service)
 
 ---
 
-## 6. ตัวอย่าง Pattern การเขียนแต่ละชั้น
+### 4.2 Service
+**อยู่ที่:** `app/Services/*`
 
-### Repository (SQL อยู่ที่นี่เท่านั้น)
+**ทำหน้าที่อะไร**
+- เป็น “กฎธุรกิจ” ของระบบ
+- ตรวจความถูกต้องของข้อมูล (validation)
+- ตรวจสิทธิ์/ความเป็นเจ้าของข้อมูล (authorization เชิงธุรกิจ)
+- รวมหลาย repository เพื่อทำงานให้จบ 1 use case
+- จุดที่ต้อง transaction/lock มักอยู่ที่ชั้นนี้
 
-```php
-// app/Repositories/RecordRepository.php
-class RecordRepository {
-    private PDO $db;
+**ควรมี logic ระดับไหน**
+- logic หนา (fat) ได้ แต่ควรจัดเป็นฟังก์ชันย่อย/แยกความรับผิดชอบให้ชัด
 
-    public function __construct(PDO $db) {
-        $this->db = $db;
-    }
+**ควรอยู่ใน Service**
+- เช่น:
+  - upsert/update/delete ข้อมูลแบบมีเงื่อนไข
+  - สรุปตัวเลข/จัดรูปข้อมูลให้หน้า dashboard
+  - ตรวจว่า user เข้าถึง shop นี้ได้ไหม
 
-    public function upsert(int $shopId, string $date, float $revenue, float $adCost, ?string $note): bool {
-        $sql = "INSERT INTO daily_records (shop_id, record_date, revenue, ad_cost, note)
-                VALUES (:shop_id, :date, :revenue, :ad_cost, :note)
-                ON DUPLICATE KEY UPDATE
-                    revenue = VALUES(revenue),
-                    ad_cost = VALUES(ad_cost),
-                    note = VALUES(note)";
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([
-            ':shop_id'  => $shopId,
-            ':date'     => $date,
-            ':revenue'  => $revenue,
-            ':ad_cost'  => $adCost,
-            ':note'     => $note,
-        ]);
-    }
-
-    public function getSumByDateRange(int $shopId, string $startDate, string $endDate): ?array {
-        $sql = "SELECT SUM(revenue) AS total_revenue, SUM(ad_cost) AS total_ad_cost,
-                       COUNT(*) AS days_count
-                FROM daily_records
-                WHERE shop_id = :shop_id AND record_date BETWEEN :start AND :end";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':shop_id' => $shopId, ':start' => $startDate, ':end' => $endDate]);
-        return $stmt->fetch() ?: null;
-    }
-}
-```
-
-### Service (Business logic อยู่ที่นี่)
-
-```php
-// app/Services/DashboardService.php
-class DashboardService {
-    private RecordRepository $recordRepo;
-    private GoalRepository $goalRepo;
-
-    public function __construct(RecordRepository $recordRepo, GoalRepository $goalRepo) {
-        $this->recordRepo = $recordRepo;
-        $this->goalRepo   = $goalRepo;
-    }
-
-    public function getSummary(int $shopId, string $startDate, string $endDate): array {
-        $data = $this->recordRepo->getSumByDateRange($shopId, $startDate, $endDate);
-
-        $totalRevenue = (float)($data['total_revenue'] ?? 0);
-        $totalAdCost  = (float)($data['total_ad_cost'] ?? 0);
-        $profit       = $totalRevenue - $totalAdCost;
-
-        return [
-            'total_revenue'      => $totalRevenue,
-            'total_ad_cost'      => $totalAdCost,
-            'profit'             => $profit,
-            'roas'               => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
-            'profit_margin'      => $totalRevenue > 0 ? round(($profit / $totalRevenue) * 100, 1) : null,
-            'avg_revenue_per_day'=> ($data['days_count'] ?? 0) > 0
-                                    ? round($totalRevenue / $data['days_count'])
-                                    : null,
-            'days_count'         => (int)($data['days_count'] ?? 0),
-        ];
-    }
-}
-```
-
-### Controller (เรียก Service → ส่งให้ View)
-
-```php
-// dashboard.php (Controller)
-<?php
-require_once __DIR__ . '/includes/bootstrap.php';
-require_once __DIR__ . '/includes/auth.php'; // ตรวจ login
-
-$shopId   = $_SESSION['current_shop_id'];
-$month    = $_GET['month'] ?? date('Y-m');
-$startDate = $month . '-01';
-$endDate   = date('Y-m-t', strtotime($startDate));
-
-// สร้าง dependencies
-$recordRepo = new RecordRepository($pdo);
-$goalRepo   = new GoalRepository($pdo);
-$service    = new DashboardService($recordRepo, $goalRepo);
-
-// เรียก Service
-$summary = $service->getSummary($shopId, $startDate, $endDate);
-
-// ส่งให้ View
-require __DIR__ . '/includes/header.php';
-// ... HTML ใช้ตัวแปร $summary เช่น e(formatMoney($summary['total_revenue']))
-require __DIR__ . '/includes/footer.php';
-```
-
-### API Endpoint (return JSON)
-
-```php
-// api/dashboard-data.php
-<?php
-require_once __DIR__ . '/../includes/bootstrap.php';
-require_once __DIR__ . '/../includes/auth.php';
-header('Content-Type: application/json');
-
-$shopId    = $_SESSION['current_shop_id'];
-$month     = $_GET['month'] ?? date('Y-m');
-// ... validate, สร้าง Service, เรียก method
-echo json_encode(['success' => true, 'data' => $result]);
-```
+**ไม่ควรอยู่ใน Service**
+- การอ่าน `$_POST` โดยตรง (ให้ controller ส่งค่าเข้ามา)
+- การ `echo` HTML
+- การสร้าง SQL string เอง (ให้ repository ทำ)
 
 ---
 
-## 7. สิ่งที่ต้องส่งมอบในแต่ละ Phase
+### 4.3 Repository
+**อยู่ที่:** `app/Repositories/*`
 
-| สิ่งที่ต้องทำ | รายละเอียด |
-|--------------|-----------|
-| ✅ โค้ดที่รันได้จริง | ไม่ใช่ pseudo code — ต้อง test ได้ |
-| ✅ ตาม pattern ข้างบน | Controller → Service → Repository |
-| ✅ SQL ใน Repository เท่านั้น | ห้ามมี SQL ในไฟล์อื่น |
-| ✅ Security ทุกข้อ | XSS, CSRF, prepared statements, password hash |
-| ✅ Error handling | API return JSON error, หน้าเว็บแสดง toast |
-| ✅ อัปเดตเอกสาร | เมื่อเพิ่มไฟล์ใหม่ ต้องอัปเดต docs/ ด้วย |
+**ทำหน้าที่อะไร**
+- รับผิดชอบการอ่าน/เขียน DB ผ่าน PDO
+- เก็บ SQL ไว้ให้เป็นที่เป็นทาง
+- คืนค่าเป็น array/row ให้ service ใช้ต่อ
 
----
+**ควรมี logic ระดับไหน**
+- logic เกี่ยวกับ query เท่านั้น (เงื่อนไข query, join, for update)
 
-## 8. เอกสารที่ต้องสร้าง (Phase 1)
+**ควรอยู่ใน Repository**
+- prepared statements
+- query แบบ `SELECT ... FOR UPDATE` (ใช้คู่กับ transaction ใน service)
 
-สร้างใน `/docs/` ตั้งแต่ Phase 1 และอัปเดตทุก Phase:
-
-| ไฟล์ | เนื้อหา |
-|------|---------|
-| `README.md` | ภาพรวม, ฟีเจอร์, Tech Stack, วิธี setup เบื้องต้น |
-| `INSTALL.md` | ขั้นตอนติดตั้ง step-by-step (server requirements, import SQL, config DB) |
-| `ARCHITECTURE.md` | อธิบาย pattern Controller→Service→Repository, โครงสร้างโฟลเดอร์ |
-| `FLOW.md` | Flow ราย use case (login, บันทึกข้อมูล, ดูแดชบอร์ด ฯลฯ) |
-| `WHERE_TO_EDIT.md` | อยากแก้อะไร → ไปแก้ไฟล์ไหน (เช่น "เพิ่ม column ใหม่ → แก้ Repository + Service + View") |
+**ไม่ควรอยู่ใน Repository**
+- กฎธุรกิจ เช่น “คำนวณกำไร/ROAS”
+- เช็ค session/เช็คสิทธิ์เชิง flow
+- การตอบกลับผู้ใช้ (redirect/json)
 
 ---
 
-## 9. ข้อห้าม
+### 4.4 Database
+**อยู่ที่:** `database/schema.sql`
 
-- ❌ ห้ามเดา requirement เอง — ถ้าไม่ชัดให้ทำเป็น TODO list แล้วถามกลับ
-- ❌ ห้าม refactor เกินจำเป็น — ทำตาม spec ไม่ต้องเพิ่มสิ่งที่ไม่ได้ขอ
-- ❌ ห้ามอธิบายยาวเรื่อง syntax พื้นฐาน
-- ❌ ห้ามใช้ Framework, jQuery, หรือ frontend framework
-- ❌ ห้ามเขียน SQL นอก Repository
-- ❌ ห้ามแสดง stack trace / DB error ให้ user เห็น
+**ทำหน้าที่อะไร**
+- เป็นโครงสร้างข้อมูลจริง (ตาราง/คอลัมน์/ดัชนี)
+- ใช้ constraint บางส่วนช่วยกันข้อมูลผิด (เช่น unique key)
+
+แนวคิดที่ใช้ใน schema ที่เห็นในโปรเจกต์นี้:
+- ความสัมพันธ์ผ่าน Foreign Key
+- Unique index สำหรับกันข้อมูลซ้ำ (เช่น รายการรายวัน 1 ร้าน/1 วัน)
+
+---
+
+### 4.5 Utility / Helper
+**อยู่ที่:** `includes/*`
+
+สิ่งสำคัญที่รวมอยู่ในชั้นนี้:
+- การอ่าน `.env` และกำหนดค่า config (`includes/config.php`)
+- การเริ่มระบบ/ตั้งค่า session/log/ต่อ DB (`includes/bootstrap.php`)
+- helper สำหรับงานซ้ำ ๆ เช่น:
+  - CSRF (`csrf_token`, `verify_csrf`)
+  - response แบบ JSON/redirect (`api_respond`, `jsonResponse`)
+  - redirect (`redirect`, `app_url`)
+  - ดึง IP ลูกค้าแบบปลอดภัยเมื่ออยู่หลัง proxy (`client_ip`)
+
+ข้อแนะนำ:
+- helper ควรเป็น “กลาง ๆ” ใช้ซ้ำได้
+- ถ้าเริ่มมี logic ธุรกิจ (เช่นกฎรายได้/กำไร) ให้ย้ายไป Service
+
+---
+
+## 5) 🔐 การออกแบบด้านความปลอดภัย (เชิงโครงสร้าง)
+
+### 5.1 ป้องกัน SQL Injection อยู่ตรงไหน
+- Repository ใช้ **PDO + prepared statements** เป็นหลัก
+- หน้าเว็บ/Service ไม่ควรต่อ string SQL เอง
+
+### 5.2 Password อยู่ชั้นไหน
+- อยู่ที่ Service + Repository
+  - Service จัดการ `password_hash()` / `password_verify()`
+  - Repository เก็บ/อ่าน `password_hash` จากตาราง `users`
+- ไม่เก็บรหัสผ่านแบบข้อความธรรมดาใน DB
+
+### 5.3 Authorization ควรเช็คที่ layer ไหน
+- ระดับ “ต้อง login ก่อน” → เช็คที่ `includes/auth.php` ด้วย `requireAuth()`
+- ระดับ “ข้อมูลนี้เป็นของ user/ร้านนี้จริงไหม” → เช็คที่ Service
+  - เช่น service ตรวจว่า user มีสิทธิ์เข้าถึง shop ก่อนทำรายการ
+
+### 5.4 CSRF ป้องกันตรงไหน
+- helper อยู่ที่ `includes/functions.php`
+- API/controller เรียก `ensure_valid_csrf_or_respond(...)` ก่อนทำ action ที่แก้ข้อมูล
+
+### 5.5 Session / Cookie ถูกวางไว้ยังไง
+- `includes/bootstrap.php` เป็นที่ตั้งค่า session:
+  - `HttpOnly`, `SameSite=Lax`, strict mode
+  - production บังคับ cookie แบบ `Secure` → ต้องใช้ HTTPS
+- ตอน login/logout มีการ `session_regenerate_id(true)` ลดความเสี่ยง session fixation
+
+### 5.6 Transaction / Lock ควรอยู่ตรงไหน
+- **อยู่ที่ Service** (เพราะเป็นจุดที่รู้ “งานหนึ่งงานต้องทำอะไรบ้างให้ครบ”)
+- Repository มีหน้าที่ “เตรียม query” เช่น `... FOR UPDATE` แต่ไม่ควรเป็นคนเริ่ม/จบ transaction เอง
+
+ตัวอย่างภาพรวมที่พบในโปรเจกต์นี้:
+- สมัครสมาชิก: transaction เพื่อสร้าง user + สร้างร้านเริ่มต้น
+- รีเซ็ตรหัสผ่าน: lock token แล้วค่อยอัปเดตรหัสผ่าน
+- แก้ไขรายการรายวัน: lock แถวเพื่อกันข้อมูลชนกัน
+
+### 5.7 Logging และ Error Handling
+- `includes/bootstrap.php` ตั้งค่าให้ error ไปลงไฟล์ตาม `LOG_FILE`
+- มี global exception handler:
+  - ถ้าเป็น `/api/` จะตอบ JSON error
+  - ถ้าเป็นหน้าเว็บ จะตอบหน้า error แบบ HTML
+
+---
+
+## 6) ⚠️ ขอบเขตของสถาปัตยกรรมนี้
+
+### เหมาะกับงานแบบไหน
+- ระบบเล็กที่อยากได้โครงสร้างชัด
+- งานที่อยากให้มือใหม่อ่านตามได้
+- ระบบที่ไม่ต้องมีหลายบริการ/หลายเซิร์ฟเวอร์
+
+### ไม่เหมาะกับงานแบบไหน
+- งานที่ต้อง scale สูงมาก (ผู้ใช้พร้อมกันจำนวนมาก)
+- งานที่ต้องมี role/permission ซับซ้อนหลายระดับ
+- งานที่ต้องมี audit log หรือ workflow ยาว ๆ หลายขั้น
+
+### ถ้าจะเอาไปใช้ production ควรคิดเพิ่มเรื่องอะไร
+(ไม่ใช่การเปลี่ยนโค้ด แต่เป็น “การดูแลระบบ”) เช่น:
+- HTTPS / การป้องกันไฟล์ `.env`
+- การ backup DB และแผนกู้คืน
+- การตั้ง cron ที่จำเป็น
+- การจัดการ log (ไม่ให้โตไม่จำกัด)
+- แผนการอัปเกรด schema (ระวัง `schema.sql` ที่เป็น drop+create)
+
+---
+
+## 7) 🧭 แนวทางการต่อยอด
+
+### 7.1 ถ้าจะเพิ่ม feature ควรเพิ่มที่ layer ไหน
+แนวทางที่แนะนำ:
+1) เพิ่มหน้า/ปุ่ม (หน้าเว็บที่ `/`)
+2) ถ้าเป็น action แบบ POST ให้สร้าง endpoint ใน `/api/`
+3) เพิ่ม/ขยาย service ใน `app/Services/*`
+4) เพิ่ม/ขยาย repository ใน `app/Repositories/*`
+5) ถ้าต้องเพิ่มตาราง/คอลัมน์ ให้แก้ `database/schema.sql`
+
+### 7.2 ถ้าจะเปลี่ยน DB หรือปรับ query หนัก ๆ ควรแก้ตรงไหน
+- เริ่มที่ Repository ก่อน
+- ถ้าเปลี่ยน schema → ต้องดู `includes/bootstrap.php` (Schema Guard) ด้วยว่าเช็คอะไรไว้
+
+### 7.3 ถ้าจะทำ API / Frontend แยก ควรเริ่มตรงไหน
+- ใช้ `/api/*` เป็น “ขอบเขต” (boundary) ของ backend
+- endpoint หลายตัวถูกออกแบบให้ตอบได้ทั้ง JSON และ redirect อยู่แล้ว (ผ่าน helper)
+- ค่อย ๆ เพิ่ม endpoint ใหม่โดยยึดรูปแบบเดิม (POST + CSRF + service + repository)
+
+### 7.4 ถ้าจะเพิ่มงานเบื้องหลัง
+- โปรเจกต์นี้มีโฟลเดอร์ `/cron/` อยู่แล้ว
+- แนะนำให้วางงานที่ต้องรันตามเวลาไว้ที่นี่ และทำให้รันผ่าน CLI เท่านั้นเหมือนสคริปต์เดิม
+
+---
+
+## 8) 📌 สรุปสำหรับผู้ซื้อ
+
+สิ่งที่เอกสาร/โค้ดชุดนี้ช่วยให้คุณ “ฝึกคิดแบบสถาปนิกระบบ” ได้:
+- การแบ่งชั้น (Layer) และการแยกหน้าที่ (SoC)
+- การออกแบบให้แก้ง่าย/ต่อยอดง่ายด้วย Service + Repository
+- ความปลอดภัยพื้นฐานที่ควรมีในระบบจริง (CSRF, session hardening, prepared statements)
+- การวางจุด transaction/lock ให้ถูกชั้น
+
+เหมาะกับใครที่สุด:
+- มือใหม่ที่อยากมีโปรเจกต์ตัวอย่างโครงสร้างดี ๆ
+- นักเรียน/คนเริ่มทำโปรเจกต์ที่ต้องการระบบ “ใช้งานได้จริง” และอ่านตามได้
+- คนที่อยากได้เทมเพลตไปต่อยอดเป็นระบบเล็ก ๆ ของตัวเอง

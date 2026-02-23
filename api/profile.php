@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/auth.php';
 
-requireAuth(true);
+requireAuth();
 
 $action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
 $wantsJson = wants_json_response();

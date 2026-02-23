@@ -91,6 +91,8 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
         const btnConfirmOk = document.getElementById('global-confirm-ok');
         let pendingForm = null;
 
+        const normalizeText = (value) => (value || '').toString().trim();
+
         const showConfirmModal = (message) => {
             if (confirmMessageEl) confirmMessageEl.textContent = message;
             if (confirmModal) {
@@ -137,6 +139,28 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
             btnConfirmOk.addEventListener('click', () => {
                 if (pendingForm) {
                     const formToSubmit = pendingForm;
+
+                    const typedExpected = normalizeText(formToSubmit.getAttribute('data-confirm-typed-expected'));
+                    if (typedExpected !== '') {
+                        const typedPrompt = normalizeText(formToSubmit.getAttribute('data-confirm-typed-prompt'))
+                            || 'เพื่อยืนยัน กรุณาพิมพ์ข้อความให้ตรงตามนี้:';
+
+                        const typed = normalizeText(window.prompt(`${typedPrompt}\n${typedExpected}`));
+                        if (typed !== typedExpected) {
+                            window.alert('ข้อความที่พิมพ์ไม่ตรงกัน ระบบยังไม่ดำเนินการ');
+                            return;
+                        }
+
+                        const typedInputName = normalizeText(formToSubmit.getAttribute('data-confirm-typed-input'));
+                        const hiddenInput = typedInputName !== ''
+                            ? formToSubmit.querySelector(`input[name="${typedInputName}"]`)
+                            : formToSubmit.querySelector('input[name="confirm_shop_name"]');
+
+                        if (hiddenInput) {
+                            hiddenInput.value = typed;
+                        }
+                    }
+
                     hideConfirmModal();
                     if (!formToSubmit.hasAttribute('data-no-loading')) {
                         showLoading();

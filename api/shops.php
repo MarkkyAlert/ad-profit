@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/auth.php';
 
-requireAuth(true);
+requireAuth();
 
 $action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
 $wantsJson = wants_json_response();
@@ -142,6 +142,17 @@ if ($action === 'delete') {
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopId = (int)($_POST['shop_id'] ?? ($_SESSION['current_shop_id'] ?? 0));
+
+    $confirmShopName = trim((string)($_POST['confirm_shop_name'] ?? ''));
+    $shopForDeleteConfirm = $shopRepository->findByIdAndUserId($shopId, $userId);
+    $expectedShopName = trim((string)($shopForDeleteConfirm['name'] ?? ''));
+    if ($expectedShopName !== '' && $confirmShopName !== $expectedShopName) {
+        $respond([
+            'success' => false,
+            'error' => 'กรุณาพิมพ์ชื่อร้านให้ตรง เพื่อยืนยันการลบร้าน',
+        ], 422, $redirectPath);
+    }
+
     $deleteResult = $shopService->deleteShop($userId, $shopId);
 
     if (($deleteResult['success'] ?? false) !== true) {

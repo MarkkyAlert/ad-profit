@@ -146,11 +146,15 @@ require __DIR__ . '/includes/header.php';
                             <form
                                 action="<?= e(app_url('/api/shops.php')) ?>"
                                 method="post"
-                                data-confirm="ยืนยันการลบร้านนี้ใช่หรือไม่? ข้อมูลทั้งหมดในร้านจะถูกลบถาวร">
+                                data-confirm="ยืนยันการลบร้านนี้ใช่หรือไม่? ข้อมูลทั้งหมดในร้านจะถูกลบถาวร (ระบบจะให้พิมพ์ชื่อร้านยืนยันอีกครั้ง)"
+                                data-confirm-typed-expected="<?= e($shopName) ?>"
+                                data-confirm-typed-prompt="เพื่อยืนยันการลบร้าน กรุณาพิมพ์ชื่อร้านให้ตรงตามนี้:"
+                                data-confirm-typed-input="confirm_shop_name">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="shop_id" value="<?= e((string)$shopId) ?>">
                                 <input type="hidden" name="redirect_to" value="/shops.php">
+                                <input type="hidden" name="confirm_shop_name" value="">
 
                                 <?php if ($canDeleteShop): ?>
                                     <button type="submit" class="btn-danger px-3 py-2 text-xs">ลบร้าน</button>
