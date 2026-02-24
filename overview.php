@@ -186,8 +186,10 @@ require __DIR__ . '/includes/header.php';
                 <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งเปรียบเทียบระหว่างร้าน</h2>
                 <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
             </div>
-            <div class="h-80">
-                <canvas id="overview-bar-chart"></canvas>
+            <div class="h-80 w-full overflow-x-auto">
+                <div style="min-width: <?= max(100, count($barPayload['labels']) * 120) ?>px; height: 100%;">
+                    <canvas id="overview-bar-chart"></canvas>
+                </div>
             </div>
         </section>
 
