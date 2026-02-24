@@ -587,15 +587,19 @@ $flashError = get_flash('error');
                         <input type="hidden" name="redirect_to" value="<?= e($redirectTo) ?>">
                         <select name="shop_id" aria-label="เลือกร้านค้า" onchange="this.form.submit()" class="w-full sm:w-48 lg:w-56 rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 sm:py-1.5 text-sm text-slate-300 font-medium shadow-sm hover:border-indigo-500/50 transition-colors">
                             <?php foreach ($headerShops as $shop): ?>
-                                <?php $shopId = (int)($shop['id'] ?? 0); ?>
+                                <?php
+                                $shopId = (int)($shop['id'] ?? 0);
+                                $shopNameFull = (string)($shop['name'] ?? 'ร้านค้า');
+                                $shopNameShort = mb_strlen($shopNameFull) > 30 ? mb_substr($shopNameFull, 0, 27) . '...' : $shopNameFull;
+                                ?>
                                 <option value="<?= e((string)$shopId) ?>" <?= $shopId === $currentShopId ? 'selected' : '' ?>>
-                                    🏪 <?= e((string)($shop['name'] ?? 'ร้านค้า')) ?>
+                                    🏪 <?= e($shopNameShort) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </form>
                 <?php else: ?>
-                    <span class="inline-block flex-grow sm:flex-grow-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 sm:py-1.5 text-sm font-medium text-slate-300 shadow-sm">🏪 <?= e($currentShopName) ?></span>
+                    <span class="inline-block flex-grow sm:flex-grow-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 sm:py-1.5 text-sm font-medium text-slate-300 shadow-sm truncate max-w-[200px]" title="<?= e($currentShopName) ?>">🏪 <?= e($currentShopName) ?></span>
                 <?php endif; ?>
 
                 <div class="shrink-0 text-xs">

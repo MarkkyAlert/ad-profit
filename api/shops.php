@@ -151,7 +151,8 @@ if ($action === 'delete') {
 
     $confirmShopName = trim((string)($_POST['confirm_shop_name'] ?? ''));
     $shopForDeleteConfirm = $shopRepository->findByIdAndUserId($shopId, $userId);
-    $expectedShopName = trim((string)($shopForDeleteConfirm['name'] ?? ''));
+    $fullShopName = trim((string)($shopForDeleteConfirm['name'] ?? ''));
+    $expectedShopName = mb_strlen($fullShopName) > 20 ? mb_substr($fullShopName, 0, 20) : $fullShopName;
     if ($expectedShopName !== '' && $confirmShopName !== $expectedShopName) {
         $respond([
             'success' => false,

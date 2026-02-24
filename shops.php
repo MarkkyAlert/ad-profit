@@ -40,9 +40,9 @@ require __DIR__ . '/includes/header.php';
             <p class="mt-2 text-sm text-slate-400">สร้างร้านใหม่, เปลี่ยนร้านที่ใช้งาน, แก้ไขชื่อร้าน และลบร้านจากหน้านี้ได้ทันที</p>
         </div>
 
-        <div class="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-4 py-3 text-sm">
+        <div class="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-4 py-3 text-sm max-w-[50%] sm:max-w-[16rem]">
             <p class="text-slate-400">ร้านที่กำลังใช้งาน</p>
-            <p class="mt-1 font-semibold text-indigo-200">🏪 <?= e($currentShopName) ?></p>
+            <p class="mt-1 font-semibold text-indigo-200 truncate" title="<?= e($currentShopName) ?>">🏪 <?= e($currentShopName) ?></p>
             <p class="mt-1 text-xs text-slate-500">ทั้งหมด <?= e((string)$shopCount) ?> ร้าน</p>
         </div>
     </div>
@@ -102,17 +102,17 @@ require __DIR__ . '/includes/header.php';
                     $createdDate = $createdDate !== '' ? substr($createdDate, 0, 10) : '';
                     $createdDateText = $createdDate !== '' ? formatThaiDate($createdDate) : '-';
                     ?>
-                    <article class="rounded-2xl border p-4 shadow-sm transition-all <?= $isCurrent ? 'border-indigo-400/35 bg-indigo-500/10 shadow-indigo-900/20' : 'border-white/10 bg-white/[0.03] hover:border-white/20' ?>">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                                <p class="text-base font-semibold text-slate-100"><?= e($shopName) ?></p>
+                    <article class="overflow-hidden rounded-2xl border p-4 shadow-sm transition-all <?= $isCurrent ? 'border-indigo-400/35 bg-indigo-500/10 shadow-indigo-900/20' : 'border-white/10 bg-white/[0.03] hover:border-white/20' ?>">
+                        <div class="flex flex-nowrap items-start justify-between gap-3">
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-base font-semibold text-slate-100" title="<?= e($shopName) ?>"><?= e($shopName) ?></p>
                                 <p class="mt-1 text-xs text-slate-500">สร้างเมื่อ <?= e($createdDateText) ?></p>
                             </div>
 
                             <?php if ($isCurrent): ?>
-                                <span class="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">กำลังใช้งาน</span>
+                                <span class="shrink-0 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">กำลังใช้งาน</span>
                             <?php else: ?>
-                                <form action="<?= e(app_url('/api/shops.php')) ?>" method="post">
+                                <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="shrink-0">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="action" value="switch">
                                     <input type="hidden" name="shop_id" value="<?= e((string)$shopId) ?>">
@@ -123,13 +123,13 @@ require __DIR__ . '/includes/header.php';
                         </div>
 
                         <div class="mt-4 flex flex-wrap items-end gap-2">
-                            <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="min-w-[220px] flex-1 grid gap-2 md:grid-cols-[1fr_auto] md:items-end">
+                            <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="min-w-0 flex-1 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="rename">
                                 <input type="hidden" name="shop_id" value="<?= e((string)$shopId) ?>">
                                 <input type="hidden" name="redirect_to" value="/shops.php">
 
-                                <div>
+                                <div class="min-w-0 overflow-hidden">
                                     <label for="shop-name-<?= e((string)$shopId) ?>" class="text-xs text-slate-400">แก้ไขชื่อร้าน</label>
                                     <input
                                         id="shop-name-<?= e((string)$shopId) ?>"
@@ -138,18 +138,21 @@ require __DIR__ . '/includes/header.php';
                                         maxlength="100"
                                         required
                                         value="<?= e($shopName) ?>"
-                                        class="mt-1 w-full rounded-xl px-3 py-2 text-sm transition-all">
+                                        class="mt-1 block w-full max-w-full rounded-xl px-3 py-2 text-sm transition-all">
                                 </div>
 
                                 <button type="submit" class="btn-primary px-3 py-2 text-xs">บันทึกชื่อ</button>
                             </form>
 
+                            <?php
+                            $shopNameForConfirm = mb_strlen($shopName) > 20 ? mb_substr($shopName, 0, 20) : $shopName;
+                            ?>
                             <form
                                 action="<?= e(app_url('/api/shops.php')) ?>"
                                 method="post"
                                 data-confirm="ยืนยันการลบร้านนี้ใช่หรือไม่? ข้อมูลทั้งหมดในร้านจะถูกลบถาวร (ระบบจะให้พิมพ์ชื่อร้านยืนยันอีกครั้ง)"
-                                data-confirm-typed-expected="<?= e($shopName) ?>"
-                                data-confirm-typed-prompt="เพื่อยืนยันการลบร้าน กรุณาพิมพ์ชื่อร้านให้ตรงตามนี้:"
+                                data-confirm-typed-expected="<?= e($shopNameForConfirm) ?>"
+                                data-confirm-typed-prompt="เพื่อยืนยันการลบร้าน กรุณาพิมพ์<?= mb_strlen($shopName) > 20 ? ' 20 ตัวแรกของ' : '' ?>ชื่อร้านให้ตรงตามนี้:"
                                 data-confirm-typed-input="confirm_shop_name">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete">

@@ -48,6 +48,18 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
         </div>
         <h3 class="mb-2 text-lg font-bold text-slate-100">ยืนยันการดำเนินการ</h3>
         <p id="global-confirm-message" class="mb-6 text-sm text-slate-400">คุณแน่ใจหรือไม่ว่าต้องการดำเนินการนี้?</p>
+        <div id="global-confirm-typed" class="mb-6 hidden text-left">
+            <p id="global-confirm-typed-prompt" class="mb-2 text-xs text-slate-400"></p>
+            <div id="global-confirm-typed-expected" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-mono text-slate-200 break-all"></div>
+            <input
+                id="global-confirm-typed-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                class="mt-3 w-full rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 text-sm text-slate-200"
+                placeholder="พิมพ์ข้อความด้านบนให้ตรง">
+            <p id="global-confirm-typed-error" class="mt-2 hidden text-xs text-red-300">ข้อความที่พิมพ์ไม่ตรงกัน</p>
+        </div>
         <div class="flex items-center justify-center gap-3">
             <button type="button" id="global-confirm-cancel" class="btn-ghost flex-1 py-2.5 text-sm">ยกเลิก</button>
             <button type="button" id="global-confirm-ok" class="btn-danger flex-1 py-2.5 text-sm">ยืนยัน</button>
@@ -87,11 +99,41 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
         const confirmModal = document.getElementById('global-confirm-modal');
         const confirmCard = document.getElementById('global-confirm-card');
         const confirmMessageEl = document.getElementById('global-confirm-message');
+        const confirmTypedSection = document.getElementById('global-confirm-typed');
+        const confirmTypedPromptEl = document.getElementById('global-confirm-typed-prompt');
+        const confirmTypedExpectedEl = document.getElementById('global-confirm-typed-expected');
+        const confirmTypedInputEl = document.getElementById('global-confirm-typed-input');
+        const confirmTypedErrorEl = document.getElementById('global-confirm-typed-error');
         const btnConfirmCancel = document.getElementById('global-confirm-cancel');
         const btnConfirmOk = document.getElementById('global-confirm-ok');
         let pendingForm = null;
 
         const normalizeText = (value) => (value || '').toString().trim();
+
+        const resetTypedConfirm = () => {
+            if (confirmTypedPromptEl) confirmTypedPromptEl.textContent = '';
+            if (confirmTypedExpectedEl) confirmTypedExpectedEl.textContent = '';
+            if (confirmTypedInputEl) confirmTypedInputEl.value = '';
+            if (confirmTypedErrorEl) confirmTypedErrorEl.classList.add('hidden');
+            if (confirmTypedSection) confirmTypedSection.classList.add('hidden');
+        };
+
+        const configureTypedConfirm = (form) => {
+            const expected = normalizeText(form?.getAttribute('data-confirm-typed-expected'));
+            if (expected === '') {
+                resetTypedConfirm();
+                return;
+            }
+
+            const promptText = normalizeText(form?.getAttribute('data-confirm-typed-prompt'))
+                || 'เพื่อยืนยัน กรุณาพิมพ์ข้อความให้ตรงตามนี้:';
+
+            if (confirmTypedPromptEl) confirmTypedPromptEl.textContent = promptText;
+            if (confirmTypedExpectedEl) confirmTypedExpectedEl.textContent = expected;
+            if (confirmTypedInputEl) confirmTypedInputEl.value = '';
+            if (confirmTypedErrorEl) confirmTypedErrorEl.classList.add('hidden');
+            if (confirmTypedSection) confirmTypedSection.classList.remove('hidden');
+        };
 
         const markFormSubmitted = (form) => {
             if (!form) {
@@ -114,6 +156,7 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
 
         const showConfirmModal = (message) => {
             if (confirmMessageEl) confirmMessageEl.textContent = message;
+            configureTypedConfirm(pendingForm);
             if (confirmModal) {
                 confirmModal.classList.remove('hidden');
                 confirmModal.classList.add('flex');
@@ -122,6 +165,11 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
                     if (confirmCard) {
                         confirmCard.classList.remove('scale-95');
                         confirmCard.classList.add('scale-100');
+                    }
+
+                    const expected = normalizeText(pendingForm?.getAttribute('data-confirm-typed-expected'));
+                    if (expected !== '' && confirmTypedInputEl) {
+                        confirmTypedInputEl.focus();
                     }
                 });
             }
@@ -138,9 +186,16 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
                     confirmModal.classList.add('hidden');
                     confirmModal.classList.remove('flex');
                     pendingForm = null;
+                    resetTypedConfirm();
                 }, 200);
             }
         };
+
+        if (confirmTypedInputEl) {
+            confirmTypedInputEl.addEventListener('input', () => {
+                if (confirmTypedErrorEl) confirmTypedErrorEl.classList.add('hidden');
+            });
+        }
 
         if (btnConfirmCancel) {
             btnConfirmCancel.addEventListener('click', hideConfirmModal);
@@ -161,12 +216,17 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
 
                     const typedExpected = normalizeText(formToSubmit.getAttribute('data-confirm-typed-expected'));
                     if (typedExpected !== '') {
-                        const typedPrompt = normalizeText(formToSubmit.getAttribute('data-confirm-typed-prompt'))
-                            || 'เพื่อยืนยัน กรุณาพิมพ์ข้อความให้ตรงตามนี้:';
-
-                        const typed = normalizeText(window.prompt(`${typedPrompt}\n${typedExpected}`));
+                        const typed = normalizeText(confirmTypedInputEl ? confirmTypedInputEl.value : '');
                         if (typed !== typedExpected) {
-                            window.alert('ข้อความที่พิมพ์ไม่ตรงกัน ระบบยังไม่ดำเนินการ');
+                            if (confirmTypedErrorEl) {
+                                confirmTypedErrorEl.classList.remove('hidden');
+                            } else {
+                                window.alert('ข้อความที่พิมพ์ไม่ตรงกัน ระบบยังไม่ดำเนินการ');
+                            }
+
+                            if (confirmTypedInputEl) {
+                                confirmTypedInputEl.focus();
+                            }
                             return;
                         }
 

@@ -1,7 +1,7 @@
 # QA API Test Cases
 
-- Generated at: 2026-02-22T20:23:14+07:00
-- Base URL: `http://127.0.0.1/ad-profit`
+- Generated at: 2026-02-24T11:44:36+07:00
+- Base URL: `http://localhost/ad-profit`
 - Total Cases: 65
 - Flaky Criteria: first attempt fails, immediate retry (GET-only) passes
 
