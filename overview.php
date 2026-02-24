@@ -134,12 +134,12 @@ require __DIR__ . '/includes/header.php';
             <table class="min-w-full text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-slate-400">
-                        <th class="px-3 py-2">ร้าน</th>
-                        <th class="px-3 py-2">ยอดขาย</th>
-                        <th class="px-3 py-2">ค่าแอด</th>
-                        <th class="px-3 py-2">กำไร</th>
-                        <th class="px-3 py-2">ROAS</th>
-                        <th class="px-3 py-2">อัตรากำไร</th>
+                        <th class="px-3 py-1.5">ร้าน</th>
+                        <th class="px-3 py-1.5">ยอดขาย</th>
+                        <th class="px-3 py-1.5">ค่าแอด</th>
+                        <th class="px-3 py-1.5">กำไร</th>
+                        <th class="px-3 py-1.5">ROAS</th>
+                        <th class="px-3 py-1.5">อัตรากำไร</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -152,12 +152,12 @@ require __DIR__ . '/includes/header.php';
                         $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                         ?>
                         <tr class="border-b border-white/[0.06] table-row-hover">
-                            <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
-                            <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
-                            <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
-                            <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
-                            <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
-                            <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                            <td class="px-3 py-1.5 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
+                            <td class="px-3 py-1.5 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
+                            <td class="px-3 py-1.5 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
+                            <td class="px-3 py-1.5 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                            <td class="px-3 py-1.5 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
+                            <td class="px-3 py-1.5 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -170,12 +170,12 @@ require __DIR__ . '/includes/header.php';
                     $totalProfitMargin = isset($totals['profit_margin']) && $totals['profit_margin'] !== null ? (float)$totals['profit_margin'] : null;
                     ?>
                     <tr class="border-t border-white/10 bg-white/[0.03] font-semibold">
-                        <td class="px-3 py-3 text-slate-200">รวมทุกร้าน</td>
-                        <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
-                        <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
-                        <td class="px-3 py-3 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
-                        <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
-                        <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
+                        <td class="px-3 py-2 text-slate-200">รวมทุกร้าน</td>
+                        <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
+                        <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
+                        <td class="px-3 py-2 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
+                        <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
+                        <td class="px-3 py-2 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
                     </tr>
                 </tfoot>
             </table>

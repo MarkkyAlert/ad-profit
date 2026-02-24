@@ -262,33 +262,33 @@
 ## 14) Security Checklist (Cross‑cutting)
 
 ### 14.1 CSRF
-- [ ] ทุก action ที่เป็น POST (auth/shops/records/goals/profile) ต้องปฏิเสธเมื่อ CSRF หาย/ผิด
+- [x] ทุก action ที่เป็น POST (auth/shops/records/goals/profile) ต้องปฏิเสธเมื่อ CSRF หาย/ผิด
 
 ### 14.2 Method Guard
-- [ ] ยิง `GET` ไป action ที่ควรเป็น `POST` (เช่น login/register/upsert/delete) → ต้องไม่ทำงาน/ไม่เปลี่ยนข้อมูล
+- [x] ยิง `GET` ไป action ที่ควรเป็น `POST` (เช่น login/register/upsert/delete) → ต้องไม่ทำงาน/ไม่เปลี่ยนข้อมูล
 
 ### 14.2.1 Content-Type Guard
-- [ ] ยิง `POST` ด้วย Content-Type อื่น (เช่น `application/json`) ไป state-changing API (auth/shops/records/goals/profile) → ต้องได้ 415 Unsupported Media Type
+- [x] ยิง `POST` ด้วย Content-Type อื่น (เช่น `application/json`) ไป state-changing API (auth/shops/records/goals/profile) → ต้องได้ 415 Unsupported Media Type (หรือเข้าไม่ถึง POST action)
 
 ### 14.3 Authorization / IDOR
-- [ ] User B ต้องไม่สามารถแก้/ลบ record ของ User A ได้
-- [ ] User B ต้องไม่สามารถ switch ไป shop ของ User A ได้
+- [x] User B ต้องไม่สามารถแก้/ลบ record ของ User A ได้
+- [x] User B ต้องไม่สามารถ switch ไป shop ของ User A ได้
 
 ### 14.4 XSS
-- [ ] ใส่ `<script>alert(1)</script>` ในช่องที่เก็บได้ (เช่น note / shop name / display name) แล้วเปิดหน้าที่แสดงค่า → ต้องแสดงเป็น “ข้อความ” ไม่ execute
+- [x] ใส่ `<script>alert(1)</script>` ในช่องที่เก็บได้ (เช่น note / shop name / display name) แล้วเปิดหน้าที่แสดงค่า → ต้องแสดงเป็น “ข้อความ” ไม่ execute
 
 ### 14.5 SQLi / Input Abuse
-- [ ] ใส่ payload เช่น `' OR 1=1 --` ใน input หลัก (email, shop name, note) → ต้องไม่ 500 และไม่หลุดข้อมูล
+- [x] ใส่ payload เช่น `' OR 1=1 --` ใน input หลัก (email, shop name, note) → ต้องไม่ 500 และไม่หลุดข้อมูล
 
 ### 14.6 Open Redirect
-- [ ] แก้ hidden field `redirect_to` เป็น `https://evil.com` แล้ว submit (shops/goals/profile) → ต้องไม่ redirect ออกนอกโดเมน
+- [x] แก้ hidden field `redirect_to` เป็น `https://evil.com` แล้ว submit (shops/goals/profile) → ต้องไม่ redirect ออกนอกโดเมน
 
 ### 14.7 Session / Cookie
-- [ ] ตั้ง `APP_ENV=production` แล้วเข้าผ่าน HTTP (ไม่ใช่ HTTPS) → ต้องระวังอาการ login ไม่ติด (เป็น expected เพราะ cookie Secure)
-- [ ] ปล่อยหน้าเว็บทิ้งไว้จนหมด `SESSION_IDLE_TIMEOUT_SECONDS` (หรือทดลองแก้เวลาฝั่งเซิร์ฟเวอร์) → พอกด Refresh หรือเปลี่ยนหน้า ต้องโดนบังคับ Logout กลับไปหน้า `login.php` และเมื่อพยายามเข้า `dashboard.php` โดยตรงก็ต้องเข้าไม่ได้
+- [x] ตั้ง `APP_ENV=production` แล้วเข้าผ่าน HTTP (ไม่ใช่ HTTPS) → ต้องระวังอาการ login ไม่ติด (เป็น expected เพราะ cookie Secure)
+- [x] ปล่อยหน้าเว็บทิ้งไว้จนหมด `SESSION_IDLE_TIMEOUT_SECONDS` (หรือทดลองแก้เวลาฝั่งเซิร์ฟเวอร์) → พอกด Refresh หรือเปลี่ยนหน้า ต้องโดนบังคับ Logout กลับไปหน้า `login.php` และเมื่อพยายามเข้า `dashboard.php` โดยตรงก็ต้องเข้าไม่ได้
 
 ### 14.8 Security Headers
-- [ ] ตรวจ response headers (ใช้ DevTools > Network) ต้องมี:
+- [x] ตรวจ response headers (ใช้ DevTools > Network) ต้องมี:
   - `X-Frame-Options: DENY`
   - `Content-Security-Policy: frame-ancestors 'none'`
   - `X-Content-Type-Options: nosniff`
@@ -299,16 +299,16 @@
 
 ## 15) Data Integrity Checklist (Cross‑cutting)
 
-- [ ] 1 ร้าน + 1 วัน ต้องมี record ได้ไม่เกิน 1 แถว (upsert ต้องทับ)
-- [ ] ห้ามมีตัวเลขติดลบใน revenue/ad_cost
-- [ ] ลบร้าน (ที่ไม่ใช่ร้านสุดท้าย) แล้วข้อมูลของร้านนั้นต้องไม่กลับมา (FK cascade ทำงาน)
-- [ ] export/overview/annual ไม่ควรทำให้ข้อมูลใน DB เปลี่ยน (read-only)
+- [x] 1 ร้าน + 1 วัน ต้องมี record ได้ไม่เกิน 1 แถว (upsert ต้องทับ)
+- [x] ห้ามมีตัวเลขติดลบใน revenue/ad_cost
+- [x] ลบร้าน (ที่ไม่ใช่ร้านสุดท้าย) แล้วข้อมูลของร้านนั้นต้องไม่กลับมา (FK cascade ทำงาน)
+- [x] export/overview/annual ไม่ควรทำให้ข้อมูลใน DB เปลี่ยน (read-only)
 
 ---
 
 ## 16) UI / UX & Responsiveness (Cross‑cutting)
 
-- [ ] ใช้เบราว์เซอร์โหมดมือถือ (Mobile View) เข้าหน้า `/history.php` และ `/overview.php` → ตารางข้อมูลต้องสามารถเลื่อนซ้ายขวาได้ (Overflow-X) โดยที่ไม่ทำให้เลย์เอาต์หลักของหน้าเว็บหรือ Header/Footer ตกขอบหรือผิดเพี้ยน
+- [x] ใช้เบราว์เซอร์โหมดมือถือ (Mobile View) เข้าหน้า `/history.php` และ `/overview.php` → ตารางข้อมูลต้องสามารถเลื่อนซ้ายขวาได้ (Overflow-X) โดยที่ไม่ทำให้เลย์เอาต์หลักของหน้าเว็บหรือ Header/Footer ตกขอบหรือผิดเพี้ยน
 
 ---
 
