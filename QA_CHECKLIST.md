@@ -230,14 +230,14 @@
 ## 12) Flow: Export CSV
 
 ### 12.1 Happy Path
-- [ ] ไป `/history.php` → กด “Export CSV” → ได้ไฟล์ `.csv`
-- [ ] เปิดไฟล์ใน Excel/Google Sheets → ภาษาไทยไม่เพี้ยน (มี UTF‑8 BOM)
+- [x] ไป `/history.php` → กด “Export CSV” → ได้ไฟล์ `.csv`
+- [x] เปิดไฟล์ใน Excel/Google Sheets → ภาษาไทยไม่เพี้ยน (มี UTF‑8 BOM)
 
 ### 12.2 Security / Data Integrity
-- [ ] ใส่ note ที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` หรือ tab แล้ว export → cell ต้องถูกป้องกันสูตร (ไม่กลายเป็นสูตรใน Excel)
+- [x] ใส่ note ที่ขึ้นต้นด้วย `=`, `+`, `-`, `@` หรือ tab แล้ว export → cell ต้องถูกป้องกันสูตร (ไม่กลายเป็นสูตรใน Excel)
 
 ### 12.3 Edge
-- [ ] ใส่ `month` ผิด format → ต้อง fallback ไม่ 500
+- [x] ใส่ `month` ผิด format → ต้อง fallback ไม่ 500
 
 ---
 
