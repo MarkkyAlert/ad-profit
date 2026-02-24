@@ -37,7 +37,22 @@ class RecordService
 
         $payload = $validation['data'];
 
+        $startedTransaction = false;
+        $canLockRows = false;
         try {
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
+
+                $canLockRows = $this->db->inTransaction();
+                if ($canLockRows) {
+                    // Serialize concurrent upserts/updates for the same shop+date.
+                    $this->recordRepository->findByShopIdAndRecordDateForUpdate($shopId, (string)$payload['record_date']);
+                }
+            }
+
             $this->recordRepository->upsert(
                 $shopId,
                 (string)$payload['record_date'],
@@ -45,7 +60,15 @@ class RecordService
                 (float)$payload['ad_cost'],
                 $payload['note']
             );
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[record] upsertRecord failed: ' . $exception->getMessage());
             return [
                 'success' => false,
@@ -89,12 +112,18 @@ class RecordService
 
         $payload = $validation['data'];
 
+        $startedTransaction = false;
         try {
-            $this->beginTransactionIfAvailable();
+            if ($this->db instanceof PDO && !$this->db->inTransaction()) {
+                $this->db->beginTransaction();
+                $startedTransaction = true;
+            }
 
             $existingRecord = $this->recordRepository->findByIdAndShopIdForUpdate($recordId, $shopId);
             if ($existingRecord === null) {
-                $this->rollBackTransactionIfAvailable();
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
 
                 return [
                     'success' => false,
@@ -108,7 +137,9 @@ class RecordService
             if ($oldDate !== $newDate) {
                 $conflictRecord = $this->recordRepository->findByShopIdAndRecordDateForUpdate($shopId, $newDate);
                 if ($conflictRecord !== null && (int)($conflictRecord['id'] ?? 0) !== $recordId) {
-                    $this->rollBackTransactionIfAvailable();
+                    if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                        $this->db->rollBack();
+                    }
 
                     return [
                         'success' => false,
@@ -126,9 +157,13 @@ class RecordService
                 $payload['note']
             );
 
-            $this->commitTransactionIfAvailable();
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (PDOException $exception) {
-            $this->rollBackTransactionIfAvailable();
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
 
             if ((string)$exception->getCode() === '23000') {
                 return [
@@ -144,7 +179,9 @@ class RecordService
                 'error' => 'ไม่สามารถแก้ไขรายการได้',
             ];
         } catch (Throwable $exception) {
-            $this->rollBackTransactionIfAvailable();
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             error_log('[record] updateRecord failed: ' . $exception->getMessage());
 
             return [
@@ -270,28 +307,58 @@ class RecordService
             ];
         }
 
-        $existingRecord = $this->recordRepository->findByIdAndShopId($recordId, $shopId);
-        if ($existingRecord === null) {
-            return [
-                'success' => false,
-                'error' => 'ไม่พบรายการที่ต้องการลบ',
-            ];
-        }
+        $startedTransaction = false;
+        $canLockRows = false;
 
         try {
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
+
+                $canLockRows = $this->db->inTransaction();
+            }
+
+            $existingRecord = $canLockRows
+                ? $this->recordRepository->findByIdAndShopIdForUpdate($recordId, $shopId)
+                : $this->recordRepository->findByIdAndShopId($recordId, $shopId);
+
+            if ($existingRecord === null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่พบรายการที่ต้องการลบ',
+                ];
+            }
+
             $deleted = $this->recordRepository->deleteByIdAndShopId($recordId, $shopId);
+            if (!$deleted) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่พบรายการที่ต้องการลบ',
+                ];
+            }
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[record] deleteRecord failed: ' . $exception->getMessage());
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถลบรายการได้',
-            ];
-        }
-
-        if (!$deleted) {
-            return [
-                'success' => false,
-                'error' => 'ไม่พบรายการที่ต้องการลบ',
             ];
         }
 

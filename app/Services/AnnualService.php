@@ -31,7 +31,16 @@ class AnnualService
 
         $startMonth = sprintf('%04d-01', $year);
         $endMonth = sprintf('%04d-12', $year);
-        $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $startMonth, $endMonth);
+
+        try {
+            $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $startMonth, $endMonth);
+        } catch (Throwable $exception) {
+            error_log('[annual] buildYearlySummary failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลรายปีได้',
+            ];
+        }
 
         $totalsByMonthKey = [];
         foreach ($monthlyTotals as $row) {

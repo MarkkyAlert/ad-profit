@@ -7,13 +7,14 @@ require_once __DIR__ . '/../includes/auth.php';
 
 requireAuth();
 
-$action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
+// Hardening: state-changing actions must come from POST only.
+$action = (string)($_POST['action'] ?? '');
 $wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $userRepository = new UserRepository($pdo);
-$profileService = new ProfileService($userRepository);
+$profileService = new ProfileService($userRepository, $pdo);
 
 $redirectPath = resolve_safe_redirect_path(
     '/profile.php',
@@ -91,6 +92,7 @@ $clearProfileRateLimit = static function (string $action, int $userId, string $c
 
 if ($action === 'update_profile') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $result = $profileService->updateProfile($userId, (string)($_POST['display_name'] ?? ''));
@@ -115,6 +117,7 @@ if ($action === 'update_profile') {
 
 if ($action === 'change_email') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $rateLimitAction = 'change_email';
@@ -158,6 +161,7 @@ if ($action === 'change_email') {
 
 if ($action === 'change_password') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $rateLimitAction = 'change_password';

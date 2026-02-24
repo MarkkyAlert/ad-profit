@@ -22,7 +22,16 @@ class OverviewService
             ];
         }
 
-        $shops = $this->shopRepository->listByUserId($userId);
+        try {
+            $shops = $this->shopRepository->listByUserId($userId);
+        } catch (Throwable $exception) {
+            error_log('[overview] buildOverview shop list failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดรายการร้านค้าได้',
+            ];
+        }
+
         $monthDate = DateTimeImmutable::createFromFormat('Y-m-d', $selectedMonth . '-01');
 
         if (!$monthDate) {
@@ -35,10 +44,18 @@ class OverviewService
         $startDate = $monthDate->format('Y-m-01');
         $endDate = $monthDate->format('Y-m-t');
 
-        $comparisonRows = $this->buildShopComparison($shops, $startDate, $endDate);
-        $totals = $this->buildTotals($comparisonRows);
-        $barChart = $this->buildBarChart($comparisonRows);
-        $sixMonthTrend = $this->buildSixMonthTrend($shops, $selectedMonth);
+        try {
+            $comparisonRows = $this->buildShopComparison($shops, $startDate, $endDate);
+            $totals = $this->buildTotals($comparisonRows);
+            $barChart = $this->buildBarChart($comparisonRows);
+            $sixMonthTrend = $this->buildSixMonthTrend($shops, $selectedMonth);
+        } catch (Throwable $exception) {
+            error_log('[overview] buildOverview failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลภาพรวมได้',
+            ];
+        }
 
         return [
             'success' => true,

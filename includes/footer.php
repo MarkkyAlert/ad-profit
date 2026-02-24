@@ -93,6 +93,25 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
 
         const normalizeText = (value) => (value || '').toString().trim();
 
+        const markFormSubmitted = (form) => {
+            if (!form) {
+                return false;
+            }
+
+            if (normalizeText(form.getAttribute('data-submitted')) === '1') {
+                return false;
+            }
+
+            form.setAttribute('data-submitted', '1');
+
+            form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach((button) => {
+                button.disabled = true;
+                button.classList.add('opacity-70', 'cursor-not-allowed');
+            });
+
+            return true;
+        };
+
         const showConfirmModal = (message) => {
             if (confirmMessageEl) confirmMessageEl.textContent = message;
             if (confirmModal) {
@@ -161,6 +180,11 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
                         }
                     }
 
+                    if (!markFormSubmitted(formToSubmit)) {
+                        hideConfirmModal();
+                        return;
+                    }
+
                     hideConfirmModal();
                     if (!formToSubmit.hasAttribute('data-no-loading')) {
                         showLoading();
@@ -176,13 +200,26 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
                     return;
                 }
 
-                const confirmMessage = form.getAttribute('data-confirm');
-                if (confirmMessage && pendingForm !== form) {
+                if (normalizeText(form.getAttribute('data-submitted')) === '1') {
                     event.preventDefault();
+                    return;
+                }
+
+                const confirmMessage = form.getAttribute('data-confirm');
+                if (confirmMessage) {
+                    // Ensure the form cannot be submitted while the confirm modal is open
+                    // (avoid double-click bypass).
+                    event.preventDefault();
+                    if (pendingForm === form) {
+                        return;
+                    }
+
                     pendingForm = form;
                     showConfirmModal(confirmMessage);
                     return;
                 }
+
+                markFormSubmitted(form);
 
                 if (form.hasAttribute('data-no-loading')) {
                     return;

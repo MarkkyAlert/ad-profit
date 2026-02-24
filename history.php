@@ -134,7 +134,7 @@ require __DIR__ . '/includes/header.php';
                                         ✏️ แก้ไข
                                     </button>
 
-                                    <form action="<?= e(app_url('/api/records.php')) ?>" method="post" data-delete-form data-confirm="ยืนยันการลบรายการนี้ใช่หรือไม่?">
+                                    <form action="<?= e(app_url('/api/records.php')) ?>" method="post" data-delete-form data-confirm="ยืนยันการลบรายการวันที่ <?= e(formatThaiDate($recordDate)) ?> ใช่หรือไม่?">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">

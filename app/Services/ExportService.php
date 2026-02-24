@@ -22,7 +22,16 @@ class ExportService
             ];
         }
 
-        $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
+        try {
+            $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
+        } catch (Throwable $exception) {
+            error_log('[export] buildMonthlyCsvPayload shop lookup failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลร้านค้าได้',
+            ];
+        }
+
         if ($shop === null) {
             return [
                 'success' => false,
@@ -30,7 +39,16 @@ class ExportService
             ];
         }
 
-        $monthlyResult = $this->recordService->getMonthlyRecords($userId, $shopId, $month);
+        try {
+            $monthlyResult = $this->recordService->getMonthlyRecords($userId, $shopId, $month);
+        } catch (Throwable $exception) {
+            error_log('[export] buildMonthlyCsvPayload getMonthlyRecords failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลที่ต้องการ export ได้',
+            ];
+        }
+
         if (($monthlyResult['success'] ?? false) !== true) {
             return [
                 'success' => false,

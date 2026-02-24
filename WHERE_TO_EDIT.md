@@ -235,7 +235,10 @@ ALTER TABLE users ADD COLUMN phone VARCHAR(20) NULL;
 ### 6.3 Transaction / Lock
 **ไฟล์:**
 - `app/Services/AuthService.php` (register, reset password)
-- `app/Services/RecordService.php` (update record)
+- `app/Services/RecordService.php` (upsert, update, delete record — ใช้ TX + FOR UPDATE lock)
+- `app/Services/ShopService.php` (rename, delete — ใช้ TX + FOR UPDATE lock)
+- `app/Services/ProfileService.php` (changeEmail, changePassword — ใช้ TX + FOR UPDATE lock)
+- `app/Services/GoalService.php` (upsert, delete goal — ใช้ TX)
 
 **เสี่ยงอะไร:**
 - แก้ผิดอาจทำให้ข้อมูลชนกัน

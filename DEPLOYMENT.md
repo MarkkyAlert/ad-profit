@@ -153,6 +153,14 @@ MAIL_FROM_NAME="Ad Profit"
 - [ ] เปิดใช้ HTTPS จริง (ถ้าเข้า HTTP จะมีอาการเหมือน session หาย/login ไม่ติด)
 - [ ] ตั้ง `APP_URL=https://...` ให้ถูกต้อง
 
+### 4.2.1 Security Headers ที่ตั้งมาแล้ว
+ระบบตั้ง HTTP response headers ไว้ใน `includes/bootstrap.php`:
+- `X-Frame-Options: DENY` (กัน clickjacking)
+- `Content-Security-Policy: frame-ancestors 'none'` (กัน embedding)
+- `X-Content-Type-Options: nosniff` (กัน MIME sniffing)
+- `Referrer-Policy: same-origin` (ลดการรั่วไหลของ referer)
+- `Permissions-Policy: geolocation=(), microphone=(), camera=()` (ปิด API ที่ไม่ใช้)
+
 ### 4.3 `.htaccess` / กฎบล็อกไฟล์สำคัญ
 - โปรเจกต์นี้ **ไม่พบ** `.htaccess` ใน repo
 - ถ้าคุณใช้ Apache/Shared Hosting ที่รองรับ `.htaccess`:

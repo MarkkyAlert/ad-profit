@@ -42,18 +42,27 @@ class DashboardService
         }
 
         $rangeData = (array)$range['data'];
-        $records = $this->recordRepository->getByDateRange(
-            $shopId,
-            (string)$rangeData['start_date'],
-            (string)$rangeData['end_date']
-        );
 
-        $summary = $this->buildSummaryFromRecords($records);
-        $dailyChart = $this->buildDailyChart($records);
-        $sixMonthChart = $this->buildSixMonthChart($shopId, (string)$rangeData['end_date']);
-        $comparison = $this->buildMonthlyComparison($shopId, $rangeData);
-        $goalMonth = $this->resolveGoalMonth($rangeData);
-        $goalProgress = $this->buildGoalProgress($shopId, $goalMonth);
+        try {
+            $records = $this->recordRepository->getByDateRange(
+                $shopId,
+                (string)$rangeData['start_date'],
+                (string)$rangeData['end_date']
+            );
+
+            $summary = $this->buildSummaryFromRecords($records);
+            $dailyChart = $this->buildDailyChart($records);
+            $sixMonthChart = $this->buildSixMonthChart($shopId, (string)$rangeData['end_date']);
+            $comparison = $this->buildMonthlyComparison($shopId, $rangeData);
+            $goalMonth = $this->resolveGoalMonth($rangeData);
+            $goalProgress = $this->buildGoalProgress($shopId, $goalMonth);
+        } catch (Throwable $exception) {
+            error_log('[dashboard] buildDashboard failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้',
+            ];
+        }
 
         return [
             'success' => true,

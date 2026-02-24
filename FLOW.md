@@ -266,16 +266,24 @@ Database (MySQL/MariaDB)
 - **สมัครสมาชิก (register)**
   - ใช้ transaction เพื่อสร้าง `users` + `shops` ให้สำเร็จพร้อมกัน
 - **รีเซ็ตรหัสผ่าน (reset password)**
-  - ใช้ transaction เพื่อ:
-    - lock โทเคน
-    - เปลี่ยนรหัสผ่าน
-    - ลบโทเคน
+  - ใช้ transaction เพื่อ: lock โทเคน + เปลี่ยนรหัสผ่าน + ลบโทเคน
+- **บันทึก/แก้ไข/ลบรายการรายวัน**
+  - `RecordService` ใช้ TX + `FOR UPDATE` lock แถว
+- **เปลี่ยนชื่อร้าน/ลบร้าน**
+  - `ShopService` ใช้ TX + `FOR UPDATE` lock แถว
+- **เปลี่ยนอีเมล/รหัสผ่าน**
+  - `ProfileService` ใช้ TX + `FOR UPDATE` lock user row
+- **บันทึก/ลบเป้าหมาย**
+  - `GoalService` ใช้ TX เพื่อกันข้อมูลชนกัน
 
 ### 6.2 จุดที่มี lock / race condition
-- **แก้ไขรายการรายวัน (update record)**
-  - `RecordService->updateRecord()` ใช้ `SELECT ... FOR UPDATE` เพื่อกันชนกัน
-  - เคสที่กันไว้: เปลี่ยน "วันที่" แล้วไปชนกับรายการของวันนั้นที่มีอยู่แล้ว
-
+- **บันทึก/แก้ไข/ลบรายการรายวัน**
+  - `RecordService` ใช้ `SELECT ... FOR UPDATE` เพื่อกันชนกัน
+  - เคสที่กันไว้: upsert/update/delete พร้อมกัน, เปลี่ยน "วันที่" แล้วไปชนกับรายการที่มีอยู่แล้ว
+- **เปลี่ยนชื่อร้าน/ลบร้าน**
+  - `ShopService` ใช้ `FOR UPDATE` lock user+shop row
+- **เปลี่ยนอีเมล/รหัสผ่าน**
+  - `ProfileService` ใช้ `FOR UPDATE` lock user row
 - **รีเซ็ตรหัสผ่าน**
   - `PasswordResetRepository->findByTokenHashForUpdate()` ใช้ `FOR UPDATE`
   - กันเคส: token เดียวกันถูกใช้ซ้ำ/ชนกันพร้อม ๆ กัน

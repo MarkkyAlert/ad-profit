@@ -6,11 +6,13 @@ class GoalService
 {
     private GoalRepository $goalRepository;
     private ShopRepository $shopRepository;
+    private ?PDO $db;
 
-    public function __construct(GoalRepository $goalRepository, ShopRepository $shopRepository)
+    public function __construct(GoalRepository $goalRepository, ShopRepository $shopRepository, ?PDO $db = null)
     {
         $this->goalRepository = $goalRepository;
         $this->shopRepository = $shopRepository;
+        $this->db = $db;
     }
 
     public function upsertGoal(
@@ -56,9 +58,23 @@ class GoalService
             ];
         }
 
+        $startedTransaction = false;
         try {
+            if ($this->db instanceof PDO && !$this->db->inTransaction()) {
+                $this->db->beginTransaction();
+                $startedTransaction = true;
+            }
+
             $this->goalRepository->upsert($shopId, $goalMonth, $targetRevenue, $targetProfit);
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[goal] upsertGoal failed: ' . $exception->getMessage());
             return [
                 'success' => false,
@@ -88,20 +104,38 @@ class GoalService
             ];
         }
 
+        $startedTransaction = false;
         try {
+            if ($this->db instanceof PDO && !$this->db->inTransaction()) {
+                $this->db->beginTransaction();
+                $startedTransaction = true;
+            }
+
             $deleted = $this->goalRepository->deleteByShopAndMonth($shopId, $goalMonth);
+
+            if (!$deleted) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่พบเป้าหมายที่ต้องการลบ',
+                ];
+            }
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[goal] deleteGoal failed: ' . $exception->getMessage());
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถลบเป้าหมายได้',
-            ];
-        }
-
-        if (!$deleted) {
-            return [
-                'success' => false,
-                'error' => 'ไม่พบเป้าหมายที่ต้องการลบ',
             ];
         }
 

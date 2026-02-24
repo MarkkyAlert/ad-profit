@@ -262,6 +262,9 @@
 ### 14.2 Method Guard
 - [ ] ยิง `GET` ไป action ที่ควรเป็น `POST` (เช่น login/register/upsert/delete) → ต้องไม่ทำงาน/ไม่เปลี่ยนข้อมูล
 
+### 14.2.1 Content-Type Guard
+- [ ] ยิง `POST` ด้วย Content-Type อื่น (เช่น `application/json`) ไป state-changing API (auth/shops/records/goals/profile) → ต้องได้ 415 Unsupported Media Type
+
 ### 14.3 Authorization / IDOR
 - [ ] User B ต้องไม่สามารถแก้/ลบ record ของ User A ได้
 - [ ] User B ต้องไม่สามารถ switch ไป shop ของ User A ได้
@@ -277,6 +280,14 @@
 
 ### 14.7 Session / Cookie
 - [ ] ตั้ง `APP_ENV=production` แล้วเข้าผ่าน HTTP (ไม่ใช่ HTTPS) → ต้องระวังอาการ login ไม่ติด (เป็น expected เพราะ cookie Secure)
+
+### 14.8 Security Headers
+- [ ] ตรวจ response headers (ใช้ DevTools > Network) ต้องมี:
+  - `X-Frame-Options: DENY`
+  - `Content-Security-Policy: frame-ancestors 'none'`
+  - `X-Content-Type-Options: nosniff`
+  - `Referrer-Policy: same-origin`
+  - `Permissions-Policy: geolocation=(), microphone=(), camera=()`
 
 ---
 

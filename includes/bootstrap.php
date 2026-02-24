@@ -17,6 +17,8 @@ $cookieSecure = APP_ENV === 'production' ? true : $httpsEnabled;
 header('X-Frame-Options: DENY');
 header("Content-Security-Policy: frame-ancestors 'none'");
 header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: same-origin');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start([

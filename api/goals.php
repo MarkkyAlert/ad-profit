@@ -7,7 +7,8 @@ require_once __DIR__ . '/../includes/auth.php';
 
 requireAuth();
 
-$action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
+// Hardening: state-changing actions must come from POST only.
+$action = (string)($_POST['action'] ?? '');
 $wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
@@ -15,7 +16,7 @@ $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
 $goalRepository = new GoalRepository($pdo);
 $shopRepository = new ShopRepository($pdo);
-$goalService = new GoalService($goalRepository, $shopRepository);
+$goalService = new GoalService($goalRepository, $shopRepository, $pdo);
 
 $respond = static function (array $payload, int $statusCode, string $redirectUrl) use ($wantsJson): never {
     api_respond($payload, $statusCode, $redirectUrl, $wantsJson);
@@ -29,6 +30,7 @@ $redirectPath = resolve_safe_redirect_path(
 
 if ($action === 'upsert') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $goalMonth = normalize_month_input(isset($_POST['goal_month']) ? (string)$_POST['goal_month'] : null);
@@ -65,6 +67,7 @@ if ($action === 'upsert') {
 
 if ($action === 'delete') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $goalMonth = normalize_month_input(isset($_POST['goal_month']) ? (string)$_POST['goal_month'] : null);

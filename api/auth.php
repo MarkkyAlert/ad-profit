@@ -5,7 +5,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/auth.php';
 
-$action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
+// Hardening: state-changing actions must come from POST only.
+$action = (string)($_POST['action'] ?? '');
 $wantsJson = wants_json_response();
 
 $userRepository = new UserRepository($pdo);
@@ -20,6 +21,7 @@ $respond = static function (array $payload, int $statusCode, string $redirectUrl
 
 if ($action === 'register') {
     ensure_post_request_or_respond($wantsJson, '/login.php?tab=register');
+    ensure_form_content_type_or_respond($wantsJson, '/login.php?tab=register');
     ensure_valid_csrf_or_respond($wantsJson, '/login.php?tab=register', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->register(
@@ -48,6 +50,7 @@ if ($action === 'register') {
 
 if ($action === 'login') {
     ensure_post_request_or_respond($wantsJson, '/login.php?tab=login');
+    ensure_form_content_type_or_respond($wantsJson, '/login.php?tab=login');
     ensure_valid_csrf_or_respond($wantsJson, '/login.php?tab=login', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->login(
@@ -75,6 +78,7 @@ if ($action === 'login') {
 
 if ($action === 'logout') {
     ensure_post_request_or_respond($wantsJson, '/dashboard.php');
+    ensure_form_content_type_or_respond($wantsJson, '/dashboard.php');
 
     if (!isset($_SESSION['user_id']) || (int)$_SESSION['user_id'] <= 0) {
         $respond([
@@ -95,6 +99,7 @@ if ($action === 'logout') {
 
 if ($action === 'forgot_password') {
     ensure_post_request_or_respond($wantsJson, '/forgot-password.php');
+    ensure_form_content_type_or_respond($wantsJson, '/forgot-password.php');
     ensure_valid_csrf_or_respond($wantsJson, '/forgot-password.php', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->requestPasswordReset(
@@ -125,6 +130,7 @@ if ($action === 'forgot_password') {
 
 if ($action === 'reset_password') {
     ensure_post_request_or_respond($wantsJson, '/reset-password.php');
+    ensure_form_content_type_or_respond($wantsJson, '/reset-password.php');
     ensure_valid_csrf_or_respond($wantsJson, '/reset-password.php', (string)($_POST['csrf_token'] ?? ''));
 
     $resetToken = trim((string)($_POST['token'] ?? ($_SESSION['password_reset_token'] ?? '')));

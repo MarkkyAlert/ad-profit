@@ -134,51 +134,107 @@ class ShopService
             ];
         }
 
-        $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
-        if ($shop === null) {
-            return [
-                'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์แก้ไขร้านค้านี้',
-            ];
-        }
+        $startedTransaction = false;
+        $canLockRows = false;
+        try {
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
 
-        $existingName = trim((string)($shop['name'] ?? ''));
-        if ($existingName === $shopName) {
+                $canLockRows = $this->db->inTransaction();
+                if ($canLockRows) {
+                    // Prevent race conditions: rename-shop must be serialized per user/shop.
+                    $this->lockUserRowForUpdate($userId);
+                    $this->lockShopRowForUpdate($shopId, $userId);
+                }
+            }
+
+            $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
+            if ($shop === null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'คุณไม่มีสิทธิ์แก้ไขร้านค้านี้',
+                ];
+            }
+
+            $existingName = trim((string)($shop['name'] ?? ''));
+            if ($existingName === $shopName) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+
+                return [
+                    'success' => true,
+                    'shop' => $shop,
+                ];
+            }
+
+            $updated = $this->shopRepository->updateNameByIdAndUserId($shopId, $userId, $shopName);
+            if (!$updated) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถอัปเดตชื่อร้านค้าได้',
+                ];
+            }
+
+            $updatedShop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
+            if ($updatedShop === null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่พบร้านค้าที่อัปเดตแล้ว',
+                ];
+            }
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
+
             return [
                 'success' => true,
-                'shop' => $shop,
+                'shop' => $updatedShop,
             ];
-        }
+        } catch (PDOException $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
 
-        try {
-            $updated = $this->shopRepository->updateNameByIdAndUserId($shopId, $userId, $shopName);
+            if ((string)$exception->getCode() === '23000') {
+                return [
+                    'success' => false,
+                    'error' => 'ชื่อร้านนี้มีอยู่แล้ว กรุณาใช้ชื่ออื่น',
+                ];
+            }
+
+            error_log('[shop] renameShop failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถอัปเดตชื่อร้านค้าได้',
+            ];
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[shop] renameShop failed: ' . $exception->getMessage());
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถอัปเดตชื่อร้านค้าได้',
             ];
         }
-
-        if (!$updated) {
-            return [
-                'success' => false,
-                'error' => 'ไม่สามารถอัปเดตชื่อร้านค้าได้',
-            ];
-        }
-
-        $updatedShop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
-        if ($updatedShop === null) {
-            return [
-                'success' => false,
-                'error' => 'ไม่พบร้านค้าที่อัปเดตแล้ว',
-            ];
-        }
-
-        return [
-            'success' => true,
-            'shop' => $updatedShop,
-        ];
     }
 
     public function switchShop(int $userId, int $shopId): array
@@ -304,5 +360,18 @@ class ShopService
 
         $stmt = $this->db->prepare('SELECT id FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
         $stmt->execute([':id' => $userId]);
+    }
+
+    private function lockShopRowForUpdate(int $shopId, int $userId): void
+    {
+        if (!$this->db instanceof PDO || $shopId <= 0 || $userId <= 0) {
+            return;
+        }
+
+        $stmt = $this->db->prepare('SELECT id FROM shops WHERE id = :id AND user_id = :user_id LIMIT 1 FOR UPDATE');
+        $stmt->execute([
+            ':id' => $shopId,
+            ':user_id' => $userId,
+        ]);
     }
 }

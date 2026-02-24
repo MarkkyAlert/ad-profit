@@ -7,7 +7,8 @@ require_once __DIR__ . '/../includes/auth.php';
 
 requireAuth();
 
-$action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
+// Hardening: state-changing actions must come from POST only.
+$action = (string)($_POST['action'] ?? '');
 $wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
@@ -23,6 +24,7 @@ $respond = static function (array $payload, int $statusCode, string $redirectUrl
 
 if ($action === 'upsert') {
     ensure_post_request_or_respond($wantsJson, '/add-record.php');
+    ensure_form_content_type_or_respond($wantsJson, '/add-record.php');
     ensure_valid_csrf_or_respond($wantsJson, '/add-record.php', (string)($_POST['csrf_token'] ?? ''));
 
     $recordDate = (string)($_POST['record_date'] ?? '');
@@ -61,6 +63,7 @@ if ($action === 'upsert') {
 if ($action === 'update') {
     $month = normalize_month_input(isset($_POST['month']) ? (string)$_POST['month'] : null);
     ensure_post_request_or_respond($wantsJson, '/history.php');
+    ensure_form_content_type_or_respond($wantsJson, '/history.php?month=' . $month);
     ensure_valid_csrf_or_respond($wantsJson, '/history.php?month=' . $month, (string)($_POST['csrf_token'] ?? ''));
 
     $recordId = (int)($_POST['record_id'] ?? 0);
@@ -100,6 +103,7 @@ if ($action === 'update') {
 if ($action === 'delete') {
     $month = normalize_month_input(isset($_POST['month']) ? (string)$_POST['month'] : null);
     ensure_post_request_or_respond($wantsJson, '/history.php');
+    ensure_form_content_type_or_respond($wantsJson, '/history.php?month=' . $month);
     ensure_valid_csrf_or_respond($wantsJson, '/history.php?month=' . $month, (string)($_POST['csrf_token'] ?? ''));
 
     $recordId = (int)($_POST['record_id'] ?? 0);

@@ -5,10 +5,12 @@ declare(strict_types=1);
 class ProfileService
 {
     private UserRepository $userRepository;
+    private ?PDO $db;
 
-    public function __construct(UserRepository $userRepository)
+    public function __construct(UserRepository $userRepository, ?PDO $db = null)
     {
         $this->userRepository = $userRepository;
+        $this->db = $db;
     }
 
     public function getProfile(int $userId): array
@@ -137,46 +139,100 @@ class ProfileService
             ];
         }
 
-        $user = $this->userRepository->findById($userId);
-        if ($user === null) {
-            return [
-                'success' => false,
-                'error' => 'ไม่พบผู้ใช้งาน',
-            ];
-        }
+        $startedTransaction = false;
+        try {
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
 
-        $passwordHash = (string)($user['password_hash'] ?? '');
-        if (!password_verify($currentPassword, $passwordHash)) {
-            return [
-                'success' => false,
-                'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
-            ];
-        }
+                if ($this->db->inTransaction()) {
+                    // Ensure email/password verification & update are consistent for this user.
+                    $this->lockUserRowForUpdate($userId);
+                }
+            }
 
-        $currentEmail = $this->normalizeEmail((string)($user['email'] ?? ''));
-        if ($currentEmail === $normalizedEmail) {
+            $user = $this->userRepository->findById($userId);
+            if ($user === null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่พบผู้ใช้งาน',
+                ];
+            }
+
+            $passwordHash = (string)($user['password_hash'] ?? '');
+            if (!password_verify($currentPassword, $passwordHash)) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
+                ];
+            }
+
+            $currentEmail = $this->normalizeEmail((string)($user['email'] ?? ''));
+            if ($currentEmail === $normalizedEmail) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'email' => $currentEmail,
+                    ],
+                ];
+            }
+
+            $existingUser = $this->userRepository->findByEmail($normalizedEmail);
+            if ($existingUser !== null && (int)$existingUser['id'] !== $userId) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
+                ];
+            }
+
+            $updated = $this->userRepository->updateEmail($userId, $normalizedEmail);
+            if (!$updated) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
+                ];
+            }
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
+
             return [
                 'success' => true,
                 'data' => [
-                    'email' => $currentEmail,
+                    'email' => $normalizedEmail,
                 ],
             ];
-        }
+        } catch (PDOException $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
 
-        $existingUser = $this->userRepository->findByEmail($normalizedEmail);
-        if ($existingUser !== null && (int)$existingUser['id'] !== $userId) {
-            return [
-                'success' => false,
-                'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
-            ];
-        }
-
-        try {
-            $updated = $this->userRepository->updateEmail($userId, $normalizedEmail);
-        } catch (Throwable $exception) {
             error_log('[profile] changeEmail failed: ' . $exception->getMessage());
 
-            $isDuplicateUser = $exception instanceof PDOException && $exception->getCode() === '23000';
+            $isDuplicateUser = (string)$exception->getCode() === '23000';
             if ($isDuplicateUser) {
                 return [
                     'success' => false,
@@ -188,21 +244,17 @@ class ProfileService
                 'success' => false,
                 'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
             ];
-        }
+        } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
 
-        if (!$updated) {
+            error_log('[profile] changeEmail failed: ' . $exception->getMessage());
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
             ];
         }
-
-        return [
-            'success' => true,
-            'data' => [
-                'email' => $normalizedEmail,
-            ],
-        ];
     }
 
     public function changePassword(
@@ -246,22 +298,6 @@ class ProfileService
             ];
         }
 
-        $user = $this->userRepository->findById($userId);
-        if ($user === null) {
-            return [
-                'success' => false,
-                'error' => 'ไม่พบผู้ใช้งาน',
-            ];
-        }
-
-        $passwordHash = (string)($user['password_hash'] ?? '');
-        if (!password_verify($currentPassword, $passwordHash)) {
-            return [
-                'success' => false,
-                'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
-            ];
-        }
-
         $newPasswordHash = password_hash($newPassword, PASSWORD_DEFAULT);
         if (!is_string($newPasswordHash) || $newPasswordHash === '') {
             error_log('[profile] Unable to create password hash for changePassword');
@@ -271,32 +307,86 @@ class ProfileService
             ];
         }
 
+        $startedTransaction = false;
         try {
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
+
+                if ($this->db->inTransaction()) {
+                    // Ensure password_hash + session_version update are atomic.
+                    $this->lockUserRowForUpdate($userId);
+                }
+            }
+
+            $user = $this->userRepository->findById($userId);
+            if ($user === null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่พบผู้ใช้งาน',
+                ];
+            }
+
+            $passwordHash = (string)($user['password_hash'] ?? '');
+            if (!password_verify($currentPassword, $passwordHash)) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
+                ];
+            }
+
             $updated = $this->userRepository->updatePasswordHash($userId, $newPasswordHash);
+            if (!$updated) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
+                ];
+            }
+
+            $this->userRepository->incrementSessionVersion($userId);
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
+
+            return [
+                'success' => true,
+            ];
         } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
             error_log('[profile] changePassword failed: ' . $exception->getMessage());
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
             ];
         }
+    }
 
-        if (!$updated) {
-            return [
-                'success' => false,
-                'error' => 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
-            ];
+    private function lockUserRowForUpdate(int $userId): void
+    {
+        if (!$this->db instanceof PDO || $userId <= 0) {
+            return;
         }
 
-        try {
-            $this->userRepository->incrementSessionVersion($userId);
-        } catch (Throwable $exception) {
-            error_log('[profile] increment session_version failed: ' . $exception->getMessage());
-        }
-
-        return [
-            'success' => true,
-        ];
+        $stmt = $this->db->prepare('SELECT id FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
+        $stmt->execute([':id' => $userId]);
     }
 
     private function normalizeEmail(string $email): string

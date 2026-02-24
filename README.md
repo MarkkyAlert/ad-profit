@@ -514,3 +514,14 @@ MAIL_FROM_NAME="Ad Profit"
 - จุดขายของระบบนี้คือ: **โครงสร้างชัด, flow ครบ, ปลอดภัยระดับใช้งานเล็ก ๆ, สอนง่าย**
 - ก่อนขายทุกครั้งให้ทำตาม `QA_CHECKLIST.md`
 - ถ้าจะขึ้น production จริง: ต้องใช้ HTTPS และตั้งค่า `.env` ให้ถูก
+
+## 🛡️ Security Hardening ที่ทำไว้แล้ว
+- **CSRF Protection**: ทุก state-changing POST action
+- **Method Guard**: POST-only สำหรับ state-changing actions
+- **Content-Type Guard**: ตรวจ Content-Type ของ POST request (415 ถ้าไม่ใช่ form)
+- **Transaction + Row Locking**: RecordService, ShopService, ProfileService, GoalService ใช้ TX + `FOR UPDATE` lock
+- **Rate Limiting**: auth actions และ profile changes
+- **Session Security**: `session_regenerate_id`, session version revocation, HttpOnly/SameSite cookies
+- **Security Headers**: X-Frame-Options, CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
+- **Double-Submit Prevention**: global JS ป้องกันกด submit ซ้ำ
+- **CSV Injection Protection**: sanitize formula characters ใน export

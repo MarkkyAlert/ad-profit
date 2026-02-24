@@ -259,6 +259,31 @@ function ensure_post_request_or_respond(bool $wantsJson, string $redirectUrl): v
     }
 }
 
+function ensure_form_content_type_or_respond(bool $wantsJson, string $redirectUrl): void
+{
+    if (!is_post_request()) {
+        return;
+    }
+
+    $contentType = strtolower(trim((string)($_SERVER['CONTENT_TYPE'] ?? '')));
+    if ($contentType === '') {
+        // Some clients may omit Content-Type for empty bodies; allow for small-system compatibility.
+        return;
+    }
+
+    $isUrlEncoded = str_starts_with($contentType, 'application/x-www-form-urlencoded');
+    $isMultipart = str_starts_with($contentType, 'multipart/form-data');
+
+    if ($isUrlEncoded || $isMultipart) {
+        return;
+    }
+
+    api_respond([
+        'success' => false,
+        'error' => 'Unsupported Media Type',
+    ], 415, $redirectUrl, $wantsJson);
+}
+
 function ensure_valid_csrf_or_respond(bool $wantsJson, string $redirectUrl, ?string $token = null): void
 {
     if (!verify_csrf($token)) {

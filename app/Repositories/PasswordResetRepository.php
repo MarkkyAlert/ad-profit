@@ -70,9 +70,8 @@ class PasswordResetRepository
                 WHERE user_id = :user_id';
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':user_id' => $userId]);
 
-        return $stmt->rowCount() > 0;
+        return $stmt->execute([':user_id' => $userId]);
     }
 
     public function deleteByTokenHash(string $tokenHash): bool

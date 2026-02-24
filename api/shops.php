@@ -7,7 +7,8 @@ require_once __DIR__ . '/../includes/auth.php';
 
 requireAuth();
 
-$action = (string)($_POST['action'] ?? $_GET['action'] ?? '');
+// Hardening: state-changing actions must come from POST only.
+$action = (string)($_POST['action'] ?? '');
 $wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
@@ -27,6 +28,7 @@ $respond = static function (array $payload, int $statusCode, string $redirectUrl
 
 if ($action === 'create') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopName = (string)($_POST['name'] ?? '');
@@ -75,6 +77,7 @@ if ($action === 'create') {
 
 if ($action === 'rename') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopId = (int)($_POST['shop_id'] ?? 0);
@@ -108,6 +111,7 @@ if ($action === 'rename') {
 
 if ($action === 'switch') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopId = (int)($_POST['shop_id'] ?? 0);
@@ -139,6 +143,7 @@ if ($action === 'switch') {
 
 if ($action === 'delete') {
     ensure_post_request_or_respond($wantsJson, $redirectPath);
+    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopId = (int)($_POST['shop_id'] ?? ($_SESSION['current_shop_id'] ?? 0));
