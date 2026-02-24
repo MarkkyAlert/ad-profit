@@ -117,8 +117,8 @@ class ProfileService
             ];
         }
 
-        $normalizedEmail = $this->normalizeEmail($newEmail);
-        if ($normalizedEmail === '' || !$this->isValidEmail($normalizedEmail)) {
+        $normalizedEmail = normalize_email($newEmail);
+        if ($normalizedEmail === '' || !is_valid_email($normalizedEmail)) {
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
@@ -149,7 +149,7 @@ class ProfileService
 
                 if ($this->db->inTransaction()) {
                     // Ensure email/password verification & update are consistent for this user.
-                    $this->lockUserRowForUpdate($userId);
+                    $this->userRepository->lockForUpdate($userId);
                 }
             }
 
@@ -177,7 +177,7 @@ class ProfileService
                 ];
             }
 
-            $currentEmail = $this->normalizeEmail((string)($user['email'] ?? ''));
+            $currentEmail = normalize_email((string)($user['email'] ?? ''));
             if ($currentEmail === $normalizedEmail) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                     $this->db->commit();
@@ -277,10 +277,11 @@ class ProfileService
             ];
         }
 
-        if (strlen($newPassword) < PASSWORD_MIN_LENGTH) {
+        $passwordError = validate_password_length($newPassword, 'รหัสผ่านใหม่');
+        if ($passwordError !== null) {
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านใหม่ต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร',
+                'error' => $passwordError,
             ];
         }
 
@@ -317,7 +318,7 @@ class ProfileService
 
                 if ($this->db->inTransaction()) {
                     // Ensure password_hash + session_version update are atomic.
-                    $this->lockUserRowForUpdate($userId);
+                    $this->userRepository->lockForUpdate($userId);
                 }
             }
 
@@ -377,25 +378,5 @@ class ProfileService
                 'error' => 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
             ];
         }
-    }
-
-    private function lockUserRowForUpdate(int $userId): void
-    {
-        if (!$this->db instanceof PDO || $userId <= 0) {
-            return;
-        }
-
-        $stmt = $this->db->prepare('SELECT id FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
-        $stmt->execute([':id' => $userId]);
-    }
-
-    private function normalizeEmail(string $email): string
-    {
-        return strtolower(trim($email));
-    }
-
-    private function isValidEmail(string $email): bool
-    {
-        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 }

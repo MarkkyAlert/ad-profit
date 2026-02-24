@@ -14,7 +14,8 @@ $wantsJson = wants_json_response();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $shopRepository = new ShopRepository($pdo);
-$shopService = new ShopService($shopRepository, $pdo);
+$userRepository = new UserRepository($pdo);
+$shopService = new ShopService($shopRepository, $userRepository, $pdo);
 
 $redirectPath = resolve_safe_redirect_path(
     '/dashboard.php',

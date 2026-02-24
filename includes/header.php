@@ -12,7 +12,8 @@ $headerShops = [];
 if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0) {
     $headerUserId = (int)$_SESSION['user_id'];
     $headerShopRepository = new ShopRepository($pdo);
-    $headerShopService = new ShopService($headerShopRepository);
+    $headerUserRepository = new UserRepository($pdo);
+    $headerShopService = new ShopService($headerShopRepository, $headerUserRepository);
     $shopContext = $headerShopService->getShopContext($headerUserId, $currentShopId > 0 ? $currentShopId : null);
 
     $headerShops = is_array($shopContext['shops'] ?? null) ? (array)$shopContext['shops'] : [];

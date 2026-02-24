@@ -5,11 +5,13 @@ declare(strict_types=1);
 class ShopService
 {
     private ShopRepository $shopRepository;
+    private UserRepository $userRepository;
     private ?PDO $db;
 
-    public function __construct(ShopRepository $shopRepository, ?PDO $db = null)
+    public function __construct(ShopRepository $shopRepository, UserRepository $userRepository, ?PDO $db = null)
     {
         $this->shopRepository = $shopRepository;
+        $this->userRepository = $userRepository;
         $this->db = $db;
     }
 
@@ -67,7 +69,7 @@ class ShopService
 
                 $canLockRows = $this->db->inTransaction();
                 if ($canLockRows) {
-                    $this->lockUserRowForUpdate($userId);
+                    $this->userRepository->lockForUpdate($userId);
                     $this->shopRepository->countByUserIdForUpdate($userId);
                 }
             }
@@ -146,7 +148,7 @@ class ShopService
                 $canLockRows = $this->db->inTransaction();
                 if ($canLockRows) {
                     // Prevent race conditions: rename-shop must be serialized per user/shop.
-                    $this->lockUserRowForUpdate($userId);
+                    $this->userRepository->lockForUpdate($userId);
                     $this->lockShopRowForUpdate($shopId, $userId);
                 }
             }
@@ -280,7 +282,7 @@ class ShopService
 
                 $canLockRows = $this->db->inTransaction();
                 if ($canLockRows) {
-                    $this->lockUserRowForUpdate($userId);
+                    $this->userRepository->lockForUpdate($userId);
                 }
             }
 
@@ -350,16 +352,6 @@ class ShopService
     public function canDeleteShop(int $userId): bool
     {
         return $this->shopRepository->countByUserId($userId) > 1;
-    }
-
-    private function lockUserRowForUpdate(int $userId): void
-    {
-        if (!$this->db instanceof PDO || $userId <= 0) {
-            return;
-        }
-
-        $stmt = $this->db->prepare('SELECT id FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
-        $stmt->execute([':id' => $userId]);
     }
 
     private function lockShopRowForUpdate(int $shopId, int $userId): void

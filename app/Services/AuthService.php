@@ -29,7 +29,7 @@ class AuthService
 
     public function register(string $email, string $password, string $passwordConfirm, string $clientIp): array
     {
-        $normalizedEmail = $this->normalizeEmail($email);
+        $normalizedEmail = normalize_email($email);
 
         if ($this->isRateLimited('register', $clientIp, $normalizedEmail)) {
             return [
@@ -38,7 +38,7 @@ class AuthService
             ];
         }
 
-        if ($normalizedEmail === '' || !$this->isValidEmail($normalizedEmail)) {
+        if ($normalizedEmail === '' || !is_valid_email($normalizedEmail)) {
             $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
@@ -54,11 +54,12 @@ class AuthService
             ];
         }
 
-        if (strlen($password) < PASSWORD_MIN_LENGTH) {
+        $passwordError = validate_password_length($password);
+        if ($passwordError !== null) {
             $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร',
+                'error' => $passwordError,
             ];
         }
 
@@ -132,7 +133,7 @@ class AuthService
 
     public function login(string $email, string $password, string $clientIp): array
     {
-        $normalizedEmail = $this->normalizeEmail($email);
+        $normalizedEmail = normalize_email($email);
 
         if ($this->isRateLimited('login', $clientIp, $normalizedEmail)) {
             return [
@@ -251,7 +252,7 @@ class AuthService
             ];
         }
 
-        $normalizedEmail = $this->normalizeEmail($email);
+        $normalizedEmail = normalize_email($email);
 
         if ($this->isRateLimited('password_reset', $clientIp, $normalizedEmail)) {
             return [
@@ -263,7 +264,7 @@ class AuthService
         // Count every password-reset request in the window to prevent abuse/spam.
         $this->markFailedAttempt('password_reset', $clientIp, $normalizedEmail);
 
-        if ($normalizedEmail === '' || !$this->isValidEmail($normalizedEmail)) {
+        if ($normalizedEmail === '' || !is_valid_email($normalizedEmail)) {
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
@@ -348,10 +349,11 @@ class AuthService
             ];
         }
 
-        if (strlen($newPassword) < PASSWORD_MIN_LENGTH) {
+        $passwordError = validate_password_length($newPassword);
+        if ($passwordError !== null) {
             return [
                 'success' => false,
-                'error' => 'รหัสผ่านต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร',
+                'error' => $passwordError,
             ];
         }
 
@@ -455,16 +457,6 @@ class AuthService
         $_SESSION['last_activity_at'] = time();
         $_SESSION['current_shop_id'] = $shopId;
         $_SESSION['current_shop_name'] = $shopName;
-    }
-
-    private function normalizeEmail(string $email): string
-    {
-        return strtolower(trim($email));
-    }
-
-    private function isValidEmail(string $email): bool
-    {
-        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 
     private function isRateLimited(string $action, string $clientIp, string $subject = ''): bool

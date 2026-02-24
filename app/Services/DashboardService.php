@@ -26,7 +26,7 @@ class DashboardService
         ?string $customStartDate,
         ?string $customEndDate
     ): array {
-        if (!$this->canAccessShop($userId, $shopId)) {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
                 'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
@@ -93,7 +93,7 @@ class DashboardService
 
     public function getSummary(int $userId, int $shopId, string $startDate, string $endDate): array
     {
-        if (!$this->canAccessShop($userId, $shopId)) {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
                 'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
@@ -519,11 +519,6 @@ class DashboardService
         }
 
         return round((($current - $previous) / $previous) * 100, 1);
-    }
-
-    private function canAccessShop(int $userId, int $shopId): bool
-    {
-        return $this->shopRepository->findByIdAndUserId($shopId, $userId) !== null;
     }
 
     private function isValidDate(string $date): bool

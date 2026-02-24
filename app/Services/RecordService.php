@@ -23,7 +23,7 @@ class RecordService
         float $adCost,
         ?string $note
     ): array {
-        if (!$this->canAccessShop($userId, $shopId)) {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
                 'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
@@ -91,7 +91,7 @@ class RecordService
         float $adCost,
         ?string $note
     ): array {
-        if (!$this->canAccessShop($userId, $shopId)) {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
                 'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
@@ -198,7 +198,7 @@ class RecordService
 
     public function getRecentRecords(int $userId, int $shopId, int $limit = 7): array
     {
-        if (!$this->canAccessShop($userId, $shopId)) {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [];
         }
 
@@ -207,7 +207,7 @@ class RecordService
 
     public function getMonthlyRecords(int $userId, int $shopId, string $month): array
     {
-        if (!$this->canAccessShop($userId, $shopId)) {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
                 'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
@@ -293,7 +293,7 @@ class RecordService
 
     public function deleteRecord(int $userId, int $shopId, int $recordId): array
     {
-        if (!$this->canAccessShop($userId, $shopId)) {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
                 'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
@@ -366,11 +366,6 @@ class RecordService
             'success' => true,
             'message' => 'ลบรายการเรียบร้อยแล้ว',
         ];
-    }
-
-    private function canAccessShop(int $userId, int $shopId): bool
-    {
-        return $this->shopRepository->findByIdAndUserId($shopId, $userId) !== null;
     }
 
     private function validateRecordPayload(string $recordDate, float $revenue, float $adCost, ?string $note): array

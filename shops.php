@@ -11,7 +11,8 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 $currentSessionShopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
 $shopRepository = new ShopRepository($pdo);
-$shopService = new ShopService($shopRepository);
+$userRepository = new UserRepository($pdo);
+$shopService = new ShopService($shopRepository, $userRepository);
 
 $shopContext = $shopService->getShopContext($userId, $currentSessionShopId > 0 ? $currentSessionShopId : null);
 $shops = is_array($shopContext['shops'] ?? null) ? array_values((array)$shopContext['shops']) : [];

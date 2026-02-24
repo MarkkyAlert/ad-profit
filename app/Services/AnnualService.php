@@ -15,7 +15,7 @@ class AnnualService
 
     public function buildYearlySummary(int $userId, int $shopId, int $year): array
     {
-        if (!$this->canAccessShop($userId, $shopId)) {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
                 'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
@@ -110,11 +110,6 @@ class AnnualService
                 ],
             ],
         ];
-    }
-
-    private function canAccessShop(int $userId, int $shopId): bool
-    {
-        return $this->shopRepository->findByIdAndUserId($shopId, $userId) !== null;
     }
 
     private function isValidYear(int $year): bool

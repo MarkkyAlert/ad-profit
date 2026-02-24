@@ -143,4 +143,9 @@ class ShopRepository
 
         return $stmt->rowCount() > 0;
     }
+
+    public function userCanAccessShop(int $shopId, int $userId): bool
+    {
+        return $this->findByIdAndUserId($shopId, $userId) !== null;
+    }
 }

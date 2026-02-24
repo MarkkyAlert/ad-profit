@@ -202,6 +202,16 @@ class UserRepository
         }
     }
 
+    public function lockForUpdate(int $userId): void
+    {
+        if ($userId <= 0) {
+            return;
+        }
+
+        $stmt = $this->db->prepare('SELECT id FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
+        $stmt->execute([':id' => $userId]);
+    }
+
     private function isMissingDisplayNameColumnError(PDOException $exception): bool
     {
         if ((string)$exception->getCode() !== '42S22') {

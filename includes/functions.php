@@ -425,3 +425,21 @@ function client_ip(): string
 
     return 'unknown';
 }
+
+function normalize_email(string $email): string
+{
+    return strtolower(trim($email));
+}
+
+function is_valid_email(string $email): bool
+{
+    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+}
+
+function validate_password_length(string $password, string $fieldLabel = 'รหัสผ่าน'): ?string
+{
+    if (strlen($password) < PASSWORD_MIN_LENGTH) {
+        return $fieldLabel . 'ต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร';
+    }
+    return null;
+}
