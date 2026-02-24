@@ -468,8 +468,10 @@ require __DIR__ . '/includes/header.php';
     <?php if (!$hasDailyData): ?>
         <p class="mb-3 text-sm text-slate-400">ยังไม่มีข้อมูลรายวันในช่วงเวลาที่เลือก</p>
     <?php endif; ?>
-    <div class="h-52 sm:h-64 lg:h-80">
-        <canvas id="daily-bar-chart"></canvas>
+    <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
+        <div style="min-width: <?= max(100, count((array)($dailyChartPayload['dates'] ?? [])) * 60) ?>px; height: 100%;">
+            <canvas id="daily-bar-chart"></canvas>
+        </div>
     </div>
 </section>
 

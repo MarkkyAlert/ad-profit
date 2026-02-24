@@ -258,8 +258,10 @@ require __DIR__ . '/includes/header.php';
         <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (12 เดือน)</h2>
         <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
     </div>
-    <div class="h-52 sm:h-64 lg:h-80">
-        <canvas id="annual-bar-chart"></canvas>
+    <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
+        <div style="min-width: 600px; height: 100%;">
+            <canvas id="annual-bar-chart"></canvas>
+        </div>
     </div>
 </section>
 
