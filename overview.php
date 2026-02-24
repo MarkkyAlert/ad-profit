@@ -8,88 +8,218 @@ require_once __DIR__ . '/includes/auth.php';
 requireAuth();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
+
+$viewRaw = isset($_GET['view']) ? strtolower(trim((string)$_GET['view'])) : 'month';
+$view = $viewRaw === 'year' ? 'year' : 'month';
+
 $selectedMonth = (string)($_GET['month'] ?? date('Y-m'));
 if (preg_match('/^\d{4}-\d{2}$/', $selectedMonth) !== 1) {
     $selectedMonth = date('Y-m');
 }
 
+$selectedYearRaw = isset($_GET['year']) ? trim((string)$_GET['year']) : substr($selectedMonth, 0, 4);
+
+if (preg_match('/^\d{4}$/', $selectedYearRaw) !== 1) {
+    $selectedYearRaw = date('Y');
+}
+
+$selectedYear = (int)$selectedYearRaw;
+if ($selectedYear >= 2400 && $selectedYear <= 2700) {
+    $selectedYear -= 543;
+}
+
+$currentYear = (int)date('Y');
+if ($selectedYear < 2000 || $selectedYear > 2100) {
+    $selectedYear = $currentYear;
+}
+
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
-$overviewService = new OverviewService($recordRepository, $shopRepository);
+$shopCount = $shopRepository->countByUserId($userId);
 
-$overviewResult = $overviewService->buildOverview($userId, $selectedMonth);
+if ($shopCount < 2) {
+    $view = 'month';
+}
 
+$availableYears = [];
+for ($year = $currentYear; $year >= $currentYear - 5; $year--) {
+    $availableYears[] = $year;
+}
+
+if (!in_array($selectedYear, $availableYears, true)) {
+    $availableYears[] = $selectedYear;
+    rsort($availableYears);
+}
+
+$activeError = null;
+$canView = false;
+
+// Monthly view variables
 $overviewError = null;
-$overviewData = [
-    'selected_month' => $selectedMonth,
-    'shops_count' => 0,
-    'can_view' => false,
-    'comparison' => [
-        'rows' => [],
-        'totals' => [
+$comparisonRows = [];
+$totals = [];
+$hasOverviewData = false;
+$barPayload = ['labels' => [], 'revenue' => [], 'ad_cost' => [], 'profit' => []];
+$trendPayload = ['labels' => [], 'months' => [], 'series' => []];
+
+// Yearly view variables
+$yearlyError = null;
+$yearlyMonths = [];
+$yearlySummary = [];
+$yearlyShopRows = [];
+$hasYearlyData = false;
+$yearChartPayload = ['labels' => [], 'revenue' => [], 'ad_cost' => [], 'profit' => []];
+
+$thaiMonths = [
+    1 => 'ม.ค.',
+    2 => 'ก.พ.',
+    3 => 'มี.ค.',
+    4 => 'เม.ย.',
+    5 => 'พ.ค.',
+    6 => 'มิ.ย.',
+    7 => 'ก.ค.',
+    8 => 'ส.ค.',
+    9 => 'ก.ย.',
+    10 => 'ต.ค.',
+    11 => 'พ.ย.',
+    12 => 'ธ.ค.',
+];
+
+$monthLabel = static function (array $row) use ($thaiMonths): string {
+    $monthNumber = (int)($row['month'] ?? 0);
+    return $thaiMonths[$monthNumber] ?? ('เดือน ' . $monthNumber);
+};
+
+if ($view === 'year') {
+    $overviewAnnualService = new OverviewAnnualService($recordRepository, $shopRepository);
+    $yearlyResult = $overviewAnnualService->buildYearlyOverview($userId, $selectedYear);
+
+    $yearlyData = [
+        'year' => $selectedYear,
+        'shops_count' => 0,
+        'can_view' => false,
+        'months' => [],
+        'summary' => [
             'total_revenue' => 0.0,
             'total_ad_cost' => 0.0,
             'profit' => 0.0,
             'roas' => null,
             'profit_margin' => null,
         ],
-    ],
-    'charts' => [
-        'bar' => [
-            'labels' => [],
+        'chart' => [
+            'months' => [],
             'revenue' => [],
             'ad_cost' => [],
             'profit' => [],
         ],
-        'trend' => [
-            'months' => [],
-            'series' => [],
-        ],
-    ],
-];
+        'shops' => [],
+    ];
 
-if (($overviewResult['success'] ?? false) === true) {
-    $overviewData = array_replace_recursive($overviewData, (array)($overviewResult['data'] ?? []));
-} else {
-    $overviewError = (string)($overviewResult['error'] ?? 'ไม่สามารถโหลดข้อมูลภาพรวมทุกร้านได้');
-}
+    if (($yearlyResult['success'] ?? false) === true) {
+        $yearlyData = array_replace_recursive($yearlyData, (array)($yearlyResult['data'] ?? []));
+    } else {
+        $yearlyError = (string)($yearlyResult['error'] ?? 'ไม่สามารถโหลดข้อมูลรายปีรวมร้านได้');
+    }
 
-$comparisonRows = (array)($overviewData['comparison']['rows'] ?? []);
-$totals = (array)($overviewData['comparison']['totals'] ?? []);
-$canView = (bool)($overviewData['can_view'] ?? false);
-$overviewTotalRevenue = (float)($totals['total_revenue'] ?? 0);
-$overviewTotalAdCost = (float)($totals['total_ad_cost'] ?? 0);
-$hasOverviewData = abs($overviewTotalRevenue) > 0.00001 || abs($overviewTotalAdCost) > 0.00001;
+    $activeError = $yearlyError;
+    $canView = (bool)($yearlyData['can_view'] ?? false);
+    $yearlyMonths = array_values((array)($yearlyData['months'] ?? []));
+    $yearlySummary = (array)($yearlyData['summary'] ?? []);
+    $yearlyShopRows = array_values((array)($yearlyData['shops'] ?? []));
 
-$barRaw = (array)($overviewData['charts']['bar'] ?? []);
-$barPayload = [
-    'labels' => array_values((array)($barRaw['labels'] ?? [])),
-    'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($barRaw['revenue'] ?? []))),
-    'ad_cost' => array_values(array_map(static fn($value): float => (float)$value, (array)($barRaw['ad_cost'] ?? []))),
-    'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($barRaw['profit'] ?? []))),
-];
+    $yearTotalRevenue = (float)($yearlySummary['total_revenue'] ?? 0);
+    $yearTotalAdCost = (float)($yearlySummary['total_ad_cost'] ?? 0);
+    $hasYearlyData = abs($yearTotalRevenue) > 0.00001 || abs($yearTotalAdCost) > 0.00001;
 
-$trendRaw = (array)($overviewData['charts']['trend'] ?? []);
-$trendMonthKeys = array_values((array)($trendRaw['months'] ?? []));
-$trendSeriesRaw = array_values((array)($trendRaw['series'] ?? []));
-$trendPayload = [
-    'labels' => array_map(static fn(string $month): string => formatThaiMonth($month), $trendMonthKeys),
-    'months' => $trendMonthKeys,
-    'series' => array_values(array_map(
-        static function ($series): array {
-            $row = is_array($series) ? $series : [];
-
-            return [
-                'shop_id' => (int)($row['shop_id'] ?? 0),
-                'shop_name' => (string)($row['shop_name'] ?? 'ร้านค้า'),
-                'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($row['revenue'] ?? []))),
-            ];
+    $chartRaw = (array)($yearlyData['chart'] ?? []);
+    $chartLabels = array_map(
+        static function (string $monthKey) use ($thaiMonths): string {
+            $monthNumber = (int)substr($monthKey, 5, 2);
+            return $thaiMonths[$monthNumber] ?? $monthKey;
         },
-        $trendSeriesRaw
-    )),
-];
+        array_values((array)($chartRaw['months'] ?? []))
+    );
 
-$shopCount = $shopRepository->countByUserId($userId);
+    $yearChartPayload = [
+        'labels' => $chartLabels,
+        'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['revenue'] ?? []))),
+        'ad_cost' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['ad_cost'] ?? []))),
+        'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['profit'] ?? []))),
+    ];
+} else {
+    $overviewService = new OverviewService($recordRepository, $shopRepository);
+    $overviewResult = $overviewService->buildOverview($userId, $selectedMonth);
+
+    $overviewData = [
+        'selected_month' => $selectedMonth,
+        'shops_count' => 0,
+        'can_view' => false,
+        'comparison' => [
+            'rows' => [],
+            'totals' => [
+                'total_revenue' => 0.0,
+                'total_ad_cost' => 0.0,
+                'profit' => 0.0,
+                'roas' => null,
+                'profit_margin' => null,
+            ],
+        ],
+        'charts' => [
+            'bar' => [
+                'labels' => [],
+                'revenue' => [],
+                'ad_cost' => [],
+                'profit' => [],
+            ],
+            'trend' => [
+                'months' => [],
+                'series' => [],
+            ],
+        ],
+    ];
+
+    if (($overviewResult['success'] ?? false) === true) {
+        $overviewData = array_replace_recursive($overviewData, (array)($overviewResult['data'] ?? []));
+    } else {
+        $overviewError = (string)($overviewResult['error'] ?? 'ไม่สามารถโหลดข้อมูลภาพรวมทุกร้านได้');
+    }
+
+    $activeError = $overviewError;
+    $comparisonRows = (array)($overviewData['comparison']['rows'] ?? []);
+    $totals = (array)($overviewData['comparison']['totals'] ?? []);
+    $canView = (bool)($overviewData['can_view'] ?? false);
+    $overviewTotalRevenue = (float)($totals['total_revenue'] ?? 0);
+    $overviewTotalAdCost = (float)($totals['total_ad_cost'] ?? 0);
+    $hasOverviewData = abs($overviewTotalRevenue) > 0.00001 || abs($overviewTotalAdCost) > 0.00001;
+
+    $barRaw = (array)($overviewData['charts']['bar'] ?? []);
+    $barPayload = [
+        'labels' => array_values((array)($barRaw['labels'] ?? [])),
+        'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($barRaw['revenue'] ?? []))),
+        'ad_cost' => array_values(array_map(static fn($value): float => (float)$value, (array)($barRaw['ad_cost'] ?? []))),
+        'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($barRaw['profit'] ?? []))),
+    ];
+
+    $trendRaw = (array)($overviewData['charts']['trend'] ?? []);
+    $trendMonthKeys = array_values((array)($trendRaw['months'] ?? []));
+    $trendSeriesRaw = array_values((array)($trendRaw['series'] ?? []));
+    $trendPayload = [
+        'labels' => array_map(static fn(string $month): string => formatThaiMonth($month), $trendMonthKeys),
+        'months' => $trendMonthKeys,
+        'series' => array_values(array_map(
+            static function ($series): array {
+                $row = is_array($series) ? $series : [];
+
+                return [
+                    'shop_id' => (int)($row['shop_id'] ?? 0),
+                    'shop_name' => (string)($row['shop_name'] ?? 'ร้านค้า'),
+                    'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($row['revenue'] ?? []))),
+                ];
+            },
+            $trendSeriesRaw
+        )),
+    ];
+}
 
 $pageTitle = 'รวมทุกร้าน';
 $currentPage = 'overview';
@@ -97,136 +227,252 @@ $currentPage = 'overview';
 require __DIR__ . '/includes/header.php';
 ?>
 <section class="section-card p-5">
-    <div class="flex flex-wrap items-end justify-between gap-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>
             <h1 class="text-xl font-semibold text-slate-100">หน้ารวมทุกร้าน</h1>
-            <p class="mt-2 text-sm text-slate-500">ตารางและกราฟเปรียบเทียบทุกร้านตามเดือนที่เลือก</p>
+            <?php if ($view === 'year'): ?>
+                <p class="mt-2 text-sm text-slate-500">สรุปยอดรวมทุกร้านแบบรายปี (12 เดือน) พร้อมกราฟและจัดอันดับตามยอดขาย</p>
+            <?php else: ?>
+                <p class="mt-2 text-sm text-slate-500">ตารางและกราฟเปรียบเทียบทุกร้านตามเดือนที่เลือก</p>
+            <?php endif; ?>
         </div>
 
-        <form method="get" action="<?= e(app_url('/overview.php')) ?>" class="flex flex-wrap items-center gap-2">
-            <label for="overview-month" class="text-sm text-slate-400">เลือกเดือน</label>
-            <input
-                id="overview-month"
-                name="month"
-                type="month"
-                value="<?= e($selectedMonth) ?>"
-                class="rounded-xl px-3 py-2 text-sm transition-all">
-            <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
-        </form>
+        <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end sm:gap-3">
+            <?php if ($shopCount >= 2): ?>
+                <div class="inline-flex rounded-xl border border-white/10 bg-white/5 p-1 text-xs">
+                    <a href="<?= e(app_url('/overview.php?view=month&month=' . $selectedMonth)) ?>"
+                        class="rounded-lg px-3 py-1.5 font-semibold transition-colors <?= $view === 'month' ? 'bg-white/10 text-slate-100' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200' ?>">
+                        รายเดือน
+                    </a>
+                    <a href="<?= e(app_url('/overview.php?view=year&year=' . (string)$selectedYear)) ?>"
+                        class="rounded-lg px-3 py-1.5 font-semibold transition-colors <?= $view === 'year' ? 'bg-white/10 text-slate-100' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200' ?>">
+                        รายปี
+                    </a>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($view === 'year'): ?>
+                <form method="get" action="<?= e(app_url('/overview.php')) ?>" class="flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="view" value="year">
+                    <label for="overview-year" class="text-sm text-slate-400">เลือกปี (พ.ศ.)</label>
+                    <select id="overview-year" name="year" class="rounded-xl px-3 py-2 text-sm transition-all">
+                        <?php foreach ($availableYears as $year): ?>
+                            <option value="<?= e((string)$year) ?>" <?= $year === $selectedYear ? 'selected' : '' ?>>
+                                <?= e((string)($year + 543)) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
+                </form>
+            <?php else: ?>
+                <form method="get" action="<?= e(app_url('/overview.php')) ?>" class="flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="view" value="month">
+                    <label for="overview-month" class="text-sm text-slate-400">เลือกเดือน</label>
+                    <input
+                        id="overview-month"
+                        name="month"
+                        type="month"
+                        value="<?= e($selectedMonth) ?>"
+                        class="rounded-xl px-3 py-2 text-sm transition-all">
+                    <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
+                </form>
+            <?php endif; ?>
+        </div>
     </div>
 
-    <?php if ($overviewError !== null): ?>
+    <?php if ($activeError !== null): ?>
         <div class="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-400">
-            <?= e($overviewError) ?>
+            <?= e($activeError) ?>
         </div>
     <?php endif; ?>
 
+
     <?php if (!$canView): ?>
-        <p class="mt-4 text-sm text-slate-500">ต้องมีอย่างน้อย 2 ร้านถึงจะเห็นข้อมูลเปรียบเทียบ</p>
+        <p class="mt-4 text-sm text-slate-500">
+            <?php if ($shopCount < 2): ?>
+                ต้องมีอย่างน้อย 2 ร้านถึงจะเห็นข้อมูลเปรียบเทียบ
+            <?php else: ?>
+                ไม่สามารถแสดงข้อมูลได้ในขณะนี้
+            <?php endif; ?>
+        </p>
     <?php else: ?>
-        <?php if (!$hasOverviewData): ?>
-            <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
-                เดือนนี้ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
-            </div>
-        <?php endif; ?>
+        <?php if ($view === 'year'): ?>
+            <?php
+            $yearTotalRevenue = (float)($yearlySummary['total_revenue'] ?? 0);
+            $yearTotalAdCost = (float)($yearlySummary['total_ad_cost'] ?? 0);
+            $yearProfit = (float)($yearlySummary['profit'] ?? ($yearTotalRevenue - $yearTotalAdCost));
+            $yearRoas = isset($yearlySummary['roas']) && $yearlySummary['roas'] !== null ? (float)$yearlySummary['roas'] : null;
+            $yearProfitMargin = isset($yearlySummary['profit_margin']) && $yearlySummary['profit_margin'] !== null
+                ? (float)$yearlySummary['profit_margin']
+                : ($yearTotalRevenue > 0 ? round(($yearProfit / $yearTotalRevenue) * 100, 1) : null);
+            ?>
 
-        <div class="mt-5 overflow-x-auto">
-            <table class="min-w-full text-sm">
-                <thead>
-                    <tr class="border-b border-white/10 text-left text-slate-400">
-                        <th class="px-3 py-1.5">ร้าน</th>
-                        <th class="px-3 py-1.5">ยอดขาย</th>
-                        <th class="px-3 py-1.5">ค่าแอด</th>
-                        <th class="px-3 py-1.5">กำไร</th>
-                        <th class="px-3 py-1.5">ROAS</th>
-                        <th class="px-3 py-1.5">อัตรากำไร</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($comparisonRows as $row): ?>
-                        <?php
-                        $rowRevenue = (float)($row['total_revenue'] ?? 0);
-                        $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                        $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
-                        $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
-                        $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
-                        ?>
-                        <tr class="border-b border-white/[0.06] table-row-hover">
-                            <td class="px-3 py-1.5 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
-                            <td class="px-3 py-1.5 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
-                            <td class="px-3 py-1.5 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
-                            <td class="px-3 py-1.5 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
-                            <td class="px-3 py-1.5 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
-                            <td class="px-3 py-1.5 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-                <tfoot>
-                    <?php
-                    $totalRevenue = (float)($totals['total_revenue'] ?? 0);
-                    $totalAdCost = (float)($totals['total_ad_cost'] ?? 0);
-                    $totalProfit = (float)($totals['profit'] ?? ($totalRevenue - $totalAdCost));
-                    $totalRoas = isset($totals['roas']) && $totals['roas'] !== null ? (float)$totals['roas'] : null;
-                    $totalProfitMargin = isset($totals['profit_margin']) && $totals['profit_margin'] !== null ? (float)$totals['profit_margin'] : null;
-                    ?>
-                    <tr class="border-t border-white/10 bg-white/[0.03] font-semibold">
-                        <td class="px-3 py-2 text-slate-200">รวมทุกร้าน</td>
-                        <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
-                        <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
-                        <td class="px-3 py-2 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
-                        <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
-                        <td class="px-3 py-2 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-
-        <section class="section-card mt-6 p-5">
-            <div class="mb-3 flex items-center justify-between gap-2">
-                <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งเปรียบเทียบระหว่างร้าน</h2>
-                <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
-            </div>
-            <div class="h-80 w-full overflow-x-auto">
-                <div style="min-width: <?= max(100, count($barPayload['labels']) * 120) ?>px; height: 100%;">
-                    <canvas id="overview-bar-chart"></canvas>
+            <?php if (!$hasYearlyData): ?>
+                <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
+                    ปีนี้ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>
-            </div>
-        </section>
+            <?php endif; ?>
 
-        <section class="section-card mt-6 p-5">
-            <div class="mb-3 flex items-center justify-between gap-2">
-                <h2 class="text-lg font-semibold text-slate-100">กราฟเส้นแนวโน้มทุกร้าน (6 เดือนย้อนหลัง)</h2>
-                <span class="text-xs text-slate-400">เส้นแต่ละร้าน = ยอดขายรายเดือน</span>
-            </div>
-            <div class="h-80">
-                <canvas id="overview-trend-chart"></canvas>
-            </div>
-        </section>
+            <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <article class="stat-card s-revenue">
+                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวมทั้งปี</p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e(formatMoney($yearTotalRevenue)) ?></p>
+                </article>
+                <article class="stat-card s-adcost">
+                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ค่าแอดรวมทั้งปี</p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-cyan-400"><?= e(formatMoney($yearTotalAdCost)) ?></p>
+                </article>
+                <article class="stat-card s-profit">
+                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">กำไรรวมทั้งปี</p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($yearProfit)) ?></p>
+                </article>
+                <article class="stat-card s-roas">
+                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ROAS เฉลี่ยทั้งปี</p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-violet-400"><?= e(formatRoas($yearRoas)) ?></p>
+                </article>
+                <article class="stat-card s-neutral">
+                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">อัตรากำไรทั้งปี</p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-slate-100"><?= e(formatPercent($yearProfitMargin)) ?></p>
+                </article>
+            </section>
 
-        <script>
-            (function() {
-                const barPayload = <?= json_encode($barPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-                const trendPayload = <?= json_encode($trendPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+            <section class="section-card mt-6 p-4 sm:p-5">
+                <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางรวมรายเดือน (12 เดือน)</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-white/10 text-left text-slate-400">
+                                <th class="px-3 py-2">เดือน</th>
+                                <th class="px-3 py-2">ยอดขาย</th>
+                                <th class="px-3 py-2">ค่าแอด</th>
+                                <th class="px-3 py-2">กำไร</th>
+                                <th class="px-3 py-2">ROAS</th>
+                                <th class="px-3 py-2">อัตรากำไร</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($yearlyMonths as $row): ?>
+                                <?php
+                                $rowRevenue = (float)($row['total_revenue'] ?? 0);
+                                $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
+                                $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                                $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
+                                $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                                ?>
+                                <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
+                                    <td class="px-3 py-2 text-slate-300 font-medium"><?= e($monthLabel($row)) ?></td>
+                                    <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
+                                    <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
+                                    <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                                    <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
+                                    <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr class="border-t border-white/10 bg-white/[0.03] font-semibold whitespace-nowrap">
+                                <td class="px-3 py-3 text-slate-200">รวมทั้งปี</td>
+                                <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($yearTotalRevenue)) ?></td>
+                                <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($yearTotalAdCost)) ?></td>
+                                <td class="px-3 py-3 <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($yearProfit)) ?></td>
+                                <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($yearRoas)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($yearProfitMargin)) ?></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
 
-                const barCanvas = document.getElementById('overview-bar-chart');
-                if (barCanvas) {
-                    new Chart(barCanvas, {
+            <section class="section-card mt-6 p-4 sm:p-5">
+                <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                    <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (12 เดือน)</h2>
+                    <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
+                </div>
+                <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
+                    <div style="min-width: 600px; height: 100%;">
+                        <canvas id="overview-year-bar-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section-card mt-6 p-4 sm:p-5">
+                <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                    <h2 class="text-base sm:text-lg font-semibold text-slate-100">ตารางเปรียบเทียบรายปี (จัดอันดับตามยอดขาย)</h2>
+                    <span class="text-xs text-slate-400">รวมปี <?= e((string)($selectedYear + 543)) ?> (พ.ศ.)</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-white/10 text-left text-slate-400">
+                                <th class="px-3 py-2">อันดับ</th>
+                                <th class="px-3 py-2">ร้าน</th>
+                                <th class="px-3 py-2">ยอดขาย</th>
+                                <th class="px-3 py-2">ค่าแอด</th>
+                                <th class="px-3 py-2">กำไร</th>
+                                <th class="px-3 py-2">ROAS</th>
+                                <th class="px-3 py-2">อัตรากำไร</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($yearlyShopRows as $index => $row): ?>
+                                <?php
+                                $rowRevenue = (float)($row['total_revenue'] ?? 0);
+                                $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
+                                $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                                $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
+                                $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                                ?>
+                                <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
+                                    <td class="px-3 py-2 text-slate-500 font-semibold"><?= e((string)($index + 1)) ?></td>
+                                    <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
+                                    <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
+                                    <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
+                                    <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                                    <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
+                                    <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr class="border-t border-white/10 bg-white/[0.03] font-semibold whitespace-nowrap">
+                                <td class="px-3 py-3 text-slate-200" colspan="2">รวมทุกร้าน</td>
+                                <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($yearTotalRevenue)) ?></td>
+                                <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($yearTotalAdCost)) ?></td>
+                                <td class="px-3 py-3 <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($yearProfit)) ?></td>
+                                <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($yearRoas)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($yearProfitMargin)) ?></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
+
+            <script>
+                (function() {
+                    const chartPayload = <?= json_encode($yearChartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                    const chartCanvas = document.getElementById('overview-year-bar-chart');
+
+                    if (!chartCanvas) {
+                        return;
+                    }
+
+                    new Chart(chartCanvas, {
                         type: 'bar',
                         data: {
-                            labels: barPayload.labels,
+                            labels: chartPayload.labels,
                             datasets: [{
                                     label: 'ยอดขาย',
-                                    data: barPayload.revenue,
+                                    data: chartPayload.revenue,
                                     backgroundColor: '#f97316'
                                 },
                                 {
                                     label: 'ค่าแอด',
-                                    data: barPayload.ad_cost,
+                                    data: chartPayload.ad_cost,
                                     backgroundColor: '#06b6d4'
                                 },
                                 {
                                     label: 'กำไร',
-                                    data: barPayload.profit,
+                                    data: chartPayload.profit,
                                     backgroundColor: '#22c55e'
                                 }
                             ]
@@ -271,73 +517,224 @@ require __DIR__ . '/includes/header.php';
                             }
                         }
                     });
-                }
+                })();
+            </script>
+        <?php else: ?>
+            <?php if (!$hasOverviewData): ?>
+                <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
+                    เดือนนี้ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
+                </div>
+            <?php endif; ?>
 
-                const trendCanvas = document.getElementById('overview-trend-chart');
-                if (trendCanvas) {
-                    const colors = ['#f97316', '#06b6d4', '#22c55e', '#eab308', '#a78bfa', '#f43f5e'];
-                    const datasets = (trendPayload.series || []).map((series, index) => {
-                        const color = colors[index % colors.length];
+            <div class="mt-5 overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-white/10 text-left text-slate-400">
+                            <th class="px-3 py-1.5">ร้าน</th>
+                            <th class="px-3 py-1.5">ยอดขาย</th>
+                            <th class="px-3 py-1.5">ค่าแอด</th>
+                            <th class="px-3 py-1.5">กำไร</th>
+                            <th class="px-3 py-1.5">ROAS</th>
+                            <th class="px-3 py-1.5">อัตรากำไร</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($comparisonRows as $row): ?>
+                            <?php
+                            $rowRevenue = (float)($row['total_revenue'] ?? 0);
+                            $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
+                            $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                            $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
+                            $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                            ?>
+                            <tr class="border-b border-white/[0.06] table-row-hover">
+                                <td class="px-3 py-1.5 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
+                                <td class="px-3 py-1.5 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
+                                <td class="px-3 py-1.5 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
+                                <td class="px-3 py-1.5 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                                <td class="px-3 py-1.5 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
+                                <td class="px-3 py-1.5 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                    <tfoot>
+                        <?php
+                        $totalRevenue = (float)($totals['total_revenue'] ?? 0);
+                        $totalAdCost = (float)($totals['total_ad_cost'] ?? 0);
+                        $totalProfit = (float)($totals['profit'] ?? ($totalRevenue - $totalAdCost));
+                        $totalRoas = isset($totals['roas']) && $totals['roas'] !== null ? (float)$totals['roas'] : null;
+                        $totalProfitMargin = isset($totals['profit_margin']) && $totals['profit_margin'] !== null ? (float)$totals['profit_margin'] : null;
+                        ?>
+                        <tr class="border-t border-white/10 bg-white/[0.03] font-semibold">
+                            <td class="px-3 py-2 text-slate-200">รวมทุกร้าน</td>
+                            <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
+                            <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
+                            <td class="px-3 py-2 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
+                            <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
+                            <td class="px-3 py-2 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
 
-                        return {
-                            label: series.shop_name || 'ร้านค้า',
-                            data: series.revenue || [],
-                            borderColor: color,
-                            backgroundColor: color,
-                            tension: 0.3,
-                            fill: false
-                        };
-                    });
+            <section class="section-card mt-6 p-5">
+                <div class="mb-3 flex items-center justify-between gap-2">
+                    <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งเปรียบเทียบระหว่างร้าน</h2>
+                    <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
+                </div>
+                <div class="h-80 w-full overflow-x-auto">
+                    <div style="min-width: <?= max(100, count($barPayload['labels']) * 120) ?>px; height: 100%;">
+                        <canvas id="overview-bar-chart"></canvas>
+                    </div>
+                </div>
+            </section>
 
-                    new Chart(trendCanvas, {
-                        type: 'line',
-                        data: {
-                            labels: trendPayload.labels,
-                            datasets: datasets
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: {
-                                mode: 'index',
-                                intersect: false
-                            },
-                            scales: {
-                                x: {
-                                    ticks: {
-                                        color: '#94a3b8'
+            <section class="section-card mt-6 p-5">
+                <div class="mb-3 flex items-center justify-between gap-2">
+                    <h2 class="text-lg font-semibold text-slate-100">กราฟเส้นแนวโน้มทุกร้าน (6 เดือนย้อนหลัง)</h2>
+                    <span class="text-xs text-slate-400">เส้นแต่ละร้าน = ยอดขายรายเดือน</span>
+                </div>
+                <div class="h-80">
+                    <canvas id="overview-trend-chart"></canvas>
+                </div>
+            </section>
+
+            <script>
+                (function() {
+                    const barPayload = <?= json_encode($barPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                    const trendPayload = <?= json_encode($trendPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+                    const barCanvas = document.getElementById('overview-bar-chart');
+                    if (barCanvas) {
+                        new Chart(barCanvas, {
+                            type: 'bar',
+                            data: {
+                                labels: barPayload.labels,
+                                datasets: [{
+                                        label: 'ยอดขาย',
+                                        data: barPayload.revenue,
+                                        backgroundColor: '#f97316'
                                     },
-                                    grid: {
-                                        color: 'rgba(255, 255, 255, 0.06)'
+                                    {
+                                        label: 'ค่าแอด',
+                                        data: barPayload.ad_cost,
+                                        backgroundColor: '#06b6d4'
+                                    },
+                                    {
+                                        label: 'กำไร',
+                                        data: barPayload.profit,
+                                        backgroundColor: '#22c55e'
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: {
+                                    mode: 'index',
+                                    intersect: false
+                                },
+                                scales: {
+                                    x: {
+                                        ticks: {
+                                            color: '#94a3b8'
+                                        },
+                                        grid: {
+                                            color: 'rgba(255, 255, 255, 0.06)'
+                                        }
+                                    },
+                                    y: {
+                                        ticks: {
+                                            color: '#94a3b8',
+                                            callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
+                                        },
+                                        grid: {
+                                            color: 'rgba(255, 255, 255, 0.06)'
+                                        }
                                     }
                                 },
-                                y: {
-                                    ticks: {
-                                        color: '#94a3b8',
-                                        callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
+                                plugins: {
+                                    legend: {
+                                        labels: {
+                                            color: '#cbd5e1'
+                                        }
                                     },
-                                    grid: {
-                                        color: 'rgba(255, 255, 255, 0.06)'
-                                    }
-                                }
-                            },
-                            plugins: {
-                                legend: {
-                                    labels: {
-                                        color: '#cbd5e1'
-                                    }
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: (context) => context.dataset.label + ': ฿' + Number(context.raw || 0).toLocaleString('th-TH')
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (context) => context.dataset.label + ': ฿' + Number(context.raw || 0).toLocaleString('th-TH')
+                                        }
                                     }
                                 }
                             }
-                        }
-                    });
-                }
-            })();
-        </script>
+                        });
+                    }
+
+                    const trendCanvas = document.getElementById('overview-trend-chart');
+                    if (trendCanvas) {
+                        const colors = ['#f97316', '#06b6d4', '#22c55e', '#eab308', '#a78bfa', '#f43f5e'];
+                        const datasets = (trendPayload.series || []).map((series, index) => {
+                            const color = colors[index % colors.length];
+
+                            return {
+                                label: series.shop_name || 'ร้านค้า',
+                                data: series.revenue || [],
+                                borderColor: color,
+                                backgroundColor: color,
+                                tension: 0.3,
+                                fill: false
+                            };
+                        });
+
+                        new Chart(trendCanvas, {
+                            type: 'line',
+                            data: {
+                                labels: trendPayload.labels,
+                                datasets: datasets
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: {
+                                    mode: 'index',
+                                    intersect: false
+                                },
+                                scales: {
+                                    x: {
+                                        ticks: {
+                                            color: '#94a3b8'
+                                        },
+                                        grid: {
+                                            color: 'rgba(255, 255, 255, 0.06)'
+                                        }
+                                    },
+                                    y: {
+                                        ticks: {
+                                            color: '#94a3b8',
+                                            callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
+                                        },
+                                        grid: {
+                                            color: 'rgba(255, 255, 255, 0.06)'
+                                        }
+                                    }
+                                },
+                                plugins: {
+                                    legend: {
+                                        labels: {
+                                            color: '#cbd5e1'
+                                        }
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (context) => context.dataset.label + ': ฿' + Number(context.raw || 0).toLocaleString('th-TH')
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                })();
+            </script>
+        <?php endif; ?>
     <?php endif; ?>
 </section>
 <?php require __DIR__ . '/includes/footer.php'; ?>
