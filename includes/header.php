@@ -502,7 +502,7 @@ $flashError = get_flash('error');
         }
 
         .progress-green {
-            background: linear-gradient(90deg, #10b981, #34d399, #10b981);
+            background: linear-gradient(90deg, #10b981, #6ee7b7, #10b981);
             background-size: 200% 100%;
             box-shadow: 0 0 15px rgba(16, 185, 129, .50);
             animation: shimmer 2s ease-in-out infinite;
