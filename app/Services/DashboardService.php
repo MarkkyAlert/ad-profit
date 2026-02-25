@@ -24,7 +24,8 @@ class DashboardService
         int $shopId,
         string $rangeType,
         ?string $customStartDate,
-        ?string $customEndDate
+        ?string $customEndDate,
+        ?string $selectedMonth
     ): array {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
@@ -33,7 +34,7 @@ class DashboardService
             ];
         }
 
-        $range = $this->resolveRange($rangeType, $customStartDate, $customEndDate);
+        $range = $this->resolveRange($rangeType, $customStartDate, $customEndDate, $selectedMonth);
         if (($range['success'] ?? false) !== true) {
             return [
                 'success' => false,
@@ -125,10 +126,10 @@ class DashboardService
         ];
     }
 
-    private function resolveRange(string $rangeType, ?string $customStartDate, ?string $customEndDate): array
+    private function resolveRange(string $rangeType, ?string $customStartDate, ?string $customEndDate, ?string $selectedMonth): array
     {
         $today = new DateTimeImmutable('today');
-        $normalizedRangeType = in_array($rangeType, ['week_this', 'week_last', 'month_this', 'month_last', 'custom'], true)
+        $normalizedRangeType = in_array($rangeType, ['week_this', 'week_last', 'month_this', 'month_last', 'month_pick', 'custom'], true)
             ? $rangeType
             : 'month_this';
 
@@ -200,6 +201,37 @@ class DashboardService
                     'is_monthly' => false,
                     'selected_month' => null,
                     'previous_month' => null,
+                    'custom_start_date' => null,
+                    'custom_end_date' => null,
+                ],
+            ];
+        }
+
+        if ($normalizedRangeType === 'month_pick') {
+            $pickedMonth = is_string($selectedMonth) ? trim($selectedMonth) : '';
+            if (!$this->isValidMonth($pickedMonth)) {
+                $pickedMonth = date('Y-m');
+            }
+
+            $monthStart = DateTimeImmutable::createFromFormat('Y-m-d', $pickedMonth . '-01');
+            if (!$monthStart) {
+                $monthStart = $today->modify('first day of this month');
+                $pickedMonth = $monthStart->format('Y-m');
+            }
+
+            $monthEnd = $monthStart->modify('last day of this month');
+            $previousMonth = $monthStart->modify('-1 month')->format('Y-m');
+
+            return [
+                'success' => true,
+                'data' => [
+                    'type' => 'month_pick',
+                    'label' => 'เลือกเดือน',
+                    'start_date' => $monthStart->format('Y-m-d'),
+                    'end_date' => $monthEnd->format('Y-m-d'),
+                    'is_monthly' => true,
+                    'selected_month' => $pickedMonth,
+                    'previous_month' => $previousMonth,
                     'custom_start_date' => null,
                     'custom_end_date' => null,
                 ],

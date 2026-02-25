@@ -18,13 +18,14 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
 $rangeType = isset($_GET['range']) ? trim((string)$_GET['range']) : 'month_this';
-$allowedRangeTypes = ['week_this', 'week_last', 'month_this', 'month_last', 'custom'];
+$allowedRangeTypes = ['week_this', 'week_last', 'month_this', 'month_last', 'month_pick', 'custom'];
 if (!in_array($rangeType, $allowedRangeTypes, true)) {
     $rangeType = 'month_this';
 }
 
 $customStartDate = isset($_GET['start_date']) ? trim((string)$_GET['start_date']) : null;
 $customEndDate = isset($_GET['end_date']) ? trim((string)$_GET['end_date']) : null;
+$selectedMonth = isset($_GET['month']) ? trim((string)$_GET['month']) : null;
 
 if ($customStartDate === '') {
     $customStartDate = null;
@@ -34,12 +35,16 @@ if ($customEndDate === '') {
     $customEndDate = null;
 }
 
+if ($selectedMonth === '') {
+    $selectedMonth = null;
+}
+
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
 $goalRepository = new GoalRepository($pdo);
 $dashboardService = new DashboardService($recordRepository, $shopRepository, $goalRepository);
 
-$result = $dashboardService->buildDashboard($userId, $shopId, $rangeType, $customStartDate, $customEndDate);
+$result = $dashboardService->buildDashboard($userId, $shopId, $rangeType, $customStartDate, $customEndDate, $selectedMonth);
 
 if (($result['success'] ?? false) !== true) {
     $errorMessage = (string)($result['error'] ?? 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้');

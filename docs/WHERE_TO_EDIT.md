@@ -147,7 +147,7 @@ define('PASSWORD_MIN_LENGTH', 8);
 - Repository: `app/Repositories/ShopRepository.php`
 
 **ตัวอย่าง:**
-- จำกัดจำนวนร้านไม่เกิน 5: เพิ่มเงื่อนไขใน `ShopService->createShop()`
+- จำกัดจำนวนร้านไม่เกิน 20: เพิ่มเงื่อนไขใน `ShopService->createShop()`
 - เปลี่ยนชื่อร้านเริ่มต้น: แก้ constant `DEFAULT_SHOP_NAME` ใน `AuthService.php`
 
 ### 4.4 ถ้าอยากเปลี่ยนการแสดงผลใน Dashboard

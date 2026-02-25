@@ -12,6 +12,7 @@ $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 $selectedRangeType = (string)($_GET['range'] ?? 'month_this');
 $customStartDateInput = isset($_GET['start_date']) ? trim((string)$_GET['start_date']) : null;
 $customEndDateInput = isset($_GET['end_date']) ? trim((string)$_GET['end_date']) : null;
+$selectedMonthInput = isset($_GET['month']) ? trim((string)$_GET['month']) : null;
 
 if ($customStartDateInput === '') {
     $customStartDateInput = null;
@@ -19,6 +20,10 @@ if ($customStartDateInput === '') {
 
 if ($customEndDateInput === '') {
     $customEndDateInput = null;
+}
+
+if ($selectedMonthInput === '') {
+    $selectedMonthInput = null;
 }
 
 $shopRepository = new ShopRepository($pdo);
@@ -31,14 +36,15 @@ $dashboardResult = $dashboardService->buildDashboard(
     $shopId,
     $selectedRangeType,
     $customStartDateInput,
-    $customEndDateInput
+    $customEndDateInput,
+    $selectedMonthInput
 );
 
 $dashboardError = null;
 
 if (($dashboardResult['success'] ?? false) !== true) {
     $dashboardError = (string)($dashboardResult['error'] ?? 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้');
-    $dashboardResult = $dashboardService->buildDashboard($userId, $shopId, 'month_this', null, null);
+    $dashboardResult = $dashboardService->buildDashboard($userId, $shopId, 'month_this', null, null, null);
 }
 
 $dashboardData = [
@@ -187,6 +193,10 @@ $rangeStart = (string)($rangeData['start_date'] ?? date('Y-m-01'));
 $rangeEnd = (string)($rangeData['end_date'] ?? date('Y-m-t'));
 $customStart = (string)($rangeData['custom_start_date'] ?? '');
 $customEnd = (string)($rangeData['custom_end_date'] ?? '');
+$monthPickerValue = is_string($rangeData['selected_month'] ?? null) ? (string)$rangeData['selected_month'] : date('Y-m');
+if (preg_match('/^\d{4}-\d{2}$/', $monthPickerValue) !== 1) {
+    $monthPickerValue = date('Y-m');
+}
 
 $goalMonth = is_string($goalData['goal_month'] ?? null) ? (string)$goalData['goal_month'] : date('Y-m');
 if (preg_match('/^\d{4}-\d{2}$/', $goalMonth) !== 1) {
@@ -194,6 +204,10 @@ if (preg_match('/^\d{4}-\d{2}$/', $goalMonth) !== 1) {
 }
 
 $goalHasGoal = (bool)($goalData['has_goal'] ?? false);
+$goalMonthLabel = formatThaiMonth($goalMonth);
+$goalActionText = $goalHasGoal
+    ? 'แก้ไขเป้าหมายเดือน ' . $goalMonthLabel
+    : '🎯 ตั้งเป้าเดือน ' . $goalMonthLabel;
 $goalTargetRevenue = isset($goalData['target_revenue']) && $goalData['target_revenue'] !== null
     ? (float)$goalData['target_revenue']
     : null;
@@ -248,6 +262,7 @@ require __DIR__ . '/includes/header.php';
                     <option value="week_last" <?= $selectedRange === 'week_last' ? 'selected' : '' ?>>สัปดาห์ก่อน</option>
                     <option value="month_this" <?= $selectedRange === 'month_this' ? 'selected' : '' ?>>เดือนนี้</option>
                     <option value="month_last" <?= $selectedRange === 'month_last' ? 'selected' : '' ?>>เดือนก่อน</option>
+                    <option value="month_pick" <?= $selectedRange === 'month_pick' ? 'selected' : '' ?>>เลือกเดือน (ย้อนหลัง)</option>
                     <option value="custom" <?= $selectedRange === 'custom' ? 'selected' : '' ?>>กำหนดเอง</option>
                 </select>
             </div>
@@ -260,6 +275,13 @@ require __DIR__ . '/includes/header.php';
                 <div>
                     <label for="custom-end-date" class="mb-1 block text-xs text-slate-400">สิ้นสุด</label>
                     <input id="custom-end-date" name="end_date" type="date" value="<?= e($customEnd) ?>" class="rounded-xl px-3 py-2 text-sm transition-all">
+                </div>
+            </div>
+
+            <div id="month-pick-field" class="flex flex-wrap items-end gap-3 <?= $selectedRange === 'month_pick' ? '' : 'hidden' ?>">
+                <div>
+                    <label for="month-pick-input" class="mb-1 block text-xs text-slate-400">เดือน</label>
+                    <input id="month-pick-input" name="month" type="month" value="<?= e($monthPickerValue) ?>" class="rounded-xl px-3 py-2 text-sm transition-all">
                 </div>
             </div>
 
@@ -351,13 +373,13 @@ require __DIR__ . '/includes/header.php';
             type="button"
             data-open-goal-modal
             class="btn-teal px-4 py-2 text-sm">
-            <?= $goalHasGoal ? 'แก้ไขเป้าหมาย' : '🎯 ตั้งเป้าเดือนนี้' ?>
+            <?= e($goalActionText) ?>
         </button>
     </div>
 
     <?php if (!$goalHasGoal): ?>
         <div class="mt-4 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-            ยังไม่ได้ตั้งเป้าหมายสำหรับเดือนนี้
+            ยังไม่ได้ตั้งเป้าหมายสำหรับเดือน <?= e($goalMonthLabel) ?>
         </div>
     <?php else: ?>
         <?php if ($goalAchieved): ?>
@@ -400,14 +422,14 @@ require __DIR__ . '/includes/header.php';
             <?php endif; ?>
         </div>
 
-        <form id="delete-goal-form" action="<?= e(app_url('/api/goals.php')) ?>" method="post" class="mt-4" data-confirm="ยืนยันการลบเป้าหมายของเดือนนี้ใช่หรือไม่?">
+        <form id="delete-goal-form" action="<?= e(app_url('/api/goals.php')) ?>" method="post" class="mt-4" data-confirm="ยืนยันการลบเป้าหมายของเดือน <?= e($goalMonthLabel) ?> ใช่หรือไม่?">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="goal_month" value="<?= e($goalMonth) ?>">
             <input type="hidden" name="redirect_to" value="<?= e($goalRedirectTo) ?>">
 
             <button type="submit" class="btn-danger px-4 py-2 text-sm">
-                🗑️ ลบเป้าหมายเดือนนี้
+                🗑️ ลบเป้าหมายเดือน <?= e($goalMonthLabel) ?>
             </button>
         </form>
     <?php endif; ?>
@@ -416,7 +438,7 @@ require __DIR__ . '/includes/header.php';
 <div id="goal-modal" class="modal-bg fixed inset-0 z-50 hidden items-center justify-center p-4">
     <div class="section-card w-full max-w-lg p-6 shadow-2xl shadow-black/50">
         <div class="mb-5 flex items-center justify-between">
-            <h2 class="text-lg font-bold text-slate-100"><?= $goalHasGoal ? '✏️ แก้ไขเป้าหมายรายเดือน' : '🎯 ตั้งเป้าหมายรายเดือน' ?></h2>
+            <h2 class="text-lg font-bold text-slate-100"><?= e($goalHasGoal ? '✏️ แก้ไขเป้าหมายเดือน ' . $goalMonthLabel : '🎯 ตั้งเป้าหมายเดือน ' . $goalMonthLabel) ?></h2>
             <button type="button" id="close-goal-modal" class="btn-ghost rounded-lg px-3 py-1 text-sm">ปิด ✕</button>
         </div>
 
@@ -493,8 +515,10 @@ require __DIR__ . '/includes/header.php';
         const rangeForm = document.getElementById('dashboard-range-form');
         const rangeSelect = document.getElementById('range-type');
         const customFields = document.getElementById('custom-range-fields');
+        const monthPickField = document.getElementById('month-pick-field');
         const startInput = document.getElementById('custom-start-date');
         const endInput = document.getElementById('custom-end-date');
+        const monthInput = document.getElementById('month-pick-input');
         const goalModal = document.getElementById('goal-modal');
         const openGoalModalButtons = document.querySelectorAll('[data-open-goal-modal]');
         const closeGoalModalButton = document.getElementById('close-goal-modal');
@@ -504,15 +528,25 @@ require __DIR__ . '/includes/header.php';
         const dailyPayload = <?= json_encode($dailyChartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         const sixMonthPayload = <?= json_encode($sixMonthPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
-        const toggleCustomFields = () => {
-            if (!customFields || !rangeSelect) {
+        const toggleRangeFields = () => {
+            if (!rangeSelect) {
                 return;
             }
 
-            if (rangeSelect.value === 'custom') {
-                customFields.classList.remove('hidden');
-            } else {
-                customFields.classList.add('hidden');
+            if (customFields) {
+                if (rangeSelect.value === 'custom') {
+                    customFields.classList.remove('hidden');
+                } else {
+                    customFields.classList.add('hidden');
+                }
+            }
+
+            if (monthPickField) {
+                if (rangeSelect.value === 'month_pick') {
+                    monthPickField.classList.remove('hidden');
+                } else {
+                    monthPickField.classList.add('hidden');
+                }
             }
         };
 
@@ -521,19 +555,29 @@ require __DIR__ . '/includes/header.php';
                 return;
             }
 
-            if (rangeSelect.value !== 'custom') {
-                rangeForm.submit();
+            if (rangeSelect.value === 'custom') {
+                if (startInput && endInput && startInput.value !== '' && endInput.value !== '') {
+                    rangeForm.submit();
+                }
                 return;
             }
 
-            if (startInput && endInput && startInput.value !== '' && endInput.value !== '') {
+            if (rangeSelect.value === 'month_pick') {
+                if (monthInput && monthInput.value !== '') {
+                    rangeForm.submit();
+                }
+                return;
+            }
+
+            if (rangeSelect.value !== 'custom') {
                 rangeForm.submit();
+                return;
             }
         };
 
         if (rangeSelect) {
             rangeSelect.addEventListener('change', () => {
-                toggleCustomFields();
+                toggleRangeFields();
                 autoSubmitIfReady();
             });
         }
@@ -546,7 +590,11 @@ require __DIR__ . '/includes/header.php';
             endInput.addEventListener('change', autoSubmitIfReady);
         }
 
-        toggleCustomFields();
+        if (monthInput) {
+            monthInput.addEventListener('change', autoSubmitIfReady);
+        }
+
+        toggleRangeFields();
 
         if (goalModal) {
             const openGoalModal = () => {

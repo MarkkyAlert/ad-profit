@@ -58,6 +58,14 @@ class ShopService
             ];
         }
 
+        $currentShopCount = $this->shopRepository->countByUserId($userId);
+        if ($currentShopCount >= 20) {
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถสร้างร้านค้าเพิ่มได้ (จำกัดสูงสุด 20 ร้านต่อผู้ใช้งาน)',
+            ];
+        }
+
         $startedTransaction = false;
         $canLockRows = false;
         try {
