@@ -220,6 +220,44 @@ class RecordRepository
     /**
      * @param int[] $shopIds
      */
+    public function getDailyTotalsByShopIdsAndDateRange(array $shopIds, string $startDate, string $endDate): array
+    {
+        $shopIds = array_values(array_unique(array_filter(array_map('intval', $shopIds), static fn(int $id): bool => $id > 0)));
+        if ($shopIds === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $params = [
+            ':start_date' => $startDate,
+            ':end_date' => $endDate,
+        ];
+
+        foreach ($shopIds as $index => $shopId) {
+            $key = ':shop_id_' . $index;
+            $placeholders[] = $key;
+            $params[$key] = $shopId;
+        }
+
+        $sql = 'SELECT record_date,
+                       SUM(revenue) AS total_revenue,
+                       SUM(ad_cost) AS total_ad_cost,
+                       COUNT(*) AS shops_count
+                FROM daily_records
+                WHERE shop_id IN (' . implode(', ', $placeholders) . ')
+                  AND record_date BETWEEN :start_date AND :end_date
+                GROUP BY record_date
+                ORDER BY record_date ASC';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * @param int[] $shopIds
+     */
     public function getMonthlyTotalsByShopIdsAndMonthRange(array $shopIds, string $startMonth, string $endMonth): array
     {
         $shopIds = array_values(array_unique(array_filter(array_map('intval', $shopIds), static fn(int $id): bool => $id > 0)));
