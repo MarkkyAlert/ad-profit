@@ -1,5 +1,16 @@
 {
     "require": {
         "phpmailer/phpmailer": "^7.0"
+    },
+    "autoload-dev": {
+        "classmap": [
+            "app/"
+        ]
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.2"
     }
 }
