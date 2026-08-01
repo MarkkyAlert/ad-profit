@@ -60,6 +60,15 @@ PHP ที่รองรับ: **≥ 8.1** (โค้ดใช้ `never` retu
 - **Rate limiting:** auth ใช้ตาราง `auth_rate_limits` (DB) + fallback session; profile (email/password) ใช้ session-based ตอบ 429
 - **Security extra:** CSV export กัน formula injection (เติม `'` หน้า cell ที่ขึ้นต้น `= + - @ \t \r`) — **guard นี้อยู่ใน controller `api/export.php` (closure `$sanitizeCsvCell`) ไม่ใช่ `ExportService` → unit-test ที่ระดับ service ไม่ได้ ต้องเทสต์ผ่าน integration ที่ยิง endpoint จริง**; reset token เก็บเป็น hash + TTL, security headers เซ็ตใน bootstrap
 
+## Logic ที่อยู่ที่ controller/view (ไม่ใช่ service)
+
+> จุดที่ business logic หลุดออกจาก Service มาอยู่ที่ controller/page — ต้องรู้ก่อนแก้ (verified จากโค้ดจริง)
+
+- **ปี (พ.ศ. + clamp):** controller (`annual.php:19-26`, `overview.php:31-38`, `api/annual-data.php:26-33`) แปลง พ.ศ. −543 (ช่วง 2400–2700) แล้ว clamp 2000–2100 (นอกช่วง → ปีปัจจุบัน) — **ตรรกะซ้ำ 3 ที่**; `AnnualService`/`OverviewAnnualService` `isValidYear` แค่ reject (2000–2100) **ไม่แปลง/ไม่ clamp**
+- **Rate-limit ของ profile:** อยู่ใน `api/profile.php:31-91` เป็น closure session-based (5 ครั้ง/60s → 429) **ไม่ได้อยู่ใน `ProfileService`** — ต่างจาก `AuthService` ที่ rate-limit อยู่ใน service (ระวังตอนแก้/เพิ่ม rate-limit อย่าถือว่าเป็น pattern เดียวกัน)
+- **Shop delete:** `api/shops.php:152-160` เรียก `ShopRepository->findByIdAndUserId` **ตรง** + ตัดชื่อร้าน 20 ตัวแรก (`mb_substr`) เทียบ `confirm_shop_name` เอง — เป็นจุดเดียวใน `api/` ที่ controller แตะ repo ตรงเพื่อ logic; typed-confirm rule อยู่ที่ controller **ไม่ใช่ `ShopService`**
+- **สูตร profit/ROAS/margin ซ้ำใน view:** `RecordService->getRecentRecords()` คืน row ดิบ → `add-record.php:138-141` คำนวณ profit/ROAS เองในเพจ; `AnnualService` summary **ไม่มี** `profit_margin` → `annual.php:80` คำนวณ margin เอง (`OverviewAnnualService` มีให้แล้ว) ⚠️ **แก้สูตร profit/ROAS/margin ต้องตามไปอัปเดต view เหล่านี้ด้วย ไม่ใช่แค่ service**
+
 ---
 
 ## การเทสต์ (Testing)
