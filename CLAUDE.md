@@ -58,7 +58,7 @@ PHP ที่รองรับ: **≥ 8.1** (โค้ดใช้ `never` retu
 - **`database/schema.sql` เป็น DROP + CREATE** — ห้ามรันทับ database จริง; ถ้าจะแก้โครงบน DB ที่มีข้อมูล ใช้ `ALTER` แยกต่างหาก
 - **Auth/Session:** idle timeout 14400s, absolute 86400s; `requireAuth`/`requireGuest` เป็น guard; `isSessionVersionValid()` เช็ก DB **ทุก request**
 - **Rate limiting:** auth ใช้ตาราง `auth_rate_limits` (DB) + fallback session; profile (email/password) ใช้ session-based ตอบ 429
-- **Security extra:** CSV export กัน formula injection (เติม `'` หน้า `= + - @`), reset token เก็บเป็น hash + TTL, security headers เซ็ตใน bootstrap
+- **Security extra:** CSV export กัน formula injection (เติม `'` หน้า cell ที่ขึ้นต้น `= + - @ \t \r`) — **guard นี้อยู่ใน controller `api/export.php` (closure `$sanitizeCsvCell`) ไม่ใช่ `ExportService` → unit-test ที่ระดับ service ไม่ได้ ต้องเทสต์ผ่าน integration ที่ยิง endpoint จริง**; reset token เก็บเป็น hash + TTL, security headers เซ็ตใน bootstrap
 
 ---
 
@@ -109,7 +109,7 @@ assert แบบ **result-array** (`assertFalse($result['success'])`, `assertStr
 - `GoalService`: ไม่กรอกเป้าเลย → fail
 - `ShopService`: สร้างเกิน 20 ร้าน → fail, ลบร้านสุดท้าย → fail
 - `ProfileService`: display_name > 120 → fail, change email/password (verify รหัสเดิม, รหัสใหม่ต้องต่างเดิม)
-- `ExportService`: รูปแบบ CSV + กัน formula injection (`= + - @` ถูกเติม `'`)
+- `ExportService`: รูปแบบ CSV (header/rows/totals) + `buildMonthlyCsvFilename` sanitize ชื่อไฟล์ (⚠️ **การกัน formula injection (เติม `'` หน้า cell ที่ขึ้นต้น `= + - @ \t \r`) อยู่ที่ controller `api/export.php` (closure `$sanitizeCsvCell` ตอนเขียน CSV จริง) ไม่ใช่ใน Service** — `buildMonthlyCsvPayload()` คืน payload ดิบ (`note` ส่งผ่านตรง ๆ) → อย่าเขียน unit test formula-injection ที่ Service)
 - `AnnualService`: `isValidYear` รับ **2000–2100** เท่านั้น (⚠️ **การแปลงปี พ.ศ. −543 อยู่ที่ controller** เช่น `annual-data.php`/`annual.php`/`overview.php` **ไม่ใช่ใน Service** — อย่าเขียน unit test แปลงปีที่ Service)
 - `OverviewService`/`OverviewDailyService`/`OverviewAnnualService`: `can_view` = จำนวนร้าน ≥ 2
 - `DashboardService`: สูตร profit / ROAS (ad_cost=0 → null) / margin (DashboardService ไม่ยุ่งกับปี)
