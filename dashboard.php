@@ -113,6 +113,13 @@ $dashboardData = [
         'revenue_reached' => false,
         'profit_reached' => false,
         'is_achieved' => false,
+        'pace_applicable' => false,
+        'month_status' => 'ended',
+        'days_remaining' => null,
+        'remaining_revenue' => null,
+        'remaining_profit' => null,
+        'required_per_day_revenue' => null,
+        'required_per_day_profit' => null,
     ],
     'charts' => [
         'daily' => [
@@ -243,6 +250,31 @@ $goalProgressProfit = isset($goalData['progress_profit']) && $goalData['progress
 $goalRevenueReached = (bool)($goalData['revenue_reached'] ?? false);
 $goalProfitReached = (bool)($goalData['profit_reached'] ?? false);
 $goalAchieved = (bool)($goalData['is_achieved'] ?? false);
+
+// pace — ต้องได้อีกวันละเท่าไรถึงถึงเป้า (โชว์เฉพาะเดือนที่ยังไล่ทัน)
+$goalPaceApplicable = (bool)($goalData['pace_applicable'] ?? false);
+$goalDaysRemaining = isset($goalData['days_remaining']) && $goalData['days_remaining'] !== null
+    ? (int)$goalData['days_remaining']
+    : null;
+$goalPerDayRevenue = isset($goalData['required_per_day_revenue']) && $goalData['required_per_day_revenue'] !== null
+    ? (float)$goalData['required_per_day_revenue']
+    : null;
+$goalPerDayProfit = isset($goalData['required_per_day_profit']) && $goalData['required_per_day_profit'] !== null
+    ? (float)$goalData['required_per_day_profit']
+    : null;
+$goalRemainingRevenue = isset($goalData['remaining_revenue']) && $goalData['remaining_revenue'] !== null
+    ? (float)$goalData['remaining_revenue']
+    : null;
+$goalRemainingProfit = isset($goalData['remaining_profit']) && $goalData['remaining_profit'] !== null
+    ? (float)$goalData['remaining_profit']
+    : null;
+
+$showRevenuePace = $goalPaceApplicable && !$goalRevenueReached
+    && $goalRemainingRevenue !== null && $goalRemainingRevenue > 0
+    && $goalPerDayRevenue !== null && $goalDaysRemaining !== null;
+$showProfitPace = $goalPaceApplicable && !$goalProfitReached
+    && $goalRemainingProfit !== null && $goalRemainingProfit > 0
+    && $goalPerDayProfit !== null && $goalDaysRemaining !== null;
 $goalRevenueProgressWidth = $goalProgressRevenue !== null ? max(0.0, min(100.0, $goalProgressRevenue)) : 0.0;
 $goalProfitProgressWidth = $goalProgressProfit !== null ? max(0.0, min(100.0, $goalProgressProfit)) : 0.0;
 $goalRedirectTo = (string)($_SERVER['REQUEST_URI'] ?? '/dashboard.php');
@@ -450,6 +482,12 @@ require __DIR__ . '/includes/header.php';
                     </div>
                     <?php if ($goalRevenueReached): ?>
                         <p class="mt-2 text-xs font-medium text-green-400">🎉 เป้ารายได้สำเร็จแล้ว</p>
+                    <?php elseif ($showRevenuePace): ?>
+                        <p class="mt-2 text-xs text-slate-300">
+                            เหลือ <?= e((string)$goalDaysRemaining) ?> วัน · ต้องได้อีกวันละ
+                            <span class="font-semibold text-orange-400"><?= e(formatMoney($goalPerDayRevenue)) ?></span>
+                            ถึงเป้ารายได้
+                        </p>
                     <?php endif; ?>
                 </article>
             <?php endif; ?>
@@ -466,6 +504,12 @@ require __DIR__ . '/includes/header.php';
                     </div>
                     <?php if ($goalProfitReached): ?>
                         <p class="mt-2 text-xs font-medium text-green-400">🎉 เป้ากำไรสำเร็จแล้ว</p>
+                    <?php elseif ($showProfitPace): ?>
+                        <p class="mt-2 text-xs text-slate-300">
+                            เหลือ <?= e((string)$goalDaysRemaining) ?> วัน · ต้องได้อีกวันละ
+                            <span class="font-semibold text-green-400"><?= e(formatMoney($goalPerDayProfit)) ?></span>
+                            ถึงเป้ากำไร
+                        </p>
                     <?php endif; ?>
                 </article>
             <?php endif; ?>

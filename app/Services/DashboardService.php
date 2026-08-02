@@ -25,7 +25,8 @@ class DashboardService
         string $rangeType,
         ?string $customStartDate,
         ?string $customEndDate,
-        ?string $selectedMonth
+        ?string $selectedMonth,
+        ?string $today = null
     ): array {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
@@ -56,7 +57,7 @@ class DashboardService
             $sixMonthChart = $this->buildSixMonthChart($shopId, (string)$rangeData['end_date']);
             $comparison = $this->buildMonthlyComparison($shopId, $rangeData);
             $goalMonth = $this->resolveGoalMonth($rangeData);
-            $goalProgress = $this->buildGoalProgress($shopId, $goalMonth);
+            $goalProgress = $this->buildGoalProgress($shopId, $goalMonth, $today);
         } catch (Throwable $exception) {
             error_log('[dashboard] buildDashboard failed: ' . $exception->getMessage());
             return [
@@ -449,7 +450,93 @@ class DashboardService
         ];
     }
 
-    private function buildGoalProgress(int $shopId, string $goalMonth): array
+    /**
+     * คำนวณ "pace" ของเป้าหมาย — ต้องได้อีกวันละเท่าไรถึงจะถึงเป้า
+     *
+     * เป็น pure function (ไม่แตะ repository) รับตัวเลขที่คำนวณมาแล้วเข้ามาล้วน
+     * days_remaining นับ **รวมวันนี้** สำหรับเดือนปัจจุบัน
+     *
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์
+     */
+    public function calculateGoalPace(
+        ?float $targetRevenue,
+        float $actualRevenue,
+        ?float $targetProfit,
+        float $actualProfit,
+        string $goalMonth,
+        ?string $today = null
+    ): array {
+        $default = [
+            'pace_applicable' => false,
+            'month_status' => 'ended',
+            'days_remaining' => null,
+            'remaining_revenue' => null,
+            'remaining_profit' => null,
+            'required_per_day_revenue' => null,
+            'required_per_day_profit' => null,
+        ];
+
+        if (!$this->isValidMonth($goalMonth)) {
+            return $default;
+        }
+
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
+            : false;
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            $todayObject = new DateTimeImmutable('today');
+        }
+        $todayObject = $todayObject->setTime(0, 0, 0);
+
+        $currentMonth = $todayObject->format('Y-m');
+
+        if ($goalMonth < $currentMonth) {
+            // เดือนจบไปแล้ว — ไม่มี pace ให้ไล่
+            return $default;
+        }
+
+        $monthStart = DateTimeImmutable::createFromFormat('Y-m-d', $goalMonth . '-01');
+        if (!$monthStart) {
+            return $default;
+        }
+        $monthStart = $monthStart->setTime(0, 0, 0);
+        $daysInMonth = (int)$monthStart->format('t');
+
+        if ($goalMonth === $currentMonth) {
+            $monthStatus = 'current';
+            // รวมวันนี้ด้วย เช่น วันสิ้นเดือน → เหลือ 1 วัน
+            $daysRemaining = $daysInMonth - (int)$todayObject->format('j') + 1;
+        } else {
+            $monthStatus = 'upcoming';
+            $daysRemaining = $daysInMonth;
+        }
+
+        $daysRemaining = max(0, $daysRemaining);
+
+        $remainingRevenue = $targetRevenue !== null ? max(0.0, $targetRevenue - $actualRevenue) : null;
+        $remainingProfit = $targetProfit !== null ? max(0.0, $targetProfit - $actualProfit) : null;
+
+        $perDay = static function (?float $remaining) use ($daysRemaining): ?float {
+            if ($remaining === null || $daysRemaining <= 0) {
+                return null;
+            }
+
+            return round($remaining / $daysRemaining, 2);
+        };
+
+        return [
+            'pace_applicable' => true,
+            'month_status' => $monthStatus,
+            'days_remaining' => $daysRemaining,
+            'remaining_revenue' => $remainingRevenue,
+            'remaining_profit' => $remainingProfit,
+            'required_per_day_revenue' => $perDay($remainingRevenue),
+            'required_per_day_profit' => $perDay($remainingProfit),
+        ];
+    }
+
+    private function buildGoalProgress(int $shopId, string $goalMonth, ?string $today = null): array
     {
         if (!$this->isValidMonth($goalMonth)) {
             $goalMonth = date('Y-m');
@@ -469,6 +556,14 @@ class DashboardService
             'revenue_reached' => false,
             'profit_reached' => false,
             'is_achieved' => false,
+            // ไม่มีเป้า → ไม่มี pace
+            'pace_applicable' => false,
+            'month_status' => 'ended',
+            'days_remaining' => null,
+            'remaining_revenue' => null,
+            'remaining_profit' => null,
+            'required_per_day_revenue' => null,
+            'required_per_day_profit' => null,
         ];
 
         if ($goal === null) {
@@ -511,7 +606,17 @@ class DashboardService
 
         $isAchieved = !empty($configuredReached) && !in_array(false, $configuredReached, true);
 
-        return [
+        // pace คำนวณจากตัวเลขที่มีอยู่แล้ว — ไม่ fetch ซ้ำ
+        $pace = $this->calculateGoalPace(
+            $targetRevenue,
+            $actualRevenue,
+            $targetProfit,
+            $actualProfit,
+            $goalMonth,
+            $today
+        );
+
+        return array_merge([
             'has_goal' => true,
             'goal_month' => $goalMonth,
             'target_revenue' => $targetRevenue,
@@ -523,7 +628,7 @@ class DashboardService
             'revenue_reached' => $revenueReached,
             'profit_reached' => $profitReached,
             'is_achieved' => $isAchieved,
-        ];
+        ], $pace);
     }
 
     private function resolveGoalMonth(array $rangeData): string
