@@ -58,16 +58,23 @@ $weekdayAvgRoas = isset($weekdayData['avg_roas']) && $weekdayData['avg_roas'] !=
     ? (float)$weekdayData['avg_roas']
     : null;
 $weekdaySampleCount = (int)($weekdayData['sample_count'] ?? 0);
+$weekdayTargetProfit = (float)($weekdayData['target_profit'] ?? 0);
+$weekdayAvgProfit = isset($weekdayData['avg_profit']) && $weekdayData['avg_profit'] !== null
+    ? (float)$weekdayData['avg_profit']
+    : null;
 
-// เทียบเชิงคุณภาพ: สูงกว่า / ใกล้เคียง (±10%) / ต่ำกว่า
+// เทียบเชิงคุณภาพจาก "กำไร" — ใช้ผลต่างเทียบกับ |ค่าเฉลี่ย| (ทนกำไรติดลบ/ศูนย์)
+// หมายเหตุ: ใช้ ratio ไม่ได้ เพราะกำไร -50 เทียบเฉลี่ย -100 คือ "ดีขึ้น" แต่ ratio จะได้ 0.5
 $weekdayHint = null;
 $weekdayHintClass = 'text-slate-400';
-if ($weekdayComparable && $weekdayAvgRevenue !== null && $weekdayAvgRevenue > 0) {
-    $weekdayRatio = $weekdayTargetRevenue / $weekdayAvgRevenue;
-    if ($weekdayRatio >= 1.1) {
+if ($weekdayComparable && $weekdayAvgProfit !== null) {
+    $weekdayProfitDiff = $weekdayTargetProfit - $weekdayAvgProfit;
+    $weekdayTolerance = abs($weekdayAvgProfit) * 0.1;
+
+    if ($weekdayProfitDiff > $weekdayTolerance) {
         $weekdayHint = 'สูงกว่า' . $weekdayName . 'ปกติของเดือนนี้';
         $weekdayHintClass = 'text-green-400';
-    } elseif ($weekdayRatio <= 0.9) {
+    } elseif ($weekdayProfitDiff < -$weekdayTolerance) {
         $weekdayHint = 'ต่ำกว่า' . $weekdayName . 'ปกติของเดือนนี้';
         $weekdayHintClass = 'text-amber-300';
     } else {
@@ -623,17 +630,22 @@ require __DIR__ . '/includes/header.php';
             วันล่าสุด: <?= e($weekdayName) ?> <?= e(formatThaiDate($weekdayTargetDate)) ?>
         </p>
 
+        <?php $weekdayProfitClass = $weekdayTargetProfit >= 0 ? 'text-green-400' : 'text-red-400'; ?>
+
         <?php if (!$weekdayComparable): ?>
             <p class="mt-3 text-sm text-slate-300">
-                รายได้ <span class="font-semibold text-orange-400"><?= e(formatMoney($weekdayTargetRevenue)) ?></span>
+                กำไร <span class="font-semibold <?= e($weekdayProfitClass) ?>"><?= e(formatMoney($weekdayTargetProfit)) ?></span>
                 · ยังไม่มีวัน<?= e($weekdayName) ?>อื่นในเดือนนี้ให้เทียบ
+            </p>
+            <p class="mt-1 text-xs text-slate-500">
+                รายได้ <?= e(formatMoney($weekdayTargetRevenue)) ?>
             </p>
         <?php else: ?>
             <div class="mt-3 space-y-1.5 text-sm text-slate-300">
                 <p>
-                    รายได้ <span class="font-semibold text-orange-400"><?= e(formatMoney($weekdayTargetRevenue)) ?></span>
+                    กำไร <span class="font-semibold <?= e($weekdayProfitClass) ?>"><?= e(formatMoney($weekdayTargetProfit)) ?></span>
                     · วัน<?= e($weekdayName) ?>เดือนนี้เฉลี่ย
-                    <span class="font-semibold text-slate-100"><?= e(formatMoney((float)$weekdayAvgRevenue)) ?></span>
+                    <span class="font-semibold <?= e(((float)$weekdayAvgProfit) >= 0 ? 'text-slate-100' : 'text-red-400') ?>"><?= e(formatMoney((float)$weekdayAvgProfit)) ?></span>
                     <span class="text-xs text-slate-500">(จาก <?= e((string)$weekdaySampleCount) ?> วัน)</span>
                 </p>
                 <?php if ($weekdayTargetRoas !== null || $weekdayAvgRoas !== null): ?>
@@ -645,6 +657,10 @@ require __DIR__ . '/includes/header.php';
                 <?php if ($weekdayHint !== null): ?>
                     <p class="text-xs <?= e($weekdayHintClass) ?>"><?= e($weekdayHint) ?></p>
                 <?php endif; ?>
+                <p class="text-xs text-slate-500">
+                    รายได้ <?= e(formatMoney($weekdayTargetRevenue)) ?>
+                    · เฉลี่ย <?= e($weekdayAvgRevenue !== null ? formatMoney($weekdayAvgRevenue) : '–') ?>
+                </p>
             </div>
         <?php endif; ?>
     </section>
