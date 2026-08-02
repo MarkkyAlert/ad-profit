@@ -7,6 +7,47 @@ class RecordService
     /** จำนวนแถวสูงสุดต่อการบันทึกแบบหลายวัน 1 ครั้ง (ครอบคลุม 1 เดือน) */
     public const BULK_MAX_ROWS = 31;
 
+    /** จำนวนแถวสูงสุดต่อการนำเข้าไฟล์ CSV 1 ครั้ง */
+    public const IMPORT_MAX_ROWS = 1000;
+
+    /** ชื่อเดือนย่อภาษาไทย → เลขเดือน (ใช้ parse วันที่จากไฟล์ export) */
+    private const THAI_MONTH_ABBREVIATIONS = [
+        'ม.ค.' => 1,
+        'ก.พ.' => 2,
+        'มี.ค.' => 3,
+        'เม.ย.' => 4,
+        'พ.ค.' => 5,
+        'มิ.ย.' => 6,
+        'ก.ค.' => 7,
+        'ส.ค.' => 8,
+        'ก.ย.' => 9,
+        'ต.ค.' => 10,
+        'พ.ย.' => 11,
+        'ธ.ค.' => 12,
+    ];
+
+    /** หัวคอลัมน์ที่ยอมรับ (ตัวพิมพ์เล็ก) → ฟิลด์ภายใน */
+    private const IMPORT_HEADER_ALIASES = [
+        'วันที่' => 'record_date',
+        'วัน' => 'record_date',
+        'date' => 'record_date',
+        'record_date' => 'record_date',
+        'รายได้' => 'revenue',
+        'ยอดขาย' => 'revenue',
+        'revenue' => 'revenue',
+        'ค่าแอด' => 'ad_cost',
+        'ค่าโฆษณา' => 'ad_cost',
+        'ad_cost' => 'ad_cost',
+        'adcost' => 'ad_cost',
+        'ad cost' => 'ad_cost',
+        'โน้ต' => 'note',
+        'หมายเหตุ' => 'note',
+        'note' => 'note',
+    ];
+
+    /** ข้อความที่ถือว่าเป็น "แถวรวม" ท้ายตาราง → ข้าม */
+    private const IMPORT_TOTAL_LABELS = ['รวม', 'ผลรวม', 'รวมทั้งหมด', 'total', 'sum'];
+
     private RecordRepository $recordRepository;
     private ShopRepository $shopRepository;
     private ?PDO $db;
@@ -86,11 +127,203 @@ class RecordService
     }
 
     /**
+     * แปลงเนื้อหาไฟล์ CSV เป็น rows สำหรับส่งต่อให้ upsertManyRecords()
+     *
+     * เป็น pure function (ไม่แตะ DB) — validation ธุรกิจยังเป็นหน้าที่ของ upsertManyRecords
+     * รองรับไฟล์ที่ export จากระบบนี้โดยตรง (BOM · วันที่ไทย · คอลัมน์คำนวณ · แถว "รวม")
+     *
+     * @return array{success: bool, rows: array<int,array<string,mixed>>, error: string|null}
+     */
+    public function parseImportCsv(string $content): array
+    {
+        $fail = static fn(string $message): array => [
+            'success' => false,
+            'rows' => [],
+            'error' => $message,
+        ];
+
+        // ตัด BOM ที่ export ใส่ไว้ ไม่งั้นหัวคอลัมน์แรกจะ match ไม่ติด
+        if (str_starts_with($content, "\xEF\xBB\xBF")) {
+            $content = substr($content, 3);
+        }
+
+        if (trim($content) === '') {
+            return $fail('ไฟล์ว่าง ไม่มีข้อมูลให้นำเข้า');
+        }
+
+        $handle = fopen('php://memory', 'r+');
+        if ($handle === false) {
+            return $fail('ไม่สามารถอ่านไฟล์ได้');
+        }
+
+        fwrite($handle, $content);
+        rewind($handle);
+
+        $headerCells = fgetcsv($handle, 0, ',', '"', '');
+        if (!is_array($headerCells)) {
+            fclose($handle);
+            return $fail('อ่านหัวตารางไม่ได้ กรุณาตรวจสอบไฟล์');
+        }
+
+        // map ตำแหน่งคอลัมน์ → ฟิลด์ (คอลัมน์ที่ไม่รู้จัก เช่น กำไร/ROAS จะถูกเพิกเฉย)
+        $columnMap = [];
+        foreach ($headerCells as $index => $headerCell) {
+            $key = mb_strtolower(trim((string)$headerCell));
+            if (isset(self::IMPORT_HEADER_ALIASES[$key])) {
+                $columnMap[self::IMPORT_HEADER_ALIASES[$key]] = (int)$index;
+            }
+        }
+
+        foreach (['record_date' => 'วันที่', 'revenue' => 'รายได้', 'ad_cost' => 'ค่าแอด'] as $field => $label) {
+            if (!isset($columnMap[$field])) {
+                fclose($handle);
+                return $fail('ไฟล์ต้องมีคอลัมน์ "' . $label . '" (ไม่พบในหัวตาราง)');
+            }
+        }
+
+        $rows = [];
+        $lineNumber = 1; // นับรวมบรรทัดหัวตารางแล้ว
+
+        while (($cells = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $lineNumber++;
+
+            if (!is_array($cells)) {
+                continue;
+            }
+
+            $cellAt = static function (?int $index) use ($cells): string {
+                if ($index === null || !array_key_exists($index, $cells)) {
+                    return '';
+                }
+
+                return trim((string)($cells[$index] ?? ''));
+            };
+
+            // แถวว่างสนิท → ข้าม
+            $nonEmpty = array_filter($cells, static fn($cell): bool => trim((string)$cell) !== '');
+            if ($nonEmpty === []) {
+                continue;
+            }
+
+            $rawDate = $cellAt($columnMap['record_date']);
+
+            // แถวรวมท้ายตาราง / แถวที่ไม่มีวันที่ → ข้าม
+            if ($rawDate === '' || in_array(mb_strtolower($rawDate), self::IMPORT_TOTAL_LABELS, true)) {
+                continue;
+            }
+
+            $recordDate = $this->parseImportDate($rawDate);
+            if ($recordDate === null) {
+                fclose($handle);
+                return $fail('บรรทัดที่ ' . $lineNumber . ': อ่านวันที่ "' . $rawDate . '" ไม่ได้');
+            }
+
+            $revenue = $this->cleanImportNumber($cellAt($columnMap['revenue']));
+            $adCost = $this->cleanImportNumber($cellAt($columnMap['ad_cost']));
+
+            if ($revenue !== '' && !is_numeric($revenue)) {
+                fclose($handle);
+                return $fail('บรรทัดที่ ' . $lineNumber . ': รายได้ "' . $revenue . '" ไม่ใช่ตัวเลข');
+            }
+
+            if ($adCost !== '' && !is_numeric($adCost)) {
+                fclose($handle);
+                return $fail('บรรทัดที่ ' . $lineNumber . ': ค่าแอด "' . $adCost . '" ไม่ใช่ตัวเลข');
+            }
+
+            $note = isset($columnMap['note']) ? $cellAt($columnMap['note']) : '';
+            if ($note !== '' && $note[0] === "'") {
+                $note = substr($note, 1); // ถอด guard formula injection ตอน export
+            }
+
+            $rows[] = [
+                'record_date' => $recordDate,
+                'revenue' => $revenue,
+                'ad_cost' => $adCost,
+                'note' => $note === '' ? null : $note,
+            ];
+        }
+
+        fclose($handle);
+
+        if ($rows === []) {
+            return $fail('ไม่พบแถวข้อมูลที่นำเข้าได้');
+        }
+
+        return [
+            'success' => true,
+            'rows' => $rows,
+            'error' => null,
+        ];
+    }
+
+    /**
+     * parse วันที่จาก CSV — ISO · D/M/YYYY · "2 ส.ค. 2569" (+ แปลง พ.ศ.)
+     * คืน null ถ้าอ่านไม่ได้
+     */
+    private function parseImportDate(string $raw): ?string
+    {
+        $value = trim($raw);
+        if ($value === '') {
+            return null;
+        }
+
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $value, $matched) === 1) {
+            return $this->buildImportDate((int)$matched[1], (int)$matched[2], (int)$matched[3]);
+        }
+
+        if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', $value, $matched) === 1) {
+            return $this->buildImportDate((int)$matched[3], (int)$matched[2], (int)$matched[1]);
+        }
+
+        // รูปแบบไทยจาก export เช่น "2 ส.ค. 2569"
+        if (preg_match('/^(\d{1,2})\s+(\S+)\s+(\d{4})$/u', $value, $matched) === 1) {
+            $month = self::THAI_MONTH_ABBREVIATIONS[$matched[2]] ?? null;
+            if ($month !== null) {
+                return $this->buildImportDate((int)$matched[3], $month, (int)$matched[1]);
+            }
+        }
+
+        return null;
+    }
+
+    private function buildImportDate(int $year, int $month, int $day): ?string
+    {
+        if ($year >= 2400 && $year <= 2700) {
+            $year -= 543; // พ.ศ. → ค.ศ.
+        }
+
+        if ($month < 1 || $month > 12 || $day < 1 || $day > 31) {
+            return null;
+        }
+
+        $candidate = sprintf('%04d-%02d-%02d', $year, $month, $day);
+        $dateObject = DateTimeImmutable::createFromFormat('Y-m-d', $candidate);
+
+        // กันวันที่ที่ไม่มีจริง เช่น 31 ก.พ.
+        return ($dateObject && $dateObject->format('Y-m-d') === $candidate) ? $candidate : null;
+    }
+
+    /** ตัด ฿ / comma / ช่องว่าง / leading ' (จาก guard formula injection ตอน export) */
+    private function cleanImportNumber(string $raw): string
+    {
+        $value = trim($raw);
+        if ($value !== '' && $value[0] === "'") {
+            $value = substr($value, 1);
+        }
+
+        $value = str_replace(['฿', ',', ' ', "\xC2\xA0"], '', $value);
+
+        return trim($value);
+    }
+
+    /**
      * บันทึกรายวันหลายแถวในครั้งเดียว (atomic — สำเร็จทั้งหมด หรือไม่เขียนเลย)
      *
      * @param array<int,array{record_date?: mixed, revenue?: mixed, ad_cost?: mixed, note?: mixed}> $rows
+     * @param int|null $maxRows เพดานจำนวนแถว — null = BULK_MAX_ROWS (ฟอร์มกรอกมือ)
      */
-    public function upsertManyRecords(int $userId, int $shopId, array $rows): array
+    public function upsertManyRecords(int $userId, int $shopId, array $rows, ?int $maxRows = null): array
     {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
@@ -131,10 +364,11 @@ class RecordService
             ];
         }
 
-        if (count($filledRows) > self::BULK_MAX_ROWS) {
+        $rowLimit = ($maxRows !== null && $maxRows > 0) ? $maxRows : self::BULK_MAX_ROWS;
+        if (count($filledRows) > $rowLimit) {
             return [
                 'success' => false,
-                'error' => 'กรอกได้สูงสุด ' . self::BULK_MAX_ROWS . ' แถวต่อครั้ง',
+                'error' => 'กรอกได้สูงสุด ' . $rowLimit . ' แถวต่อครั้ง',
             ];
         }
 

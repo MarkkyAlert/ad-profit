@@ -467,6 +467,34 @@ require __DIR__ . '/includes/header.php';
 </script>
 
 <section class="section-card mt-6 p-5">
+    <h2 class="text-lg font-semibold text-slate-100">นำเข้าไฟล์ CSV</h2>
+    <p class="mt-1 text-sm text-slate-500">
+        รองรับคอลัมน์ <span class="text-slate-300">วันที่ · รายได้ · ค่าแอด · โน้ต</span>
+        (หัวภาษาอังกฤษ date/revenue/ad_cost/note ก็ได้) ·
+        คอลัมน์ที่คำนวณเอง เช่น กำไร/ROAS และแถว "รวม" จะถูกข้ามให้อัตโนมัติ
+    </p>
+    <p class="mt-1 text-xs text-slate-500">
+        ไฟล์ที่ดาวน์โหลดจากหน้าประวัติ นำกลับเข้ามาได้เลย · วันเดียวกันจะอัปเดตทับ ·
+        ถ้ามีแถวใดผิด ระบบจะไม่บันทึกทั้งไฟล์ · สูงสุด <?= e((string)RecordService::IMPORT_MAX_ROWS) ?> แถว / 2MB
+    </p>
+
+    <form action="<?= e(app_url('/api/records.php')) ?>" method="post" enctype="multipart/form-data"
+        class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="import_csv">
+
+        <input
+            type="file"
+            name="csv"
+            accept=".csv,text/csv"
+            required
+            class="w-full rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-slate-200">
+
+        <button type="submit" class="btn-teal shrink-0 px-6 py-2.5 text-sm">↑ นำเข้า</button>
+    </form>
+</section>
+
+<section class="section-card mt-6 p-5">
     <div class="mb-3 flex items-center justify-between">
         <h2 class="text-lg font-semibold text-slate-100">รายการล่าสุด 7 วัน</h2>
         <a href="<?= e(app_url('/history.php')) ?>" class="text-sm text-indigo-400 hover:text-indigo-300 font-medium">ดูประวัติทั้งหมด</a>

@@ -149,6 +149,82 @@ final class RecordServiceBulkTest extends IntegrationTestCase
         $this->assertSame(0, $this->countRows('daily_records'));
     }
 
+    public function testImportSizedBatchWritesAllRowsAtomically(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        // 50 แถว (เกินเพดานฟอร์ม 31) — ใช้ cap ของการนำเข้า
+        $rows = [];
+        $date = new \DateTimeImmutable('2026-01-01');
+        for ($index = 0; $index < 50; $index++) {
+            $rows[] = [
+                'record_date' => $date->modify('+' . $index . ' days')->format('Y-m-d'),
+                'revenue' => 1000 + $index,
+                'ad_cost' => 100,
+                'note' => null,
+            ];
+        }
+
+        $result = $this->makeService()->upsertManyRecords($userId, $shopId, $rows, RecordService::IMPORT_MAX_ROWS);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame(50, $result['saved_count']);
+        $this->assertSame(50, $this->countRows('daily_records'));
+    }
+
+    public function testImportSizedBatchWithBadRowWritesNothing(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $rows = [];
+        $date = new \DateTimeImmutable('2026-02-01');
+        for ($index = 0; $index < 40; $index++) {
+            $rows[] = [
+                'record_date' => $date->modify('+' . $index . ' days')->format('Y-m-d'),
+                'revenue' => 1000,
+                'ad_cost' => 100,
+                'note' => null,
+            ];
+        }
+        // แถวผิดกลางไฟล์ (ค่าแอดติดลบ)
+        $rows[20]['ad_cost'] = -5;
+
+        $result = $this->makeService()->upsertManyRecords($userId, $shopId, $rows, RecordService::IMPORT_MAX_ROWS);
+
+        $this->assertFalse($result['success']);
+        $this->assertSame(0, $this->countRows('daily_records'));   // atomic
+    }
+
+    public function testParsedCsvImportsIntoDatabase(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $service = $this->makeService();
+
+        $csv = "\xEF\xBB\xBF" . "วันที่,รายได้,ค่าแอด,กำไร,ROAS,โน้ต\n"
+            . "2 ส.ค. 2569,\"1,000.00\",200.00,800.00,5.00,คอร์ส A\n"
+            . "3 ส.ค. 2569,1500.50,0.00,1500.50,–,\n"
+            . "รวม,2500.50,200.00,2300.50,5.00,–\n";
+
+        $parsed = $service->parseImportCsv($csv);
+        $this->assertTrue($parsed['success']);
+
+        $result = $service->upsertManyRecords($userId, $shopId, $parsed['rows'], RecordService::IMPORT_MAX_ROWS);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame(2, $this->countRows('daily_records'));
+
+        $stmt = $this->pdo->prepare('SELECT revenue, ad_cost, note FROM daily_records WHERE shop_id = ? AND record_date = ?');
+        $stmt->execute([$shopId, '2026-08-02']);
+        $row = $stmt->fetch();
+
+        $this->assertSame(1000.0, (float)$row['revenue']);
+        $this->assertSame(200.0, (float)$row['ad_cost']);
+        $this->assertSame('คอร์ส A', $row['note']);
+    }
+
     public function testBulkUpsertRejectsShopOfAnotherUser(): void
     {
         $ownerId = $this->createUser('owner@example.com');

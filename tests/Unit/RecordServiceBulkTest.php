@@ -132,6 +132,56 @@ final class RecordServiceBulkTest extends TestCase
         $this->assertStringContainsString((string)RecordService::BULK_MAX_ROWS, $result['error']);
     }
 
+    public function testDefaultCapIsBulkMaxRows(): void
+    {
+        $service = $this->makeService();
+
+        $rows = [];
+        for ($day = 1; $day <= RecordService::BULK_MAX_ROWS + 1; $day++) {
+            $rows[] = $this->row(sprintf('2024-%02d-01', $day), 100, 10);
+        }
+
+        // ไม่ส่ง maxRows → ต้องใช้ 31 เหมือนเดิม
+        $result = $service->upsertManyRecords(1, 1, $rows);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString((string)RecordService::BULK_MAX_ROWS, $result['error']);
+    }
+
+    public function testHigherCapAllowsMoreThanBulkMaxRows(): void
+    {
+        $service = $this->makeService();
+
+        // 40 แถว (เกิน 31) แต่ส่ง cap สูงกว่า → ต้องผ่าน
+        $rows = [];
+        $date = new \DateTimeImmutable('2024-01-01');
+        for ($index = 0; $index < 40; $index++) {
+            $rows[] = $this->row($date->modify('+' . $index . ' days')->format('Y-m-d'), 100, 10);
+        }
+
+        $result = $service->upsertManyRecords(1, 1, $rows, RecordService::IMPORT_MAX_ROWS);
+
+        $this->assertTrue($result['success']);
+        $this->assertSame(40, $result['saved_count']);
+    }
+
+    public function testImportCapIsStillEnforced(): void
+    {
+        $service = $this->makeService();
+
+        $rows = [];
+        $date = new \DateTimeImmutable('2024-01-01');
+        for ($index = 0; $index < 6; $index++) {
+            $rows[] = $this->row($date->modify('+' . $index . ' days')->format('Y-m-d'), 100, 10);
+        }
+
+        // cap ต่ำกว่าจำนวนแถว → ต้อง fail
+        $result = $service->upsertManyRecords(1, 1, $rows, 5);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('5', $result['error']);
+    }
+
     public function testFailsWhenUserCannotAccessShop(): void
     {
         $service = $this->makeService(false);

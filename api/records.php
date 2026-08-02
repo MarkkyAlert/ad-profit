@@ -116,6 +116,102 @@ if ($action === 'bulk_upsert') {
     ], $statusCode, '/add-record.php');
 }
 
+if ($action === 'import_csv') {
+    // multipart/form-data → ไม่ใช้ ensure_form_content_type_or_respond (มันรับแค่ urlencoded/multipart
+    // แต่ CSRF ยังต้องตรวจตามปกติ เพราะ token มาใน field ของ multipart)
+    ensure_post_request_or_respond($wantsJson, '/add-record.php');
+    ensure_valid_csrf_or_respond($wantsJson, '/add-record.php', (string)($_POST['csrf_token'] ?? ''));
+
+    $uploadedFile = $_FILES['csv'] ?? null;
+    if (!is_array($uploadedFile) || (int)($uploadedFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        $respond([
+            'success' => false,
+            'error' => 'กรุณาเลือกไฟล์ CSV ที่ต้องการนำเข้า',
+        ], 422, '/add-record.php');
+    }
+
+    $uploadError = (int)($uploadedFile['error'] ?? UPLOAD_ERR_OK);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        $uploadErrorMessage = in_array($uploadError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+            ? 'ไฟล์ใหญ่เกินกว่าที่เซิร์ฟเวอร์รับได้'
+            : 'อัปโหลดไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
+
+        $respond([
+            'success' => false,
+            'error' => $uploadErrorMessage,
+        ], 422, '/add-record.php');
+    }
+
+    $maxUploadBytes = 2 * 1024 * 1024; // 2MB
+    if ((int)($uploadedFile['size'] ?? 0) > $maxUploadBytes) {
+        $respond([
+            'success' => false,
+            'error' => 'ไฟล์ใหญ่เกิน 2MB',
+        ], 422, '/add-record.php');
+    }
+
+    $originalName = (string)($uploadedFile['name'] ?? '');
+    $extension = strtolower((string)pathinfo($originalName, PATHINFO_EXTENSION));
+    if ($extension !== '' && !in_array($extension, ['csv', 'txt'], true)) {
+        $respond([
+            'success' => false,
+            'error' => 'รองรับเฉพาะไฟล์ .csv',
+        ], 422, '/add-record.php');
+    }
+
+    $temporaryPath = (string)($uploadedFile['tmp_name'] ?? '');
+    if ($temporaryPath === '' || !is_uploaded_file($temporaryPath)) {
+        $respond([
+            'success' => false,
+            'error' => 'ไม่พบไฟล์ที่อัปโหลด',
+        ], 422, '/add-record.php');
+    }
+
+    // อ่านเป็น string อย่างเดียว ไม่เก็บไฟล์ลงเซิร์ฟเวอร์
+    $csvContent = file_get_contents($temporaryPath);
+    if ($csvContent === false) {
+        $respond([
+            'success' => false,
+            'error' => 'ไม่สามารถอ่านไฟล์ที่อัปโหลดได้',
+        ], 422, '/add-record.php');
+    }
+
+    $parsed = $recordService->parseImportCsv($csvContent);
+    if (($parsed['success'] ?? false) !== true) {
+        $respond([
+            'success' => false,
+            'error' => (string)($parsed['error'] ?? 'ไฟล์ CSV ไม่ถูกต้อง'),
+        ], 422, '/add-record.php');
+    }
+
+    $result = $recordService->upsertManyRecords(
+        $userId,
+        $shopId,
+        (array)$parsed['rows'],
+        RecordService::IMPORT_MAX_ROWS
+    );
+
+    if (($result['success'] ?? false) === true) {
+        $savedCount = (int)($result['saved_count'] ?? 0);
+
+        $respond([
+            'success' => true,
+            'message' => 'นำเข้า ' . $savedCount . ' แถวสำเร็จ',
+            'data' => [
+                'saved_count' => $savedCount,
+            ],
+        ], 200, '/add-record.php');
+    }
+
+    $errorMessage = (string)($result['error'] ?? 'ไม่สามารถนำเข้าข้อมูลได้');
+    $statusCode = infer_http_status_from_error($errorMessage, 422);
+
+    $respond([
+        'success' => false,
+        'error' => $errorMessage,
+    ], $statusCode, '/add-record.php');
+}
+
 if ($action === 'update') {
     $month = normalize_month_input(isset($_POST['month']) ? (string)$_POST['month'] : null);
     ensure_post_request_or_respond($wantsJson, '/history.php');
