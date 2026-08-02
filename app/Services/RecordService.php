@@ -580,24 +580,19 @@ class RecordService
     }
 
     /**
-     * สรุปกำไรเฉลี่ยแยกตามวันในสัปดาห์ ย้อนหลัง N สัปดาห์
+     * คำนวณช่วงวันที่ของตารางกำไรตามวัน ตามโหมดที่เลือก
      *
-     * window = today ย้อนกลับไป (weeks*7 − 1) วัน → รวม weeks*7 วันพอดี
-     * (weeks=8 → 56 วัน = แต่ละวันในสัปดาห์ปรากฏ 8 ครั้ง)
-     * avg_roas คิดแบบ ratio of sums (Σรายได้ ÷ Σค่าแอด)
+     *  - '8w'    → 56 วันล่าสุด (today ย้อนกลับ 55 วัน) = แต่ละวันในสัปดาห์ปรากฏ 8 ครั้ง
+     *  - 'month' → ตั้งแต่วันที่ 1 ของเดือน today ถึง today (ไม่นับวันอนาคตที่ยังไม่ถึง)
+     *
+     * โหมดที่ไม่รู้จัก → fallback เป็น '8w'
      *
      * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์
+     * @return array{mode: string, start_date: string, end_date: string}
      */
-    public function getWeekdayBreakdown(int $userId, int $shopId, int $weeks = 8, ?string $today = null): array
+    public function resolveWeekdayWindow(string $mode, ?string $today = null): array
     {
-        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
-            return [
-                'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
-            ];
-        }
-
-        $normalizedWeeks = max(1, $weeks);
+        $normalizedMode = $mode === 'month' ? 'month' : '8w';
 
         $todayInput = is_string($today) ? trim($today) : '';
         $todayObject = $todayInput !== ''
@@ -609,7 +604,49 @@ class RecordService
         $todayObject = $todayObject->setTime(0, 0, 0);
 
         $endDate = $todayObject->format('Y-m-d');
-        $startDate = $todayObject->modify('-' . ($normalizedWeeks * 7 - 1) . ' days')->format('Y-m-d');
+        $startDate = $normalizedMode === 'month'
+            ? $todayObject->format('Y-m-01')
+            : $todayObject->modify('-55 days')->format('Y-m-d');
+
+        return [
+            'mode' => $normalizedMode,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+        ];
+    }
+
+    /**
+     * สรุปกำไรเฉลี่ยแยกตามวันในสัปดาห์ ภายในช่วงวันที่ที่กำหนด
+     *
+     * ใช้คู่กับ resolveWeekdayWindow() ที่ controller เป็นคนเลือกโหมด
+     * avg_roas คิดแบบ ratio of sums (Σรายได้ ÷ Σค่าแอด)
+     */
+    public function getWeekdayBreakdown(int $userId, int $shopId, string $startDate, string $endDate): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        $startObject = DateTimeImmutable::createFromFormat('Y-m-d', $startDate);
+        $endObject = DateTimeImmutable::createFromFormat('Y-m-d', $endDate);
+
+        if (!$startObject || $startObject->format('Y-m-d') !== $startDate
+            || !$endObject || $endObject->format('Y-m-d') !== $endDate) {
+            return [
+                'success' => false,
+                'error' => 'รูปแบบวันที่ไม่ถูกต้อง',
+            ];
+        }
+
+        if ($startDate > $endDate) {
+            return [
+                'success' => false,
+                'error' => 'วันที่เริ่มต้นต้องไม่มากกว่าวันที่สิ้นสุด',
+            ];
+        }
 
         try {
             $records = $this->recordRepository->getByDateRange($shopId, $startDate, $endDate);
@@ -676,7 +713,6 @@ class RecordService
         return [
             'success' => true,
             'data' => [
-                'weeks' => $normalizedWeeks,
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'has_data' => $hasData,

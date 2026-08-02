@@ -16,6 +16,8 @@ use ShopRepository;
 final class RecordServiceWeekdayBreakdownTest extends TestCase
 {
     private const TODAY = '2026-08-02';
+    /** window 8 สัปดาห์ของ TODAY (56 วัน) */
+    private const WINDOW_START = '2026-06-08';
 
     /**
      * @param array<int,array{0:string,1:float,2:float}> $records [date, revenue, ad_cost]
@@ -73,13 +75,14 @@ final class RecordServiceWeekdayBreakdownTest extends TestCase
         $records[] = ['2026-08-02', 500.0, 100.0];
         $records[] = ['2026-07-26', 300.0, 100.0];
 
-        $result = $this->makeService($records)->getWeekdayBreakdown(1, 1, 8, self::TODAY);
+        $result = $this->makeService($records)->getWeekdayBreakdown(1, 1, self::WINDOW_START, self::TODAY);
 
         $this->assertTrue($result['success']);
         $data = $result['data'];
 
         $this->assertTrue($data['has_data']);
-        $this->assertSame(8, $data['weeks']);
+        $this->assertSame(self::WINDOW_START, $data['start_date']);
+        $this->assertSame(self::TODAY, $data['end_date']);
         $this->assertCount(7, $data['weekdays']);
         // เรียง จันทร์(1) → อาทิตย์(7)
         $this->assertSame([1, 2, 3, 4, 5, 6, 7], array_column($data['weekdays'], 'weekday'));
@@ -99,7 +102,7 @@ final class RecordServiceWeekdayBreakdownTest extends TestCase
     public function testWeekdayWithoutRecordsHasNullAverages(): void
     {
         $result = $this->makeService([['2026-07-27', 1000.0, 200.0]])  // จันทร์
-            ->getWeekdayBreakdown(1, 1, 8, self::TODAY);
+            ->getWeekdayBreakdown(1, 1, self::WINDOW_START, self::TODAY);
 
         $tuesday = $this->pick($result['data']['weekdays'], 2);
 
@@ -114,7 +117,7 @@ final class RecordServiceWeekdayBreakdownTest extends TestCase
         $result = $this->makeService([
             ['2026-07-27', 1000.0, 0.0],   // จันทร์
             ['2026-07-20', 2000.0, 0.0],   // จันทร์
-        ])->getWeekdayBreakdown(1, 1, 8, self::TODAY);
+        ])->getWeekdayBreakdown(1, 1, self::WINDOW_START, self::TODAY);
 
         $monday = $this->pick($result['data']['weekdays'], 1);
 
@@ -128,7 +131,7 @@ final class RecordServiceWeekdayBreakdownTest extends TestCase
         $result = $this->makeService([
             ['2026-08-01', 100.0, 900.0],  // เสาร์ → -800
             ['2026-07-25', 100.0, 700.0],  // เสาร์ → -600
-        ])->getWeekdayBreakdown(1, 1, 8, self::TODAY);
+        ])->getWeekdayBreakdown(1, 1, self::WINDOW_START, self::TODAY);
 
         $saturday = $this->pick($result['data']['weekdays'], 6);
 
@@ -136,33 +139,81 @@ final class RecordServiceWeekdayBreakdownTest extends TestCase
         $this->assertSame(-700.0, $saturday['avg_profit']);
     }
 
-    public function testWindowSizeFollowsWeeksParameter(): void
+    public function testEightWeekWindowCoversFiftySixDays(): void
+    {
+        $window = $this->makeService([])->resolveWeekdayWindow('8w', self::TODAY);
+
+        $this->assertSame('8w', $window['mode']);
+        $this->assertSame(self::TODAY, $window['end_date']);
+        $this->assertSame('2026-06-08', $window['start_date']);   // 56 วันรวมวันนี้
+    }
+
+    public function testMonthWindowStartsAtFirstOfMonthAndEndsToday(): void
+    {
+        $window = $this->makeService([])->resolveWeekdayWindow('month', self::TODAY);
+
+        $this->assertSame('month', $window['mode']);
+        $this->assertSame('2026-08-01', $window['start_date']);
+        // ตัดที่ today ไม่ใช่สิ้นเดือน — ไม่นับวันอนาคตที่ยังไม่ถึง
+        $this->assertSame(self::TODAY, $window['end_date']);
+        $this->assertNotSame('2026-08-31', $window['end_date']);
+    }
+
+    public function testMonthWindowOnFirstDayOfMonthIsSingleDay(): void
+    {
+        $window = $this->makeService([])->resolveWeekdayWindow('month', '2026-08-01');
+
+        $this->assertSame('2026-08-01', $window['start_date']);
+        $this->assertSame('2026-08-01', $window['end_date']);
+    }
+
+    public function testUnknownModeFallsBackToEightWeeks(): void
+    {
+        $window = $this->makeService([])->resolveWeekdayWindow('bogus', self::TODAY);
+
+        $this->assertSame('8w', $window['mode']);
+        $this->assertSame('2026-06-08', $window['start_date']);
+    }
+
+    public function testInvalidDateRangeFails(): void
     {
         $service = $this->makeService([]);
 
-        $eightWeeks = $service->getWeekdayBreakdown(1, 1, 8, self::TODAY)['data'];
-        $fourWeeks = $service->getWeekdayBreakdown(1, 1, 4, self::TODAY)['data'];
+        $badFormat = $service->getWeekdayBreakdown(1, 1, '08/06/2026', self::TODAY);
+        $this->assertFalse($badFormat['success']);
+        $this->assertStringContainsString('วันที่', $badFormat['error']);
 
-        $this->assertSame('2026-08-02', $eightWeeks['end_date']);
-        $this->assertSame('2026-06-08', $eightWeeks['start_date']);   // 56 วันรวมวันนี้
-        $this->assertSame(8, $eightWeeks['weeks']);
+        $reversed = $service->getWeekdayBreakdown(1, 1, self::TODAY, self::WINDOW_START);
+        $this->assertFalse($reversed['success']);
+        $this->assertStringContainsString('เริ่มต้น', $reversed['error']);
+    }
 
-        $this->assertSame('2026-07-06', $fourWeeks['start_date']);    // 28 วันรวมวันนี้
-        $this->assertSame(4, $fourWeeks['weeks']);
+    public function testCustomRangeGroupsOnlyWithinThatRange(): void
+    {
+        // จำกัดช่วงแค่ 2026-07-27..2026-08-02 → จันทร์เหลือครั้งเดียว
+        $result = $this->makeService([
+            ['2026-07-20', 5000.0, 100.0],   // จันทร์ นอกช่วง
+            ['2026-07-27', 1000.0, 200.0],   // จันทร์ ในช่วง
+        ])->getWeekdayBreakdown(1, 1, '2026-07-27', self::TODAY);
+
+        $monday = $this->pick($result['data']['weekdays'], 1);
+
+        $this->assertSame(1, $monday['sample_count']);
+        $this->assertSame(800.0, $monday['avg_profit']);
     }
 
     public function testRecordsOutsideWindowAreExcluded(): void
     {
         $result = $this->makeService([
             ['2026-06-01', 9999.0, 1.0],   // ก่อน window (start = 2026-06-08)
-        ])->getWeekdayBreakdown(1, 1, 8, self::TODAY);
+        ])->getWeekdayBreakdown(1, 1, self::WINDOW_START, self::TODAY);
 
         $this->assertFalse($result['data']['has_data']);
     }
 
     public function testNoRecordsReturnsHasDataFalseWithSevenRows(): void
     {
-        $result = $this->makeService([])->getWeekdayBreakdown(1, 1, 8, self::TODAY);
+        $result = $this->makeService([])->getWeekdayBreakdown(1, 1, self::WINDOW_START, self::TODAY);
 
         $this->assertTrue($result['success']);
         $this->assertFalse($result['data']['has_data']);
@@ -171,7 +222,7 @@ final class RecordServiceWeekdayBreakdownTest extends TestCase
 
     public function testFailsWhenUserCannotAccessShop(): void
     {
-        $result = $this->makeService([], false)->getWeekdayBreakdown(1, 999, 8, self::TODAY);
+        $result = $this->makeService([], false)->getWeekdayBreakdown(1, 999, self::WINDOW_START, self::TODAY);
 
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('ไม่มีสิทธิ์', $result['error']);

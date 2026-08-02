@@ -18,6 +18,8 @@ use ShopRepository;
 final class RecordServiceWeekdayBreakdownTest extends IntegrationTestCase
 {
     private const TODAY = '2026-08-02';
+    /** window 8 สัปดาห์ของ TODAY (56 วัน) */
+    private const WINDOW_START = '2026-06-08';
 
     private function makeService(): RecordService
     {
@@ -58,7 +60,7 @@ final class RecordServiceWeekdayBreakdownTest extends IntegrationTestCase
         $this->createRecord($shopId, '2026-07-31', 100.0, 500.0);
         $this->createRecord($shopId, '2026-07-24', 100.0, 300.0);
 
-        $data = $this->makeService()->getWeekdayBreakdown($userId, $shopId, 8, self::TODAY)['data'];
+        $data = $this->makeService()->getWeekdayBreakdown($userId, $shopId, self::WINDOW_START, self::TODAY)['data'];
 
         $this->assertTrue($data['has_data']);
         $this->assertSame('2026-06-08', $data['start_date']);
@@ -90,11 +92,30 @@ final class RecordServiceWeekdayBreakdownTest extends IntegrationTestCase
 
         $this->createRecord($shopA, '2026-07-27', 1000.0, 200.0);
 
-        $dataA = $this->makeService()->getWeekdayBreakdown($userId, $shopA, 8, self::TODAY)['data'];
+        $dataA = $this->makeService()->getWeekdayBreakdown($userId, $shopA, self::WINDOW_START, self::TODAY)['data'];
         $mondayA = $this->pick($dataA['weekdays'], 1);
 
         $this->assertSame(1, $mondayA['sample_count']);
         $this->assertSame(800.0, $mondayA['avg_profit']);
+    }
+
+    public function testCustomRangeLimitsAggregation(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $this->createRecord($shopId, '2026-07-20', 5000.0, 100.0);  // จันทร์ นอกช่วงที่จะขอ
+        $this->createRecord($shopId, '2026-07-27', 1000.0, 200.0);  // จันทร์ ในช่วง
+
+        // ขอเฉพาะ 2026-07-27 .. 2026-08-02 (แบบเดียวกับโหมด "เดือนนี้" ที่ช่วงสั้นกว่า)
+        $data = $this->makeService()->getWeekdayBreakdown($userId, $shopId, '2026-07-27', self::TODAY)['data'];
+
+        $this->assertSame('2026-07-27', $data['start_date']);
+        $this->assertSame(self::TODAY, $data['end_date']);
+
+        $monday = $this->pick($data['weekdays'], 1);
+        $this->assertSame(1, $monday['sample_count']);   // ตัดจันทร์นอกช่วงออก
+        $this->assertSame(800.0, $monday['avg_profit']);
     }
 
     public function testEmptyShopHasNoData(): void
@@ -102,7 +123,7 @@ final class RecordServiceWeekdayBreakdownTest extends IntegrationTestCase
         $userId = $this->createUser();
         $shopId = $this->createShop($userId);
 
-        $data = $this->makeService()->getWeekdayBreakdown($userId, $shopId, 8, self::TODAY)['data'];
+        $data = $this->makeService()->getWeekdayBreakdown($userId, $shopId, self::WINDOW_START, self::TODAY)['data'];
 
         $this->assertFalse($data['has_data']);
         $this->assertCount(7, $data['weekdays']);

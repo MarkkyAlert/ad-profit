@@ -83,9 +83,19 @@ if ($weekdayComparable && $weekdayAvgProfit !== null) {
     }
 }
 
-// กำไรเฉลี่ยแยกตามวันในสัปดาห์ ย้อนหลัง 8 สัปดาห์
-$breakdownWeeks = 8;
-$breakdownResult = $recordService->getWeekdayBreakdown($userId, $shopId, $breakdownWeeks);
+// กำไรเฉลี่ยแยกตามวันในสัปดาห์ — เลือก window ได้ (8 สัปดาห์ / เดือนนี้)
+$breakdownModeInput = isset($_GET['wd']) ? strtolower(trim((string)$_GET['wd'])) : '8w';
+$breakdownMode = in_array($breakdownModeInput, ['8w', 'month'], true) ? $breakdownModeInput : '8w';
+$breakdownWindow = $recordService->resolveWeekdayWindow($breakdownMode);
+$breakdownMode = (string)$breakdownWindow['mode'];
+$breakdownLabel = $breakdownMode === 'month' ? 'เดือนนี้' : 'ย้อนหลัง 8 สัปดาห์';
+
+$breakdownResult = $recordService->getWeekdayBreakdown(
+    $userId,
+    $shopId,
+    (string)$breakdownWindow['start_date'],
+    (string)$breakdownWindow['end_date']
+);
 $breakdownData = ($breakdownResult['success'] ?? false) === true
     ? (array)($breakdownResult['data'] ?? [])
     : [];
@@ -705,10 +715,36 @@ require __DIR__ . '/includes/header.php';
 
 <?php if ($breakdownHasData): ?>
     <section class="section-card mt-6 p-4 sm:p-5">
-        <h2 class="text-base sm:text-lg font-semibold text-slate-100">
-            กำไรเฉลี่ยตามวัน · ย้อนหลัง <?= e((string)$breakdownWeeks) ?> สัปดาห์
-        </h2>
+        <?php
+        // คง filter ช่วงเวลาเดิมของ dashboard ไว้ตอนสลับ window (whitelist กันสะท้อน input มั่ว)
+        $breakdownKeptQuery = [];
+        foreach (['range', 'start_date', 'end_date', 'month'] as $keptKey) {
+            if (isset($_GET[$keptKey]) && is_string($_GET[$keptKey])) {
+                $breakdownKeptQuery[$keptKey] = (string)$_GET[$keptKey];
+            }
+        }
+        $breakdownModeUrl = static function (string $mode) use ($breakdownKeptQuery): string {
+            return app_url('/dashboard.php') . '?' . http_build_query(array_merge($breakdownKeptQuery, ['wd' => $mode]));
+        };
+        ?>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 class="text-base sm:text-lg font-semibold text-slate-100">
+                กำไรเฉลี่ยตามวัน · <?= e($breakdownLabel) ?>
+            </h2>
+            <div class="flex shrink-0 gap-2">
+                <a href="<?= e($breakdownModeUrl('8w')) ?>"
+                    class="<?= $breakdownMode === '8w' ? 'btn-primary' : 'btn-ghost' ?> px-3 py-1.5 text-xs"
+                    data-loading-link="true">8 สัปดาห์</a>
+                <a href="<?= e($breakdownModeUrl('month')) ?>"
+                    class="<?= $breakdownMode === 'month' ? 'btn-primary' : 'btn-ghost' ?> px-3 py-1.5 text-xs"
+                    data-loading-link="true">เดือนนี้</a>
+            </div>
+        </div>
+
         <p class="mt-1 text-xs text-slate-500">
+            <?= e(formatThaiDate((string)$breakdownWindow['start_date'])) ?> –
+            <?= e(formatThaiDate((string)$breakdownWindow['end_date'])) ?> ·
             ยิ่ง "จาก N วัน" มาก ยิ่งเชื่อได้ · ไฮไลต์เฉพาะวันที่มีข้อมูลตั้งแต่
             <?= e((string)$breakdownMinSample) ?> วันขึ้นไป
         </p>
