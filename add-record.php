@@ -16,6 +16,24 @@ $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 
 $recentRecords = $recordService->getRecentRecords($userId, $shopId, 7);
 
+// วันที่ยังไม่ได้กรอกของเดือนปัจจุบัน (ใช้โชว์ banner + เติมลงตาราง bulk)
+$currentMonth = date('Y-m');
+$unfilledResult = $recordService->getUnfilledDatesForMonth($userId, $shopId, $currentMonth);
+$missingDates = ($unfilledResult['success'] ?? false) === true
+    ? array_values((array)($unfilledResult['data']['missing_dates'] ?? []))
+    : [];
+$missingCount = count($missingDates);
+
+// แสดงรายการวันแบบไทยไม่เกิน 10 วัน ที่เหลือสรุปเป็น "และอีก N วัน"
+$missingPreviewLimit = 10;
+$missingPreviewText = implode(', ', array_map(
+    static fn(string $date): string => formatThaiDate($date),
+    array_slice($missingDates, 0, $missingPreviewLimit)
+));
+if ($missingCount > $missingPreviewLimit) {
+    $missingPreviewText .= ' และอีก ' . ($missingCount - $missingPreviewLimit) . ' วัน';
+}
+
 $shopCount = $shopRepository->countByUserId($userId);
 
 $pageTitle = 'บันทึกข้อมูลรายวัน';
@@ -118,6 +136,27 @@ require __DIR__ . '/includes/header.php';
         กรอกได้สูงสุด <?= e((string)RecordService::BULK_MAX_ROWS) ?> แถวต่อครั้ง · แถวที่เว้นว่างไว้ทั้งแถวจะถูกข้าม ·
         ถ้ามีแถวใดกรอกผิด ระบบจะไม่บันทึกทั้งชุด
     </p>
+
+    <?php if ($missingCount > 0): ?>
+        <div class="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="text-sm font-medium text-amber-200">
+                        เดือนนี้ยังไม่ได้กรอก <?= e((string)$missingCount) ?> วัน
+                    </p>
+                    <p class="mt-1 break-words text-xs text-amber-100/70"><?= e($missingPreviewText) ?></p>
+                </div>
+                <button type="button" id="bulk-fill-missing" class="btn-ghost shrink-0 px-4 py-2 text-sm">
+                    ↓ เติมวันที่ขาดลงตาราง
+                </button>
+            </div>
+            <p id="bulk-fill-notice" class="mt-2 hidden text-xs text-amber-100/70"></p>
+        </div>
+    <?php else: ?>
+        <div class="mb-4 rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3">
+            <p class="text-sm font-medium text-green-200">กรอกครบทุกวันแล้ว 🎉</p>
+        </div>
+    <?php endif; ?>
 
     <form action="<?= e(app_url('/api/records.php')) ?>" method="post">
         <?= csrf_field() ?>
@@ -235,6 +274,45 @@ require __DIR__ . '/includes/header.php';
 
         for (let index = 0; index < INITIAL_ROWS; index++) {
             addRow();
+        }
+
+        // ── เติมวันที่ยังไม่ได้กรอกลงตาราง ──────────────────────────────
+        const MISSING_DATES = <?= json_encode(
+            $missingDates,
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
+        ) ?>;
+
+        const fillButton = document.getElementById('bulk-fill-missing');
+        const fillNotice = document.getElementById('bulk-fill-notice');
+
+        if (fillButton && MISSING_DATES.length > 0) {
+            fillButton.addEventListener('click', () => {
+                const dates = MISSING_DATES.slice(0, MAX_ROWS);
+
+                tbody.innerHTML = '';
+                dates.forEach((date) => {
+                    addRow();
+                    const rows = tbody.querySelectorAll('tr');
+                    const dateInput = rows[rows.length - 1].querySelector('input[name="record_date[]"]');
+                    if (dateInput) {
+                        dateInput.value = date;
+                    }
+                });
+
+                refresh();
+
+                if (fillNotice) {
+                    if (MISSING_DATES.length > MAX_ROWS) {
+                        fillNotice.textContent = 'เติมให้ ' + MAX_ROWS + ' วันแรก (ขาดทั้งหมด '
+                            + MISSING_DATES.length + ' วัน) — บันทึกชุดนี้ก่อนแล้วกดเติมอีกครั้ง';
+                        fillNotice.classList.remove('hidden');
+                    } else {
+                        fillNotice.classList.add('hidden');
+                    }
+                }
+
+                tbody.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
         }
     })();
 </script>
