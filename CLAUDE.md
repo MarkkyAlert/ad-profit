@@ -10,6 +10,11 @@
 
 PHP ที่รองรับ: **≥ 8.1** (โค้ดใช้ `never` return type ซึ่งเป็นฟีเจอร์ 8.1) — แต่ **ยังไม่ได้ enforce ใน composer.json** (ไม่มี `"php"` constraint) ถ้าจะ pin ให้เพิ่ม `"require": { "php": ">=8.1" }`. ทุกไฟล์มี `declare(strict_types=1)`
 
+⚠️ **ช่องว่างเรื่องเวอร์ชันที่ต้องรู้ (อย่าเข้าใจผิดว่าเทสต์ครอบ 8.1):**
+- **test suite รันได้บน PHP 8.4+ เท่านั้น** — `phpunit/phpunit 13.x` require `php >= 8.4.1` → บน 8.1–8.3 `composer install` (dev) ไม่ผ่านตั้งแต่แรก
+- ความเข้ากันได้กับ **8.1 พิสูจน์แค่ระดับ syntax** (`php -l`) ผ่าน CI job `lint-php81` — **ไม่ได้พิสูจน์ runtime behavior บน 8.1**
+- ถ้าต้องการ runtime coverage บน 8.1 จริง ต้อง downgrade PHPUnit (เช่น ^10) — **ยังไม่ทำตอนนี้**
+
 ---
 
 ## กฎสถาปัตยกรรม (ห้ามฝ่าฝืนโดยไม่จำเป็น)
@@ -84,6 +89,8 @@ PHP ที่รองรับ: **≥ 8.1** (โค้ดใช้ `never` retu
 
 ### Framework
 - **PHPUnit** เป็น dev dependency, รันด้วย `composer test` **(หลัง setup แล้วเท่านั้น)**
+- ⚠️ **ต้องใช้ PHP 8.4+ ในการรันเทสต์** (PHPUnit 13 require `php >= 8.4.1`) — เครื่องที่เป็น 8.1–8.3 จะ `composer install` dev dependency ไม่ผ่าน; ความเข้ากันได้กับ 8.1 คุมด้วย `php -l` ใน CI job `lint-php81` เท่านั้น (syntax ไม่ใช่ runtime)
+- `phpunit.xml` เปิด `failOnWarning="true"` + `failOnNotice="true"` → warning/notice = เทสต์แดง (CI บังคับ)
 
 ### โครงสร้าง (หลัง setup)
 ```

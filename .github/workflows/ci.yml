@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ── job 1: static analysis + unit tests (ไม่ต้องใช้ DB) ──────────────────────
+  quality:
+    name: Quality (PHPStan + Unit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # PHPUnit 13.x require PHP >= 8.4.1 → CI ต้องใช้ 8.4 ขึ้นไป
+      # (โค้ด production รองรับ 8.1+ แต่ dev dependency บังคับ 8.4)
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo, pdo_mysql, mbstring
+          coverage: none
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: PHPStan (level 3, ต้อง 0 error)
+        run: composer stan
+
+      - name: Unit tests (ไม่แตะ DB)
+        run: vendor/bin/phpunit --testsuite Unit
+
+  # ── job 3: syntax lint บน PHP 8.1 (ปิด gap: เทสต์จริงรันได้แค่ 8.4+) ─────────
+  #    PHPUnit 13 require php >= 8.4.1 → ลง dependency บน 8.1 ไม่ได้
+  #    job นี้จึงไม่ composer install แค่ php -l ทุกไฟล์ เพื่อพิสูจน์ว่า
+  #    ไม่มี syntax ที่ PHP 8.1 (เวอร์ชันต่ำสุดที่โปรเจกต์อ้างว่ารองรับ) ไม่รู้จัก
+  #    ⚠️ พิสูจน์แค่ระดับ syntax — ไม่ครอบ runtime behavior บน 8.1
+  lint-php81:
+    name: Syntax lint (PHP 8.1)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.1
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: php -l ทุกไฟล์ (app/, includes/, api/, root *.php)
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            if ! php -l "$file" > /dev/null 2>&1; then
+              echo "::error file=${file}::PHP 8.1 syntax error"
+              php -l "$file" || true
+              status=1
+            fi
+          done < <(
+            find app includes api -type f -name '*.php' -print0
+            find . -maxdepth 1 -type f -name '*.php' -print0
+          )
+          if [ "$status" -eq 0 ]; then
+            echo "✅ ทุกไฟล์ผ่าน php -l บน $(php -r 'echo PHP_VERSION;')"
+          fi
+          exit $status
+
+  # ── job 2: integration tests (ต้องมี MariaDB จริง) ──────────────────────────
+  integration:
+    name: Integration (MariaDB 10.4)
+    runs-on: ubuntu-latest
+
+    services:
+      # ใช้ mariadb:10.4 ให้ตรงกับ dev environment
+      mariadb:
+        image: mariadb:10.4
+        env:
+          MARIADB_DATABASE: ad_profit_test
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo, pdo_mysql, mbstring
+          coverage: none
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      # รอ MariaDB พร้อมรับ connection (ใช้ PDO — ไม่ต้องลง mysql client บน runner)
+      - name: Wait for MariaDB
+        run: |
+          php -r '
+          for ($i = 0; $i < 30; $i++) {
+              try {
+                  new PDO("mysql:host=127.0.0.1;port=3306;dbname=ad_profit_test", "root", "root");
+                  echo "MariaDB ready\n";
+                  exit(0);
+              } catch (Throwable $e) {
+                  sleep(2);
+              }
+          }
+          fwrite(STDERR, "MariaDB not ready in time\n");
+          exit(1);
+          '
+
+      # ❗ ไม่มี step seed schema โดยตั้งใจ:
+      #    tests/Integration/IntegrationTestCase.php (setUpBeforeClass → loadSchema)
+      #    โหลด database/schema.sql เข้า test DB ให้เองอยู่แล้ว โดย split เป็น statement
+      #    แล้วข้าม `CREATE DATABASE` / `USE` (schema hardcode ชื่อ DB จริง `ad_profit`)
+      #    ⚠️ อย่าเผลอ seed ด้วย `grep -v '^CREATE DATABASE' | mysql` — `CREATE DATABASE`
+      #       ในไฟล์นี้กินพื้นที่ 3 บรรทัด (มี CHARACTER SET / COLLATE ต่อท้าย) การ grep
+      #       ทีละบรรทัดจะเหลือเศษ SQL ค้าง → import พังทันที
+      #    job นี้จึงต้องการแค่ "ให้ DB ว่างชื่อ ad_profit_test มีอยู่" (สร้างโดย MARIADB_DATABASE)
+      - name: Integration tests
+        env:
+          TEST_DB_HOST: 127.0.0.1
+          TEST_DB_PORT: '3306'
+          TEST_DB_NAME: ad_profit_test
+          TEST_DB_USER: root
+          TEST_DB_PASS: root
+        run: vendor/bin/phpunit --testsuite Integration
