@@ -580,6 +580,112 @@ class RecordService
     }
 
     /**
+     * สรุปกำไรเฉลี่ยแยกตามวันในสัปดาห์ ย้อนหลัง N สัปดาห์
+     *
+     * window = today ย้อนกลับไป (weeks*7 − 1) วัน → รวม weeks*7 วันพอดี
+     * (weeks=8 → 56 วัน = แต่ละวันในสัปดาห์ปรากฏ 8 ครั้ง)
+     * avg_roas คิดแบบ ratio of sums (Σรายได้ ÷ Σค่าแอด)
+     *
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์
+     */
+    public function getWeekdayBreakdown(int $userId, int $shopId, int $weeks = 8, ?string $today = null): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        $normalizedWeeks = max(1, $weeks);
+
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
+            : false;
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            $todayObject = new DateTimeImmutable('today');
+        }
+        $todayObject = $todayObject->setTime(0, 0, 0);
+
+        $endDate = $todayObject->format('Y-m-d');
+        $startDate = $todayObject->modify('-' . ($normalizedWeeks * 7 - 1) . ' days')->format('Y-m-d');
+
+        try {
+            $records = $this->recordRepository->getByDateRange($shopId, $startDate, $endDate);
+        } catch (Throwable $exception) {
+            error_log('[record] getWeekdayBreakdown failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลสรุปตามวันได้',
+            ];
+        }
+
+        // เตรียมถัง 1..7 ไว้ก่อน เพื่อให้ output เรียง จันทร์→อาทิตย์ เสมอ
+        $buckets = [];
+        for ($weekday = 1; $weekday <= 7; $weekday++) {
+            $buckets[$weekday] = [
+                'count' => 0,
+                'revenue_total' => 0.0,
+                'ad_cost_total' => 0.0,
+            ];
+        }
+
+        $hasData = false;
+
+        foreach ($records as $record) {
+            $recordDate = trim((string)($record['record_date'] ?? ''));
+            if ($recordDate === '') {
+                continue;
+            }
+
+            $recordObject = DateTimeImmutable::createFromFormat('Y-m-d', $recordDate);
+            if (!$recordObject || $recordObject->format('Y-m-d') !== $recordDate) {
+                continue;
+            }
+
+            $weekday = (int)$recordObject->format('N');
+            if (!isset($buckets[$weekday])) {
+                continue;
+            }
+
+            $buckets[$weekday]['count']++;
+            $buckets[$weekday]['revenue_total'] += (float)($record['revenue'] ?? 0);
+            $buckets[$weekday]['ad_cost_total'] += (float)($record['ad_cost'] ?? 0);
+            $hasData = true;
+        }
+
+        $weekdays = [];
+        foreach ($buckets as $weekday => $bucket) {
+            $count = (int)$bucket['count'];
+            $revenueTotal = (float)$bucket['revenue_total'];
+            $adCostTotal = (float)$bucket['ad_cost_total'];
+            $profitTotal = $revenueTotal - $adCostTotal;
+
+            $weekdays[] = [
+                'weekday' => $weekday,
+                'sample_count' => $count,
+                'avg_profit' => $count > 0 ? round($profitTotal / $count, 2) : null,
+                'avg_revenue' => $count > 0 ? round($revenueTotal / $count, 2) : null,
+                'avg_roas' => ($count > 0 && $adCostTotal > 0)
+                    ? round($revenueTotal / $adCostTotal, 2)
+                    : null,
+            ];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'weeks' => $normalizedWeeks,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'has_data' => $hasData,
+                'weekdays' => $weekdays,
+            ],
+        ];
+    }
+
+    /**
      * นับจำนวนวันนับจากรายการล่าสุดที่กรอกไว้ (ใช้เตือนว่าไม่ได้กรอกนานแล้ว)
      *
      * แยก 2 เคสให้ชัด:

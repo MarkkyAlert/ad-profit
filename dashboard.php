@@ -83,6 +83,43 @@ if ($weekdayComparable && $weekdayAvgProfit !== null) {
     }
 }
 
+// กำไรเฉลี่ยแยกตามวันในสัปดาห์ ย้อนหลัง 8 สัปดาห์
+$breakdownWeeks = 8;
+$breakdownResult = $recordService->getWeekdayBreakdown($userId, $shopId, $breakdownWeeks);
+$breakdownData = ($breakdownResult['success'] ?? false) === true
+    ? (array)($breakdownResult['data'] ?? [])
+    : [];
+$breakdownHasData = (bool)($breakdownData['has_data'] ?? false);
+$breakdownRows = array_values((array)($breakdownData['weekdays'] ?? []));
+
+// ไฮไลต์ดี/เงียบ เฉพาะวันที่มีข้อมูลพอ (sample_count >= 3) และต้องมีอย่างน้อย 2 วันให้เทียบ
+$breakdownMinSample = 3;
+$breakdownBestWeekday = null;
+$breakdownWorstWeekday = null;
+$breakdownEligible = array_values(array_filter(
+    $breakdownRows,
+    static fn(array $row): bool => (int)($row['sample_count'] ?? 0) >= 3 && ($row['avg_profit'] ?? null) !== null
+));
+
+if (count($breakdownEligible) >= 2) {
+    $breakdownBest = $breakdownEligible[0];
+    $breakdownWorst = $breakdownEligible[0];
+    foreach ($breakdownEligible as $row) {
+        if ((float)$row['avg_profit'] > (float)$breakdownBest['avg_profit']) {
+            $breakdownBest = $row;
+        }
+        if ((float)$row['avg_profit'] < (float)$breakdownWorst['avg_profit']) {
+            $breakdownWorst = $row;
+        }
+    }
+
+    // ถ้าทุกวันกำไรเท่ากันหมด ก็ไม่ต้องไฮไลต์
+    if ((float)$breakdownBest['avg_profit'] !== (float)$breakdownWorst['avg_profit']) {
+        $breakdownBestWeekday = (int)$breakdownBest['weekday'];
+        $breakdownWorstWeekday = (int)$breakdownWorst['weekday'];
+    }
+}
+
 $lastRecordResult = $recordService->getDaysSinceLastRecord($userId, $shopId);
 $lastRecordData = ($lastRecordResult['success'] ?? false) === true
     ? (array)($lastRecordResult['data'] ?? [])
@@ -663,6 +700,62 @@ require __DIR__ . '/includes/header.php';
                 </p>
             </div>
         <?php endif; ?>
+    </section>
+<?php endif; ?>
+
+<?php if ($breakdownHasData): ?>
+    <section class="section-card mt-6 p-4 sm:p-5">
+        <h2 class="text-base sm:text-lg font-semibold text-slate-100">
+            กำไรเฉลี่ยตามวัน · ย้อนหลัง <?= e((string)$breakdownWeeks) ?> สัปดาห์
+        </h2>
+        <p class="mt-1 text-xs text-slate-500">
+            ยิ่ง "จาก N วัน" มาก ยิ่งเชื่อได้ · ไฮไลต์เฉพาะวันที่มีข้อมูลตั้งแต่
+            <?= e((string)$breakdownMinSample) ?> วันขึ้นไป
+        </p>
+
+        <div class="mt-3 overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="border-b border-white/10 text-left text-slate-400">
+                        <th class="px-3 py-2">วัน</th>
+                        <th class="px-3 py-2">กำไรเฉลี่ย</th>
+                        <th class="px-3 py-2">ROAS เฉลี่ย</th>
+                        <th class="px-3 py-2">จาก</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($breakdownRows as $breakdownRow): ?>
+                        <?php
+                        $rowWeekday = (int)($breakdownRow['weekday'] ?? 0);
+                        $rowSampleCount = (int)($breakdownRow['sample_count'] ?? 0);
+                        $rowAvgProfit = $breakdownRow['avg_profit'] ?? null;
+                        $rowAvgRoas = $breakdownRow['avg_roas'] ?? null;
+
+                        $rowClass = '';
+                        if ($breakdownBestWeekday !== null && $rowWeekday === $breakdownBestWeekday) {
+                            $rowClass = 'bg-green-500/10';
+                        } elseif ($breakdownWorstWeekday !== null && $rowWeekday === $breakdownWorstWeekday) {
+                            $rowClass = 'bg-amber-500/10';
+                        }
+                        ?>
+                        <tr class="border-b border-white/[0.06] <?= e($rowClass) ?>">
+                            <td class="px-3 py-2 font-medium text-slate-300"><?= e(formatThaiWeekday($rowWeekday)) ?></td>
+                            <?php if ($rowSampleCount === 0 || $rowAvgProfit === null): ?>
+                                <td class="px-3 py-2 text-slate-500">—</td>
+                                <td class="px-3 py-2 text-slate-500">—</td>
+                                <td class="px-3 py-2 text-slate-500">—</td>
+                            <?php else: ?>
+                                <td class="px-3 py-2 font-semibold <?= ((float)$rowAvgProfit) >= 0 ? 'text-green-400' : 'text-red-400' ?>">
+                                    <?= e(formatMoney((float)$rowAvgProfit)) ?>
+                                </td>
+                                <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($rowAvgRoas !== null ? (float)$rowAvgRoas : null)) ?></td>
+                                <td class="px-3 py-2 text-xs text-slate-500"><?= e((string)$rowSampleCount) ?> วัน</td>
+                            <?php endif; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     </section>
 <?php endif; ?>
 
