@@ -162,6 +162,13 @@ require __DIR__ . '/includes/header.php';
         <?= csrf_field() ?>
         <input type="hidden" name="action" value="bulk_upsert">
 
+        <p class="mb-2 text-xs text-slate-400">
+            💡 วางจาก Excel / Google Sheets ได้ — คัดลอกหลายแถว (วันที่ · รายได้ · ค่าแอด · โน้ต)
+            แล้วกด <kbd class="rounded bg-white/10 px-1">Ctrl</kbd>+<kbd class="rounded bg-white/10 px-1">V</kbd>
+            ในช่องที่ต้องการเริ่มวาง
+        </p>
+        <p id="bulk-paste-notice" class="mb-3 hidden text-xs text-amber-200"></p>
+
         <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
                 <thead>
@@ -314,6 +321,148 @@ require __DIR__ . '/includes/header.php';
                 tbody.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             });
         }
+
+        // ── วางจาก Excel / Google Sheets (TSV) ──────────────────────────
+        const COLUMN_NAMES = ['record_date[]', 'revenue[]', 'ad_cost[]', 'note[]'];
+        const pasteNotice = document.getElementById('bulk-paste-notice');
+
+        const getRows = () => Array.from(tbody.querySelectorAll('tr'));
+        const pad2 = (value) => String(value).padStart(2, '0');
+
+        // รองรับ YYYY-MM-DD และ D/M/YYYY (+ แปลง พ.ศ. 2400–2700) — นอกเหนือจากนี้คืน null
+        const parseDateCell = (raw) => {
+            const value = String(raw).trim();
+            if (value === '') {
+                return null;
+            }
+
+            let year;
+            let month;
+            let day;
+
+            let matched = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+            if (matched) {
+                year = Number(matched[1]);
+                month = Number(matched[2]);
+                day = Number(matched[3]);
+            } else {
+                matched = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                if (!matched) {
+                    return null;
+                }
+                day = Number(matched[1]);
+                month = Number(matched[2]);
+                year = Number(matched[3]);
+            }
+
+            if (year >= 2400 && year <= 2700) {
+                year -= 543; // พ.ศ. → ค.ศ.
+            }
+
+            if (month < 1 || month > 12 || day < 1 || day > 31) {
+                return null;
+            }
+
+            return year + '-' + pad2(month) + '-' + pad2(day);
+        };
+
+        const normalizeCell = (columnIndex, raw) => {
+            if (columnIndex === 0) {
+                // parse ไม่ได้ → คืนค่าดิบ ให้ฝั่ง server เป็นคน reject
+                return parseDateCell(raw) || String(raw).trim();
+            }
+
+            if (columnIndex === 1 || columnIndex === 2) {
+                return String(raw).replace(/[฿,\s]/g, '').trim();
+            }
+
+            return String(raw).trim();
+        };
+
+        tbody.addEventListener('paste', (event) => {
+            const target = event.target;
+            if (!target || target.tagName !== 'INPUT') {
+                return;
+            }
+
+            const clipboard = event.clipboardData || window.clipboardData;
+            const text = clipboard ? clipboard.getData('text') : '';
+            if (text === '') {
+                return;
+            }
+
+            // ค่าเดี่ยว (ไม่มี tab/newline) → ปล่อยให้เบราว์เซอร์วางตามปกติ
+            if (!text.includes('\t') && !text.includes('\n') && !text.includes('\r')) {
+                return;
+            }
+
+            event.preventDefault();
+
+            const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+            while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            if (lines.length === 0) {
+                return;
+            }
+
+            const grid = lines.map((line) => line.split('\t'));
+
+            const startRow = getRows().indexOf(target.closest('tr'));
+            const startCol = COLUMN_NAMES.indexOf(target.getAttribute('name'));
+            if (startRow < 0 || startCol < 0) {
+                return;
+            }
+
+            // ข้าม header — เช็กเฉพาะตอนวางเริ่มที่คอลัมน์วันที่ (กันตัดข้อมูลทิ้งผิด)
+            if (startCol === 0 && grid.length > 1 && parseDateCell(grid[0][0]) === null) {
+                grid.shift();
+            }
+
+            let placedRows = 0;
+            let truncatedRows = 0;
+
+            grid.forEach((cells, rowOffset) => {
+                const rowIndex = startRow + rowOffset;
+
+                while (getRows().length <= rowIndex && getRows().length < MAX_ROWS) {
+                    addRow();
+                }
+
+                const rows = getRows();
+                if (rowIndex >= rows.length) {
+                    truncatedRows++;
+                    return;
+                }
+
+                const row = rows[rowIndex];
+                cells.forEach((cell, cellOffset) => {
+                    const columnIndex = startCol + cellOffset;
+                    if (columnIndex > 3) {
+                        return; // เกินคอลัมน์สุดท้าย (โน้ต)
+                    }
+
+                    const input = row.querySelector('input[name="' + COLUMN_NAMES[columnIndex] + '"]');
+                    if (input) {
+                        input.value = normalizeCell(columnIndex, cell);
+                    }
+                });
+
+                placedRows++;
+            });
+
+            refresh();
+
+            if (pasteNotice) {
+                if (truncatedRows > 0) {
+                    pasteNotice.textContent = 'วางได้ ' + placedRows + ' แถว · ส่วนที่เกิน '
+                        + MAX_ROWS + ' แถว (' + truncatedRows + ' แถว) ถูกตัด';
+                    pasteNotice.classList.remove('hidden');
+                } else {
+                    pasteNotice.classList.add('hidden');
+                }
+            }
+        });
     })();
 </script>
 
