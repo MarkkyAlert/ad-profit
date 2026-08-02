@@ -1,0 +1,46 @@
+# PHPStan — static analysis config (target: level 3, ต้อง 0 error)
+#
+# (a) ทำไม ignore $pdo ใน api/*:
+#     โปรเจกต์นี้เป็น front-controller-per-file (ไม่มี router) — `includes/bootstrap.php`
+#     ประกาศ `$pdo = db()` ไว้ที่ global scope แล้วไฟล์ใน api/ ที่ require bootstrap
+#     ใช้ตัวแปรนี้ต่อ. PHPStan วิเคราะห์ทีละไฟล์ ตาม global ข้ามไฟล์ไม่ได้ จึงมองว่า
+#     "$pdo might not be defined" — เป็น artifact ของสถาปัตยกรรม **ไม่ใช่ bug**
+#     (ignore เจาะจงเฉพาะ $pdo ใน api/ เท่านั้น ไม่ได้ปิด variable.undefined ทั้งระบบ)
+#
+# (b) scope ตอนนี้ยังไม่รวม root page (`dashboard.php`, `overview.php`, `annual.php`,
+#     `history.php`, `add-record.php`, `shops.php`, `profile.php`, `login.php` ฯลฯ)
+#     ซึ่งใช้ `$pdo` แบบเดียวกัน — เพิ่มเข้า paths ทีหลังได้ (ต้องขยาย ignore ให้ครอบด้วย)
+#
+# (c) DEFERRED (ยังไม่ทำ ตั้งใจ):
+#     - level 4 เจอ dead code จริง 3 method ใน app/Services/RecordService.php:412-431
+#       (beginTransactionIfAvailable / commitTransactionIfAvailable / rollBackTransactionIfAvailable)
+#       ไม่ถูกเรียกจากที่ไหนเลย → ไว้ลบตอนเฟส cleanup
+#     - level 4 ที่เหลือส่วนใหญ่เป็น false positive: PHPStan ถือว่า PDO::inTransaction() เป็น pure
+#       จึงบ่น "always false" กับ pattern TX guard ใน Record/Shop/Profile/GoalService (โค้ดถูกที่ runtime)
+#     - level 6 ต้องเขียน array-shape docblock (@return array{success: bool, ...}) ~79 จุด
+#       ตาม result-array pattern ของ Service/Repository
+
+parameters:
+    level: 3
+
+    paths:
+        - app
+        - includes
+        - api
+        - tests
+
+    # ให้ PHPStan เห็น constant ที่ define ใน config.php (APP_ENV, MAIL_*, SCHEMA_GUARD_ENABLED ฯลฯ)
+    # กัน constant.notFound — config.php แค่ define ค่า ไม่มี side effect (ไม่ต่อ DB / ไม่ start session)
+    bootstrapFiles:
+        - includes/config.php
+
+    ignoreErrors:
+        # (a) ดูคำอธิบายด้านบน — ครอบ 2 ที่ที่ใช้ $pdo แบบ global เหมือนกัน:
+        #     - api/*            : front-controller ที่ require bootstrap.php
+        #     - includes/header.php : view shell ที่ถูก require ต่อจาก bootstrap (บรรทัด 14-15)
+        -
+            identifier: variable.undefined
+            message: '#Variable \$pdo might not be defined#'
+            paths:
+                - api/*
+                - includes/header.php
