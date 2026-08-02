@@ -55,7 +55,7 @@ PHP ที่รองรับ: **≥ 8.1** (โค้ดใช้ `never` retu
 - **`api/dashboard-data.php`, `overview-data.php`, `annual-data.php` ไม่ถูกเรียกจาก UI** (data page เรียก Service ตรงในเพจ) — อย่าเข้าใจผิดว่าหน้าเว็บ fetch endpoint พวกนี้
 - **`idempotency_requests` + `IdempotencyRequestRepository` ยังไม่ถูกใช้จริง** — มีแค่ cron cleanup กันซ้ำจริงพึ่ง unique key ระดับ DB + row lock
 - **Schema Guard ใน `includes/bootstrap.php`:** ถ้า schema ไม่ตรง (ตาราง/คอลัมน์/index ที่กำหนด) ระบบตอบ 503 / CLI exit(1) ควบคุมด้วย flag `SCHEMA_GUARD_ENABLED` — **เวลาแก้ schema ต้องอัปเดต guard ด้วย**
-- **`database/schema.sql` เป็น DROP + CREATE** — ห้ามรันทับ database จริง; ถ้าจะแก้โครงบน DB ที่มีข้อมูล ใช้ `ALTER` แยกต่างหาก
+- **`database/schema.sql` เป็น DROP + CREATE** — ห้ามรันทับ database จริง; ถ้าจะแก้โครงบน DB ที่มีข้อมูล ใช้ `ALTER` แยกต่างหาก ⚠️ ไฟล์**ขึ้นต้นด้วย `CREATE DATABASE ad_profit; USE ad_profit;` (hardcode ชื่อ DB จริง)** → `mysql < schema.sql` บนเซิร์ฟเวอร์ = **DROP ตารางใน `ad_profit` จริงทันที**; integration test loader (`tests/Integration/IntegrationTestCase.php`) จึง**ตัด 2 บรรทัดนี้ทิ้ง** ให้ DDL ลงเฉพาะ DB ที่ต่ออยู่
 - **Auth/Session:** idle timeout 14400s, absolute 86400s; `requireAuth`/`requireGuest` เป็น guard; `isSessionVersionValid()` เช็ก DB **ทุก request**
 - **Rate limiting:** auth ใช้ตาราง `auth_rate_limits` (DB) + fallback session; profile (email/password) ใช้ session-based ตอบ 429
 - **Security extra:** CSV export กัน formula injection (เติม `'` หน้า cell ที่ขึ้นต้น `= + - @ \t \r`) — **guard นี้อยู่ใน controller `api/export.php` (closure `$sanitizeCsvCell`) ไม่ใช่ `ExportService` → unit-test ที่ระดับ service ไม่ได้ ต้องเทสต์ผ่าน integration ที่ยิง endpoint จริง**; reset token เก็บเป็น hash + TTL, security headers เซ็ตใน bootstrap
@@ -125,12 +125,13 @@ assert แบบ **result-array** (`assertFalse($result['success'])`, `assertStr
 
 ### Integration tests (เมื่อจำเป็นต้องแตะ DB)
 - **ต้องใช้ MySQL test DB จริง** — SQL เป็น MySQL-specific (`ON DUPLICATE KEY`, `FOR UPDATE`, `DATE_FORMAT`, `information_schema`) SQLite in-memory ใช้ไม่ได้
-- seed schema จาก `database/schema.sql` เข้า test DB ก่อนรัน
-- **ใช้ DB แยกผ่าน env** (`DB_NAME=ad_profit_test`) — `db()` อ่านจาก `DB_*` constant ห้ามให้เทสต์แตะข้อมูลจริงเด็ดขาด
-- เป้าหมาย: `RecordRepository` upsert unique(shop,date), FK cascade ตอนลบร้าน, `AuthService` increment session_version
+- seed schema จาก `database/schema.sql` เข้า test DB ก่อนรัน — **loader ตัด `CREATE DATABASE`/`USE ad_profit` ทิ้ง** (schema hardcode ชื่อ DB จริง ดู gotchas) ให้ DDL ลงเฉพาะ DB ที่ต่ออยู่
+- **ใช้ test DB แยกผ่าน env `TEST_DB_*`** — base class ต่อ PDO เอง (ไม่ผ่าน `db()`) แล้วฉีดเข้า repo/service; **SAFETY: ชื่อต้องลงท้าย `_test` ไม่งั้น throw**; แต่ละ test isolate ด้วย `TRUNCATE` (ไม่ใช่ tx rollback เพราะ service เปิด transaction เอง)
+- **เตรียม test DB (ทำครั้งเดียว):** `CREATE DATABASE ad_profit_test;` แล้ว set env เท่าที่ต่างจาก default — `TEST_DB_HOST` (default `127.0.0.1`), `TEST_DB_PORT` (`3306`), `TEST_DB_NAME` (`ad_profit_test`), `TEST_DB_USER` (`root`), `TEST_DB_PASS` (`''`); ต่อไม่ได้ → integration **skip** (ไม่ error)
+- เป้าหมาย: `RecordRepository` upsert unique(shop,date), FK cascade ตอนลบร้าน/ลบ user, `UserRepository` increment session_version, `AuthService` register (สร้าง user + default shop)
 
 ### ข้อควรระวัง
-- `AuthService` เขียน `$_SESSION` + เรียก `session_regenerate_id(true)` (ต้องมี active session) → ส่วน `establishSession` เทสต์ยากใน CLI ให้เทสต์เฉพาะ branch validation/rate-limit หรือทำเป็น integration ที่ start session
+- `AuthService` เขียน `$_SESSION` + เรียก `session_regenerate_id(true)` (ต้องมี active session) → ส่วน `establishSession` เทสต์ยากใน CLI ให้เทสต์เฉพาะ branch validation/rate-limit หรือทำเป็น integration ที่ start session — **ทำแล้วใน `tests/Integration/AuthServiceTest.php`:** `setUp()` เปิด session เอง (`ini_set` save_path ถ้าว่าง + `session_start(['use_cookies'=>'0','cache_limiter'=>''])` กัน "headers already sent" ใน CLI) โดยไม่แตะ AuthService/base class
 - ตั้ง `$_SESSION = []` ใน `setUp()` เมื่อเทสต์โค้ดที่อ่าน session
 - error message เป็นภาษาไทย → assert ด้วย substring ที่เป็นคำไทย (เช่น `'ติดลบ'`, `'ไม่มีสิทธิ์'`)
 
