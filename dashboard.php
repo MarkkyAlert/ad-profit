@@ -180,6 +180,7 @@ $dashboardData = [
     ],
     'statistics' => [
         'avg_revenue_per_day' => null,
+        'avg_profit_per_day' => null,
         'profit_margin' => null,
         'best_day' => null,
         'worst_day' => null,
@@ -300,9 +301,9 @@ $formatDayMetric = static function ($day): string {
         return '–';
     }
 
-    $revenue = (float)($day['revenue'] ?? 0);
+    $profit = (float)($day['profit'] ?? 0);
 
-    return formatThaiDate($recordDate) . ' (' . formatMoney($revenue) . ')';
+    return formatThaiDate($recordDate) . ' (' . formatMoney($profit) . ')';
 };
 
 $selectedRange = (string)($rangeData['type'] ?? 'month_this');
@@ -517,9 +518,16 @@ require __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <?php
+    $avgProfitPerDay = isset($statistics['avg_profit_per_day']) && $statistics['avg_profit_per_day'] !== null
+        ? (float)$statistics['avg_profit_per_day']
+        : null;
+    ?>
     <article class="stat-card s-neutral">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">เฉลี่ยรายได้ต่อวัน</p>
-        <p class="mt-1 text-lg font-semibold text-slate-100"><?= $statistics['avg_revenue_per_day'] !== null ? e(formatMoney((float)$statistics['avg_revenue_per_day']) . '/วัน') : '–' ?></p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">เฉลี่ยกำไรต่อวัน</p>
+        <p class="mt-1 text-lg font-semibold <?= $avgProfitPerDay === null || $avgProfitPerDay >= 0 ? 'text-slate-100' : 'text-red-400' ?>">
+            <?= $avgProfitPerDay !== null ? e(formatMoney($avgProfitPerDay) . '/วัน') : '–' ?>
+        </p>
     </article>
 
     <article class="stat-card s-neutral">
@@ -528,12 +536,12 @@ require __DIR__ . '/includes/header.php';
     </article>
 
     <article class="stat-card s-best">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันขายดีสุด</p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันกำไรดีสุด</p>
         <p class="mt-1 text-sm font-semibold text-green-400"><?= e($formatDayMetric(isset($statistics['best_day']) && is_array($statistics['best_day']) ? $statistics['best_day'] : null)) ?></p>
     </article>
 
     <article class="stat-card s-worst">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันขายแย่สุด</p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันกำไรแย่สุด</p>
         <p class="mt-1 text-sm font-semibold text-red-400"><?= e($formatDayMetric(isset($statistics['worst_day']) && is_array($statistics['worst_day']) ? $statistics['worst_day'] : null)) ?></p>
     </article>
 </section>

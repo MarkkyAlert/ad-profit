@@ -78,6 +78,7 @@ class DashboardService
                 ],
                 'statistics' => [
                     'avg_revenue_per_day' => $summary['avg_revenue_per_day'],
+                    'avg_profit_per_day' => $summary['avg_profit_per_day'],
                     'profit_margin' => $summary['profit_margin'],
                     'best_day' => $summary['best_day'],
                     'worst_day' => $summary['worst_day'],
@@ -278,17 +279,20 @@ class DashboardService
             $totalRevenue += $recordRevenue;
             $totalAdCost += $recordAdCost;
 
-            if ($bestDay === null || $recordRevenue > (float)$bestDay['revenue']) {
+            // จัดอันดับด้วย "กำไร" (ติดลบได้เมื่อค่าแอดมากกว่ารายได้)
+            $recordProfit = $recordRevenue - $recordAdCost;
+
+            if ($bestDay === null || $recordProfit > (float)$bestDay['profit']) {
                 $bestDay = [
                     'record_date' => $recordDate,
-                    'revenue' => $recordRevenue,
+                    'profit' => $recordProfit,
                 ];
             }
 
-            if ($worstDay === null || $recordRevenue < (float)$worstDay['revenue']) {
+            if ($worstDay === null || $recordProfit < (float)$worstDay['profit']) {
                 $worstDay = [
                     'record_date' => $recordDate,
-                    'revenue' => $recordRevenue,
+                    'profit' => $recordProfit,
                 ];
             }
         }
@@ -302,7 +306,9 @@ class DashboardService
             'profit' => $profit,
             'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
             'profit_margin' => $totalRevenue > 0 ? round(($profit / $totalRevenue) * 100, 1) : null,
+            // คง avg_revenue_per_day ไว้ (ของเดิมอาจมีที่ใช้) — การ์ดใช้ avg_profit_per_day แทน
             'avg_revenue_per_day' => $daysCount > 0 ? round($totalRevenue / $daysCount, 2) : null,
+            'avg_profit_per_day' => $daysCount > 0 ? round($profit / $daysCount, 2) : null,
             'days_count' => $daysCount,
             'best_day' => $bestDay,
             'worst_day' => $worstDay,
