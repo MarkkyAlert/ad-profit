@@ -94,16 +94,19 @@ if ($output === false) {
 
 echo "\xEF\xBB\xBF";
 
+// ส่ง $escape เป็น '' ทุกจุด: PHP 8.4+ deprecate การไม่ระบุค่านี้ ซึ่งถ้า display_errors เปิด
+// (โหมด development) ข้อความ deprecation จะถูกเขียนปนลงไฟล์ CSV จนไฟล์เสีย
+// '' = ปิด escape แบบ backslash ตรงตามมาตรฐาน CSV (RFC-4180) เหมือนที่ parseImportCsv ใช้กับ fgetcsv
 if (!empty($headers)) {
-    fputcsv($output, array_map($sanitizeCsvCell, $headers));
+    fputcsv($output, array_map($sanitizeCsvCell, $headers), ',', '"', '');
 }
 
 foreach ($rows as $row) {
-    fputcsv($output, array_map($sanitizeCsvCell, (array)$row));
+    fputcsv($output, array_map($sanitizeCsvCell, (array)$row), ',', '"', '');
 }
 
 if (!empty($totalsRow)) {
-    fputcsv($output, array_map($sanitizeCsvCell, $totalsRow));
+    fputcsv($output, array_map($sanitizeCsvCell, $totalsRow), ',', '"', '');
 }
 
 fclose($output);
