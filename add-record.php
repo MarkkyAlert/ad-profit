@@ -187,6 +187,9 @@ require __DIR__ . '/includes/header.php';
 
         <div class="mt-4 flex flex-wrap items-center gap-3">
             <button type="button" id="bulk-add-row" class="btn-ghost px-4 py-2 text-sm">+ เพิ่มแถว</button>
+            <button type="button" id="bulk-fill-max" class="btn-ghost px-4 py-2 text-sm">
+                ⤓ เติมครบ <?= e((string)RecordService::BULK_MAX_ROWS) ?> แถว
+            </button>
             <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">✓ บันทึกทั้งหมด</button>
         </div>
     </form>
@@ -221,6 +224,7 @@ require __DIR__ . '/includes/header.php';
         const tbody = document.getElementById('bulk-rows');
         const template = document.getElementById('bulk-row-template');
         const addButton = document.getElementById('bulk-add-row');
+        const fillMaxButton = document.getElementById('bulk-fill-max');
         const counter = document.getElementById('bulk-row-count');
 
         if (!tbody || !template || !addButton) {
@@ -243,6 +247,12 @@ require __DIR__ . '/includes/header.php';
             addButton.disabled = rows.length >= MAX_ROWS;
             addButton.classList.toggle('opacity-50', addButton.disabled);
             addButton.classList.toggle('cursor-not-allowed', addButton.disabled);
+
+            if (fillMaxButton) {
+                fillMaxButton.disabled = rows.length >= MAX_ROWS;
+                fillMaxButton.classList.toggle('opacity-50', fillMaxButton.disabled);
+                fillMaxButton.classList.toggle('cursor-not-allowed', fillMaxButton.disabled);
+            }
         };
 
         const addRow = () => {
@@ -278,6 +288,16 @@ require __DIR__ . '/includes/header.php';
         });
 
         addButton.addEventListener('click', addRow);
+
+        // เติมแถวจนครบเพดาน — ต่อจากแถวที่มีอยู่ ไม่ล้างของเดิม
+        // (addRow() มี guard เกิน MAX_ROWS อยู่แล้ว และเรียก refresh() ให้เอง)
+        if (fillMaxButton) {
+            fillMaxButton.addEventListener('click', () => {
+                while (tbody.querySelectorAll('tr').length < MAX_ROWS) {
+                    addRow();
+                }
+            });
+        }
 
         for (let index = 0; index < INITIAL_ROWS; index++) {
             addRow();
