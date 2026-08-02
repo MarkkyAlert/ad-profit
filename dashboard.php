@@ -35,6 +35,47 @@ $dashboardService = new DashboardService($recordRepository, $shopRepository, $go
 const REMINDER_DAYS_THRESHOLD = 3;
 
 $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
+
+// เทียบวันล่าสุดกับวันเดียวกันในสัปดาห์ของเดือนนั้น
+$weekdayResult = $recordService->getWeekdayContext($userId, $shopId);
+$weekdayData = ($weekdayResult['success'] ?? false) === true
+    ? (array)($weekdayResult['data'] ?? [])
+    : [];
+$weekdayHasData = (bool)($weekdayData['has_data'] ?? false);
+$weekdayComparable = (bool)($weekdayData['comparable'] ?? false);
+$weekdayName = isset($weekdayData['weekday']) && $weekdayData['weekday'] !== null
+    ? formatThaiWeekday((int)$weekdayData['weekday'])
+    : '';
+$weekdayTargetDate = (string)($weekdayData['target_date'] ?? '');
+$weekdayTargetRevenue = (float)($weekdayData['target_revenue'] ?? 0);
+$weekdayAvgRevenue = isset($weekdayData['avg_revenue']) && $weekdayData['avg_revenue'] !== null
+    ? (float)$weekdayData['avg_revenue']
+    : null;
+$weekdayTargetRoas = isset($weekdayData['target_roas']) && $weekdayData['target_roas'] !== null
+    ? (float)$weekdayData['target_roas']
+    : null;
+$weekdayAvgRoas = isset($weekdayData['avg_roas']) && $weekdayData['avg_roas'] !== null
+    ? (float)$weekdayData['avg_roas']
+    : null;
+$weekdaySampleCount = (int)($weekdayData['sample_count'] ?? 0);
+
+// เทียบเชิงคุณภาพ: สูงกว่า / ใกล้เคียง (±10%) / ต่ำกว่า
+$weekdayHint = null;
+$weekdayHintClass = 'text-slate-400';
+if ($weekdayComparable && $weekdayAvgRevenue !== null && $weekdayAvgRevenue > 0) {
+    $weekdayRatio = $weekdayTargetRevenue / $weekdayAvgRevenue;
+    if ($weekdayRatio >= 1.1) {
+        $weekdayHint = 'สูงกว่า' . $weekdayName . 'ปกติของเดือนนี้';
+        $weekdayHintClass = 'text-green-400';
+    } elseif ($weekdayRatio <= 0.9) {
+        $weekdayHint = 'ต่ำกว่า' . $weekdayName . 'ปกติของเดือนนี้';
+        $weekdayHintClass = 'text-amber-300';
+    } else {
+        $weekdayHint = 'ใกล้เคียง' . $weekdayName . 'ปกติของเดือนนี้';
+        $weekdayHintClass = 'text-slate-300';
+    }
+}
+
 $lastRecordResult = $recordService->getDaysSinceLastRecord($userId, $shopId);
 $lastRecordData = ($lastRecordResult['success'] ?? false) === true
     ? (array)($lastRecordResult['data'] ?? [])
@@ -574,6 +615,40 @@ require __DIR__ . '/includes/header.php';
         </form>
     </div>
 </div>
+
+<?php if ($weekdayHasData): ?>
+    <section class="section-card mt-6 p-4 sm:p-5">
+        <h2 class="text-base sm:text-lg font-semibold text-slate-100">📅 เทียบวันในสัปดาห์</h2>
+        <p class="mt-1 text-xs text-slate-500">
+            วันล่าสุด: <?= e($weekdayName) ?> <?= e(formatThaiDate($weekdayTargetDate)) ?>
+        </p>
+
+        <?php if (!$weekdayComparable): ?>
+            <p class="mt-3 text-sm text-slate-300">
+                รายได้ <span class="font-semibold text-orange-400"><?= e(formatMoney($weekdayTargetRevenue)) ?></span>
+                · ยังไม่มีวัน<?= e($weekdayName) ?>อื่นในเดือนนี้ให้เทียบ
+            </p>
+        <?php else: ?>
+            <div class="mt-3 space-y-1.5 text-sm text-slate-300">
+                <p>
+                    รายได้ <span class="font-semibold text-orange-400"><?= e(formatMoney($weekdayTargetRevenue)) ?></span>
+                    · วัน<?= e($weekdayName) ?>เดือนนี้เฉลี่ย
+                    <span class="font-semibold text-slate-100"><?= e(formatMoney((float)$weekdayAvgRevenue)) ?></span>
+                    <span class="text-xs text-slate-500">(จาก <?= e((string)$weekdaySampleCount) ?> วัน)</span>
+                </p>
+                <?php if ($weekdayTargetRoas !== null || $weekdayAvgRoas !== null): ?>
+                    <p>
+                        ROAS วันล่าสุด <span class="font-semibold text-violet-400"><?= e(formatRoas($weekdayTargetRoas)) ?></span>
+                        · เฉลี่ย <span class="font-semibold text-slate-100"><?= e(formatRoas($weekdayAvgRoas)) ?></span>
+                    </p>
+                <?php endif; ?>
+                <?php if ($weekdayHint !== null): ?>
+                    <p class="text-xs <?= e($weekdayHintClass) ?>"><?= e($weekdayHint) ?></p>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </section>
+<?php endif; ?>
 
 <section class="section-card mt-6 p-4 sm:p-5">
     <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">

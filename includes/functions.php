@@ -109,6 +109,25 @@ function formatThaiMonth(string $month): string
     return $monthText . ' ' . $thaiYear;
 }
 
+/**
+ * แปลงเลขวันในสัปดาห์แบบ ISO-8601 (1 = จันทร์ … 7 = อาทิตย์) เป็นชื่อวันภาษาไทย
+ * นอกช่วง 1–7 → คืนค่าว่าง
+ */
+function formatThaiWeekday(int $weekday): string
+{
+    $thaiWeekdays = [
+        1 => 'จันทร์',
+        2 => 'อังคาร',
+        3 => 'พุธ',
+        4 => 'พฤหัสบดี',
+        5 => 'ศุกร์',
+        6 => 'เสาร์',
+        7 => 'อาทิตย์',
+    ];
+
+    return $thaiWeekdays[$weekday] ?? '';
+}
+
 function csrf_token(): string
 {
     if (empty($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token'])) {

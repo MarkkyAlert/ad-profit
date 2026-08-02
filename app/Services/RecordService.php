@@ -440,6 +440,146 @@ class RecordService
     }
 
     /**
+     * เทียบยอดของวันหนึ่ง กับ "วันเดียวกันในสัปดาห์" วันอื่น ๆ ของเดือนนั้น
+     *
+     * ใช้ตอบว่า "ยอดวันนี้ตกเพราะเป็นวันที่คนซื้อน้อยอยู่แล้ว หรือผิดปกติ"
+     * avg_roas คิดแบบ ratio of sums (รวมรายได้ ÷ รวมค่าแอด) ไม่ใช่เฉลี่ยของ ROAS รายวัน
+     *
+     * @param string|null $targetDate รูปแบบ Y-m-d — ไม่ส่ง = วันล่าสุดที่กรอกไว้
+     */
+    public function getWeekdayContext(int $userId, int $shopId, ?string $targetDate = null): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        $emptyResult = [
+            'success' => true,
+            'data' => [
+                'has_data' => false,
+                'target_date' => null,
+                'weekday' => null,
+                'target_revenue' => null,
+                'target_profit' => null,
+                'target_roas' => null,
+                'sample_count' => 0,
+                'avg_revenue' => null,
+                'avg_profit' => null,
+                'avg_roas' => null,
+                'comparable' => false,
+            ],
+        ];
+
+        $resolvedDate = is_string($targetDate) ? trim($targetDate) : '';
+        if ($resolvedDate !== '') {
+            $dateObject = DateTimeImmutable::createFromFormat('Y-m-d', $resolvedDate);
+            if (!$dateObject || $dateObject->format('Y-m-d') !== $resolvedDate) {
+                return [
+                    'success' => false,
+                    'error' => 'รูปแบบวันที่ไม่ถูกต้อง',
+                ];
+            }
+        } else {
+            // ไม่ระบุ → ใช้วันล่าสุดที่กรอกไว้
+            try {
+                $recentRecords = $this->recordRepository->getRecentByShopId($shopId, 1);
+            } catch (Throwable $exception) {
+                error_log('[record] getWeekdayContext failed: ' . $exception->getMessage());
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถโหลดข้อมูลเปรียบเทียบได้',
+                ];
+            }
+
+            $latest = $recentRecords[0] ?? null;
+            $resolvedDate = is_array($latest) ? trim((string)($latest['record_date'] ?? '')) : '';
+            if ($resolvedDate === '') {
+                return $emptyResult;
+            }
+
+            $dateObject = DateTimeImmutable::createFromFormat('Y-m-d', $resolvedDate);
+            if (!$dateObject || $dateObject->format('Y-m-d') !== $resolvedDate) {
+                return $emptyResult;
+            }
+        }
+
+        $dateObject = $dateObject->setTime(0, 0, 0);
+        $weekday = (int)$dateObject->format('N');
+        $monthStart = $dateObject->format('Y-m-01');
+        $monthEnd = $dateObject->format('Y-m-t');
+
+        try {
+            $monthRecords = $this->recordRepository->getByDateRange($shopId, $monthStart, $monthEnd);
+        } catch (Throwable $exception) {
+            error_log('[record] getWeekdayContext failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลเปรียบเทียบได้',
+            ];
+        }
+
+        $targetRevenue = 0.0;
+        $targetAdCost = 0.0;
+        $sampleCount = 0;
+        $sampleRevenueTotal = 0.0;
+        $sampleAdCostTotal = 0.0;
+
+        foreach ($monthRecords as $record) {
+            $recordDate = trim((string)($record['record_date'] ?? ''));
+            if ($recordDate === '') {
+                continue;
+            }
+
+            $recordObject = DateTimeImmutable::createFromFormat('Y-m-d', $recordDate);
+            if (!$recordObject || $recordObject->format('Y-m-d') !== $recordDate) {
+                continue;
+            }
+
+            $revenue = (float)($record['revenue'] ?? 0);
+            $adCost = (float)($record['ad_cost'] ?? 0);
+
+            if ($recordDate === $resolvedDate) {
+                $targetRevenue = $revenue;
+                $targetAdCost = $adCost;
+                continue; // ตัดตัวเองออกจากกลุ่มเทียบ
+            }
+
+            if ((int)$recordObject->format('N') !== $weekday) {
+                continue;
+            }
+
+            $sampleCount++;
+            $sampleRevenueTotal += $revenue;
+            $sampleAdCostTotal += $adCost;
+        }
+
+        $sampleProfitTotal = $sampleRevenueTotal - $sampleAdCostTotal;
+
+        return [
+            'success' => true,
+            'data' => [
+                'has_data' => true,
+                'target_date' => $resolvedDate,
+                'weekday' => $weekday,
+                'target_revenue' => $targetRevenue,
+                'target_profit' => $targetRevenue - $targetAdCost,
+                'target_roas' => $targetAdCost > 0 ? round($targetRevenue / $targetAdCost, 2) : null,
+                'sample_count' => $sampleCount,
+                'avg_revenue' => $sampleCount > 0 ? round($sampleRevenueTotal / $sampleCount, 2) : null,
+                'avg_profit' => $sampleCount > 0 ? round($sampleProfitTotal / $sampleCount, 2) : null,
+                // ratio of sums — ไม่ใช่ค่าเฉลี่ยของ ROAS รายวัน
+                'avg_roas' => ($sampleCount > 0 && $sampleAdCostTotal > 0)
+                    ? round($sampleRevenueTotal / $sampleAdCostTotal, 2)
+                    : null,
+                'comparable' => $sampleCount >= 1,
+            ],
+        ];
+    }
+
+    /**
      * นับจำนวนวันนับจากรายการล่าสุดที่กรอกไว้ (ใช้เตือนว่าไม่ได้กรอกนานแล้ว)
      *
      * แยก 2 เคสให้ชัด:
