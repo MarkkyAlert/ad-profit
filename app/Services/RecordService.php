@@ -408,25 +408,4 @@ class RecordService
             ],
         ];
     }
-
-    private function beginTransactionIfAvailable(): void
-    {
-        if ($this->db instanceof PDO && !$this->db->inTransaction()) {
-            $this->db->beginTransaction();
-        }
-    }
-
-    private function commitTransactionIfAvailable(): void
-    {
-        if ($this->db instanceof PDO && $this->db->inTransaction()) {
-            $this->db->commit();
-        }
-    }
-
-    private function rollBackTransactionIfAvailable(): void
-    {
-        if ($this->db instanceof PDO && $this->db->inTransaction()) {
-            $this->db->rollBack();
-        }
-    }
 }

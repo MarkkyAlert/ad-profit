@@ -12,10 +12,7 @@
 #     ซึ่งใช้ `$pdo` แบบเดียวกัน — เพิ่มเข้า paths ทีหลังได้ (ต้องขยาย ignore ให้ครอบด้วย)
 #
 # (c) DEFERRED (ยังไม่ทำ ตั้งใจ):
-#     - level 4 เจอ dead code จริง 3 method ใน app/Services/RecordService.php:412-431
-#       (beginTransactionIfAvailable / commitTransactionIfAvailable / rollBackTransactionIfAvailable)
-#       ไม่ถูกเรียกจากที่ไหนเลย → ไว้ลบตอนเฟส cleanup
-#     - level 4 ที่เหลือส่วนใหญ่เป็น false positive: PHPStan ถือว่า PDO::inTransaction() เป็น pure
+#     - level 4 ส่วนใหญ่เป็น false positive: PHPStan ถือว่า PDO::inTransaction() เป็น pure
 #       จึงบ่น "always false" กับ pattern TX guard ใน Record/Shop/Profile/GoalService (โค้ดถูกที่ runtime)
 #     - level 6 ต้องเขียน array-shape docblock (@return array{success: bool, ...}) ~79 จุด
 #       ตาม result-array pattern ของ Service/Repository
