@@ -31,6 +31,24 @@ $recordRepository = new RecordRepository($pdo);
 $goalRepository = new GoalRepository($pdo);
 $dashboardService = new DashboardService($recordRepository, $shopRepository, $goalRepository);
 
+/** เตือนเมื่อไม่ได้กรอกข้อมูลติดต่อกันตั้งแต่กี่วัน (ปรับได้) */
+const REMINDER_DAYS_THRESHOLD = 3;
+
+$recordService = new RecordService($recordRepository, $shopRepository, $pdo);
+$lastRecordResult = $recordService->getDaysSinceLastRecord($userId, $shopId);
+$lastRecordData = ($lastRecordResult['success'] ?? false) === true
+    ? (array)($lastRecordResult['data'] ?? [])
+    : [];
+
+$hasAnyRecord = (bool)($lastRecordData['has_records'] ?? false);
+$daysSinceLastRecord = isset($lastRecordData['days_since']) && $lastRecordData['days_since'] !== null
+    ? (int)$lastRecordData['days_since']
+    : null;
+$showInactiveReminder = $hasAnyRecord
+    && $daysSinceLastRecord !== null
+    && $daysSinceLastRecord >= REMINDER_DAYS_THRESHOLD;
+$showFirstRecordInvite = ($lastRecordResult['success'] ?? false) === true && !$hasAnyRecord;
+
 $dashboardResult = $dashboardService->buildDashboard(
     $userId,
     $shopId,
@@ -247,6 +265,37 @@ $currentPage = 'dashboard';
 
 require __DIR__ . '/includes/header.php';
 ?>
+<?php if ($showInactiveReminder): ?>
+    <div class="mb-6 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-sm font-medium text-amber-200">
+                    คุณไม่ได้กรอกข้อมูลมา <?= e((string)$daysSinceLastRecord) ?> วันแล้ว
+                </p>
+                <p class="mt-1 text-xs text-amber-100/70">
+                    บันทึกล่าสุด: <?= e(formatThaiDate((string)($lastRecordData['last_record_date'] ?? ''))) ?>
+                </p>
+            </div>
+            <a href="<?= e(app_url('/add-record.php')) ?>" class="btn-orange shrink-0 px-4 py-2 text-sm" data-loading-link="true">
+                ✎ กรอกข้อมูลตอนนี้
+            </a>
+        </div>
+    </div>
+<?php elseif ($showFirstRecordInvite): ?>
+    <div class="mb-6 rounded-xl border border-indigo-500/25 bg-indigo-500/10 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-sm font-medium text-indigo-200">เริ่มบันทึกวันแรกของคุณ</p>
+                <p class="mt-1 text-xs text-indigo-100/70">
+                    ร้านนี้ยังไม่มีข้อมูล กรอกรายได้และค่าแอดวันแรกเพื่อเริ่มดูสรุปผล
+                </p>
+            </div>
+            <a href="<?= e(app_url('/add-record.php')) ?>" class="btn-primary shrink-0 px-4 py-2 text-sm" data-loading-link="true">
+                + เริ่มบันทึก
+            </a>
+        </div>
+    </div>
+<?php endif; ?>
 <section class="section-card mb-6 p-4 sm:p-5">
     <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>

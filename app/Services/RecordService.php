@@ -440,6 +440,84 @@ class RecordService
     }
 
     /**
+     * นับจำนวนวันนับจากรายการล่าสุดที่กรอกไว้ (ใช้เตือนว่าไม่ได้กรอกนานแล้ว)
+     *
+     * แยก 2 เคสให้ชัด:
+     *  - ไม่เคยกรอกเลย  → has_records = false, days_since = null
+     *  - กรอกวันนี้      → has_records = true,  days_since = 0
+     *
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์, ไม่ส่ง = วันนี้จริง
+     */
+    public function getDaysSinceLastRecord(int $userId, int $shopId, ?string $today = null): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
+            : false;
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            $todayObject = new DateTimeImmutable('today');
+        }
+        $todayObject = $todayObject->setTime(0, 0, 0);
+
+        try {
+            $records = $this->recordRepository->getRecentByShopId($shopId, 1);
+        } catch (Throwable $exception) {
+            error_log('[record] getDaysSinceLastRecord failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถตรวจสอบข้อมูลล่าสุดได้',
+            ];
+        }
+
+        $emptyResult = [
+            'success' => true,
+            'data' => [
+                'has_records' => false,
+                'last_record_date' => null,
+                'days_since' => null,
+            ],
+        ];
+
+        $lastRecord = $records[0] ?? null;
+        if (!is_array($lastRecord)) {
+            return $emptyResult;
+        }
+
+        $lastDate = trim((string)($lastRecord['record_date'] ?? ''));
+        if ($lastDate === '') {
+            return $emptyResult;
+        }
+
+        $lastObject = DateTimeImmutable::createFromFormat('Y-m-d', $lastDate);
+        if (!$lastObject || $lastObject->format('Y-m-d') !== $lastDate) {
+            return $emptyResult;
+        }
+        $lastObject = $lastObject->setTime(0, 0, 0);
+
+        $daysSince = (int)$lastObject->diff($todayObject)->format('%r%a');
+        if ($daysSince < 0) {
+            // รายการลงวันที่ล่วงหน้า — ไม่ถือว่าขาดการกรอก
+            $daysSince = 0;
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'has_records' => true,
+                'last_record_date' => $lastDate,
+                'days_since' => $daysSince,
+            ],
+        ];
+    }
+
+    /**
      * หาวันที่ "ยังไม่ได้กรอก" ของเดือนที่เลือก
      *
      * ช่วงที่พิจารณา = วันที่ 1 ของเดือน ถึง "วันตัด":
