@@ -110,6 +110,136 @@ require __DIR__ . '/includes/header.php';
 </section>
 
 <section class="section-card mt-6 p-5">
+    <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-lg font-semibold text-slate-100">กรอกหลายวัน</h2>
+        <span id="bulk-row-count" class="text-xs text-slate-400"></span>
+    </div>
+    <p class="mb-4 text-sm text-slate-500">
+        กรอกได้สูงสุด <?= e((string)RecordService::BULK_MAX_ROWS) ?> แถวต่อครั้ง · แถวที่เว้นว่างไว้ทั้งแถวจะถูกข้าม ·
+        ถ้ามีแถวใดกรอกผิด ระบบจะไม่บันทึกทั้งชุด
+    </p>
+
+    <form action="<?= e(app_url('/api/records.php')) ?>" method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="bulk_upsert">
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="border-b border-white/10 text-left text-slate-400">
+                        <th class="px-2 py-2 w-10">#</th>
+                        <th class="px-2 py-2">วันที่</th>
+                        <th class="px-2 py-2">รายได้ (฿)</th>
+                        <th class="px-2 py-2">ค่าแอด (฿)</th>
+                        <th class="px-2 py-2">โน้ต</th>
+                        <th class="px-2 py-2 w-12"></th>
+                    </tr>
+                </thead>
+                <tbody id="bulk-rows"></tbody>
+            </table>
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+            <button type="button" id="bulk-add-row" class="btn-ghost px-4 py-2 text-sm">+ เพิ่มแถว</button>
+            <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">✓ บันทึกทั้งหมด</button>
+        </div>
+    </form>
+</section>
+
+<template id="bulk-row-template">
+    <tr class="border-b border-white/[0.06]">
+        <td class="px-2 py-2 text-slate-500 bulk-row-number"></td>
+        <td class="px-2 py-2">
+            <input name="record_date[]" type="date" class="w-full rounded-lg px-2 py-1.5 text-sm">
+        </td>
+        <td class="px-2 py-2">
+            <input name="revenue[]" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
+        </td>
+        <td class="px-2 py-2">
+            <input name="ad_cost[]" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
+        </td>
+        <td class="px-2 py-2">
+            <input name="note[]" type="text" maxlength="255" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="ไม่บังคับ">
+        </td>
+        <td class="px-2 py-2 text-center">
+            <button type="button" class="bulk-remove-row text-red-400 hover:text-red-300 text-lg leading-none" title="ลบแถว">×</button>
+        </td>
+    </tr>
+</template>
+
+<script>
+    (function() {
+        const MAX_ROWS = <?= (int)RecordService::BULK_MAX_ROWS ?>;
+        const INITIAL_ROWS = 5;
+
+        const tbody = document.getElementById('bulk-rows');
+        const template = document.getElementById('bulk-row-template');
+        const addButton = document.getElementById('bulk-add-row');
+        const counter = document.getElementById('bulk-row-count');
+
+        if (!tbody || !template || !addButton) {
+            return;
+        }
+
+        const refresh = () => {
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach((row, index) => {
+                const numberCell = row.querySelector('.bulk-row-number');
+                if (numberCell) {
+                    numberCell.textContent = String(index + 1);
+                }
+            });
+
+            if (counter) {
+                counter.textContent = rows.length + ' / ' + MAX_ROWS + ' แถว';
+            }
+
+            addButton.disabled = rows.length >= MAX_ROWS;
+            addButton.classList.toggle('opacity-50', addButton.disabled);
+            addButton.classList.toggle('cursor-not-allowed', addButton.disabled);
+        };
+
+        const addRow = () => {
+            if (tbody.querySelectorAll('tr').length >= MAX_ROWS) {
+                return;
+            }
+
+            tbody.appendChild(template.content.cloneNode(true));
+            refresh();
+        };
+
+        // ลบแถว: เหลือแถวสุดท้ายให้ล้างค่าแทนการลบ (กันตารางว่างเปล่า)
+        tbody.addEventListener('click', (event) => {
+            const button = event.target.closest('.bulk-remove-row');
+            if (!button) {
+                return;
+            }
+
+            const row = button.closest('tr');
+            if (!row) {
+                return;
+            }
+
+            if (tbody.querySelectorAll('tr').length > 1) {
+                row.remove();
+            } else {
+                row.querySelectorAll('input').forEach((input) => {
+                    input.value = '';
+                });
+            }
+
+            refresh();
+        });
+
+        addButton.addEventListener('click', addRow);
+
+        for (let index = 0; index < INITIAL_ROWS; index++) {
+            addRow();
+        }
+    })();
+</script>
+
+<section class="section-card mt-6 p-5">
     <div class="mb-3 flex items-center justify-between">
         <h2 class="text-lg font-semibold text-slate-100">รายการล่าสุด 7 วัน</h2>
         <a href="<?= e(app_url('/history.php')) ?>" class="text-sm text-indigo-400 hover:text-indigo-300 font-medium">ดูประวัติทั้งหมด</a>

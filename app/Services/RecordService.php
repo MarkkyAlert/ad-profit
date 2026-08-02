@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 class RecordService
 {
+    /** จำนวนแถวสูงสุดต่อการบันทึกแบบหลายวัน 1 ครั้ง (ครอบคลุม 1 เดือน) */
+    public const BULK_MAX_ROWS = 31;
+
     private RecordRepository $recordRepository;
     private ShopRepository $shopRepository;
     private ?PDO $db;
@@ -79,6 +82,151 @@ class RecordService
         return [
             'success' => true,
             'message' => 'บันทึกข้อมูลเรียบร้อยแล้ว',
+        ];
+    }
+
+    /**
+     * บันทึกรายวันหลายแถวในครั้งเดียว (atomic — สำเร็จทั้งหมด หรือไม่เขียนเลย)
+     *
+     * @param array<int,array{record_date?: mixed, revenue?: mixed, ad_cost?: mixed, note?: mixed}> $rows
+     */
+    public function upsertManyRecords(int $userId, int $shopId, array $rows): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        // ตัดแถวว่างสนิททิ้ง (ผู้ใช้เว้นแถวไว้ในตารางได้)
+        $filledRows = [];
+        foreach ($rows as $index => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $recordDate = trim((string)($row['record_date'] ?? ''));
+            $revenueRaw = trim((string)($row['revenue'] ?? ''));
+            $adCostRaw = trim((string)($row['ad_cost'] ?? ''));
+            $noteRaw = trim((string)($row['note'] ?? ''));
+
+            if ($recordDate === '' && $revenueRaw === '' && $adCostRaw === '' && $noteRaw === '') {
+                continue;
+            }
+
+            $filledRows[] = [
+                'row_number' => (int)$index + 1,
+                'record_date' => $recordDate,
+                'revenue' => $row['revenue'] ?? null,
+                'ad_cost' => $row['ad_cost'] ?? null,
+                'note' => $noteRaw === '' ? null : $noteRaw,
+            ];
+        }
+
+        if ($filledRows === []) {
+            return [
+                'success' => false,
+                'error' => 'กรุณากรอกข้อมูลอย่างน้อย 1 แถว',
+            ];
+        }
+
+        if (count($filledRows) > self::BULK_MAX_ROWS) {
+            return [
+                'success' => false,
+                'error' => 'กรอกได้สูงสุด ' . self::BULK_MAX_ROWS . ' แถวต่อครั้ง',
+            ];
+        }
+
+        // validate ทุกแถวให้ครบก่อน แล้วค่อยเขียน (กันเขียนครึ่ง ๆ กลาง ๆ)
+        $payloads = [];
+        $seenDates = [];
+        foreach ($filledRows as $row) {
+            $rowNumber = (int)$row['row_number'];
+
+            if (!is_numeric($row['revenue']) || !is_numeric($row['ad_cost'])) {
+                return [
+                    'success' => false,
+                    'error' => 'แถวที่ ' . $rowNumber . ': กรุณากรอกรายได้และค่าแอดให้ถูกต้อง',
+                ];
+            }
+
+            $validation = $this->validateRecordPayload(
+                (string)$row['record_date'],
+                (float)$row['revenue'],
+                (float)$row['ad_cost'],
+                $row['note']
+            );
+
+            if (($validation['success'] ?? false) !== true) {
+                return [
+                    'success' => false,
+                    'error' => 'แถวที่ ' . $rowNumber . ': ' . (string)($validation['error'] ?? 'ข้อมูลไม่ถูกต้อง'),
+                ];
+            }
+
+            $payload = (array)$validation['data'];
+            $recordDate = (string)$payload['record_date'];
+
+            if (isset($seenDates[$recordDate])) {
+                return [
+                    'success' => false,
+                    'error' => 'มีวันที่ซ้ำกันในตาราง (' . $recordDate . ') กรุณากรอกวันละ 1 แถว',
+                ];
+            }
+
+            $seenDates[$recordDate] = true;
+            $payloads[] = $payload;
+        }
+
+        $startedTransaction = false;
+        $canLockRows = false;
+        try {
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
+
+                $canLockRows = $this->db->inTransaction();
+            }
+
+            foreach ($payloads as $payload) {
+                if ($canLockRows) {
+                    // Serialize concurrent upserts for the same shop+date.
+                    $this->recordRepository->findByShopIdAndRecordDateForUpdate($shopId, (string)$payload['record_date']);
+                }
+
+                $this->recordRepository->upsert(
+                    $shopId,
+                    (string)$payload['record_date'],
+                    (float)$payload['revenue'],
+                    (float)$payload['ad_cost'],
+                    $payload['note']
+                );
+            }
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
+        } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
+            error_log('[record] upsertManyRecords failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถบันทึกข้อมูลได้',
+            ];
+        }
+
+        $savedCount = count($payloads);
+
+        return [
+            'success' => true,
+            'message' => 'บันทึกข้อมูล ' . $savedCount . ' วันเรียบร้อยแล้ว',
+            'saved_count' => $savedCount,
         ];
     }
 
