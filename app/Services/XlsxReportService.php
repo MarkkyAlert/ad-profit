@@ -13,6 +13,7 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Conditional;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
@@ -33,6 +34,7 @@ class XlsxReportService
     private const HEADER_FILL_ARGB = 'FF1F4E79';
     private const NEGATIVE_FONT_ARGB = 'FFC00000';
     private const POSITIVE_FONT_ARGB = 'FF107C41';
+    private const PENDING_FONT_ARGB = 'FFB45309';
     private const PERCENT_FORMAT = '0.0"%"';
     private const MONEY_FORMAT = '#,##0.00';
     private const RATIO_FORMAT = '0.00';
@@ -352,6 +354,250 @@ class XlsxReportService
         // สรุปทั้งปีมาก่อนทุกอย่าง
         $spreadsheet->setIndexByName('รายปี', 0);
         $spreadsheet->setActiveSheetIndex(0);
+    }
+
+    /**
+     * เพิ่ม sheet "เป้าหมาย" — เป้า vs ผลจริง ต่อเดือน
+     * ผู้เรียกต้องเช็กเองว่ามีเป้าอย่างน้อย 1 เดือน (ไม่งั้นได้ชีตเปล่า)
+     *
+     * @param array<int,array<string,mixed>> $goalProgress จาก AnnualService ['data']['goal_progress']
+     */
+    public function buildGoalSheet(Spreadsheet $spreadsheet, array $goalProgress, int $year): void
+    {
+        $rows = array_values($goalProgress);
+
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('เป้าหมาย');
+
+        $sheet->setCellValueExplicit(
+            'A1',
+            sprintf('เป้าหมายรายเดือน ปี %d (เฉพาะเดือนที่ตั้งเป้า)', $year + 543),
+            DataType::TYPE_STRING
+        );
+        $sheet->mergeCells('A1:I1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+
+        $headerRow = 3;
+        $sheet->fromArray(
+            [
+                'เดือน',
+                'เป้ารายได้', 'รายได้จริง', 'ทำได้', 'ถึงเป้า',
+                'เป้ากำไร', 'กำไรจริง', 'ทำได้', 'ถึงเป้า',
+            ],
+            null,
+            'A' . $headerRow
+        );
+        $this->styleHeaderRow($sheet, 'A' . $headerRow . ':I' . $headerRow);
+        $sheet->freezePane('A' . ($headerRow + 1));
+
+        $rowNumber = $headerRow + 1;
+        foreach ($rows as $row) {
+            $sheet->setCellValueExplicit(
+                'A' . $rowNumber,
+                self::THAI_MONTHS[(int)($row['month'] ?? 0)] ?? '',
+                DataType::TYPE_STRING
+            );
+
+            // รายได้: เป้า / จริง / % / ถึงเป้า — ไม่ได้ตั้งเป้าไว้ก็เว้นว่างทั้งชุด
+            $this->writeGoalPair(
+                $sheet,
+                $rowNumber,
+                'B',
+                $row['target_revenue'] ?? null,
+                (float)($row['actual_revenue'] ?? 0),
+                $row['revenue_progress'] ?? null,
+                $row['revenue_reached'] ?? null
+            );
+
+            $this->writeGoalPair(
+                $sheet,
+                $rowNumber,
+                'F',
+                $row['target_profit'] ?? null,
+                (float)($row['actual_profit'] ?? 0),
+                $row['profit_progress'] ?? null,
+                $row['profit_reached'] ?? null
+            );
+
+            $rowNumber++;
+        }
+
+        $lastRow = $rowNumber - 1;
+        if ($lastRow >= $headerRow + 1) {
+            $sheet->getStyle('B' . ($headerRow + 1) . ':C' . $lastRow)
+                ->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+            $sheet->getStyle('F' . ($headerRow + 1) . ':G' . $lastRow)
+                ->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+            $sheet->getStyle('D' . ($headerRow + 1) . ':D' . $lastRow)
+                ->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
+            $sheet->getStyle('H' . ($headerRow + 1) . ':H' . $lastRow)
+                ->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
+            $sheet->setAutoFilter('A' . $headerRow . ':I' . $lastRow);
+        }
+
+        foreach (range('A', 'I') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+    }
+
+    /**
+     * เขียนคู่ "เป้า / จริง / % / ถึงเป้า" ลง 4 คอลัมน์ติดกัน
+     *
+     * @param mixed $target
+     * @param mixed $progress
+     * @param mixed $reached
+     */
+    private function writeGoalPair(
+        Worksheet $sheet,
+        int $rowNumber,
+        string $startColumn,
+        $target,
+        float $actual,
+        $progress,
+        $reached
+    ): void {
+        $columns = [];
+        for ($offset = 0; $offset < 4; $offset++) {
+            $columns[] = Coordinate::stringFromColumnIndex(
+                Coordinate::columnIndexFromString($startColumn) + $offset
+            );
+        }
+
+        // ไม่ได้ตั้งเป้าด้านนี้ → เว้นว่างทั้งชุด (ไม่ใช่ 0 ที่จะอ่านว่า "ตั้งเป้าไว้ศูนย์")
+        if ($target === null) {
+            return;
+        }
+
+        $sheet->setCellValue($columns[0] . $rowNumber, (float)$target);
+        $sheet->setCellValue($columns[1] . $rowNumber, $actual);
+        $this->paintNegative($sheet, $columns[1] . $rowNumber, $actual);
+
+        if ($progress !== null) {
+            $sheet->setCellValue($columns[2] . $rowNumber, (float)$progress);
+            $this->paintNegative($sheet, $columns[2] . $rowNumber, (float)$progress);
+        }
+
+        if ($reached === null) {
+            return;
+        }
+
+        $isReached = $reached === true;
+        $sheet->setCellValueExplicit(
+            $columns[3] . $rowNumber,
+            $isReached ? '✓ ถึงเป้า' : 'ยังไม่ถึง',
+            DataType::TYPE_STRING
+        );
+        $sheet->getStyle($columns[3] . $rowNumber)->getFont()->getColor()->setARGB(
+            $isReached ? self::POSITIVE_FONT_ARGB : self::PENDING_FONT_ARGB
+        );
+    }
+
+    /**
+     * เพิ่ม sheet "ฤดูกาล" — กริดกำไร 12 เดือน × 3 ปี
+     * ใช้ conditional formatting ของ Excel จริง (แก้ตัวเลขแล้วสีขยับตาม)
+     *
+     * @param array<string,mixed> $payload จาก AnnualService::buildMonthlyHeatmap()['data']
+     */
+    public function buildSeasonSheet(Spreadsheet $spreadsheet, array $payload): void
+    {
+        $years = array_values((array)($payload['years'] ?? []));
+        $grid = (array)($payload['grid'] ?? []);
+
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('ฤดูกาล');
+
+        $sheet->setCellValueExplicit('A1', 'ฤดูกาลกำไร (3 ปี)', DataType::TYPE_STRING);
+        $sheet->mergeCells('A1:M1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+        $sheet->setCellValueExplicit(
+            'A2',
+            'เดือนเดียวกันเขียวหลายปีติด = ฤดูกาลขายจริง ไม่ใช่ฟลุ๊ค · ช่องว่าง = ยังไม่มีข้อมูล',
+            DataType::TYPE_STRING
+        );
+        // merge ด้วย ไม่งั้น autoSize ยืดคอลัมน์ A ตามความยาวข้อความบรรทัดนี้
+        $sheet->mergeCells('A2:M2');
+        $sheet->getStyle('A2')->getFont()->setItalic(true)->setSize(9);
+
+        $headerRow = 4;
+        $header = ['ปี'];
+        for ($month = 1; $month <= 12; $month++) {
+            $header[] = self::THAI_MONTHS[$month];
+        }
+        $sheet->fromArray($header, null, 'A' . $headerRow);
+        $this->styleHeaderRow($sheet, 'A' . $headerRow . ':M' . $headerRow);
+        $sheet->freezePane('B' . ($headerRow + 1));
+
+        $rowNumber = $headerRow + 1;
+        foreach ($years as $gridYear) {
+            $sheet->setCellValueExplicit(
+                'A' . $rowNumber,
+                (string)((int)$gridYear + 543),
+                DataType::TYPE_STRING
+            );
+            $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
+
+            for ($month = 1; $month <= 12; $month++) {
+                $cell = (array)($grid[$gridYear][$month] ?? []);
+                // has_data=false → เว้นว่าง (ต่างจากเท่าทุนที่เป็น 0 จริง)
+                if (($cell['has_data'] ?? false) !== true || ($cell['profit'] ?? null) === null) {
+                    continue;
+                }
+
+                $column = Coordinate::stringFromColumnIndex($month + 1);
+                $sheet->setCellValue($column . $rowNumber, (float)$cell['profit']);
+            }
+
+            $rowNumber++;
+        }
+
+        $lastRow = $rowNumber - 1;
+        if ($lastRow >= $headerRow + 1) {
+            $dataRange = 'B' . ($headerRow + 1) . ':M' . $lastRow;
+            $sheet->getStyle($dataRange)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+            $sheet->setConditionalStyles($dataRange, $this->buildProfitConditionals());
+        }
+
+        foreach (range('A', 'M') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+    }
+
+    /**
+     * กฎ conditional formatting: กำไร > 0 เขียว · < 0 แดง · ช่องว่างไม่เข้าเงื่อนไขทั้งคู่
+     *
+     * @return array<int,Conditional>
+     */
+    private function buildProfitConditionals(): array
+    {
+        $positive = new Conditional();
+        $positive->setConditionType(Conditional::CONDITION_CELLIS);
+        $positive->setOperatorType(Conditional::OPERATOR_GREATERTHAN);
+        $positive->addCondition('0');
+        $positive->getStyle()->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFC6EFCE');
+        $positive->getStyle()->getFont()->getColor()->setARGB('FF006100');
+
+        $negative = new Conditional();
+        $negative->setConditionType(Conditional::CONDITION_CELLIS);
+        $negative->setOperatorType(Conditional::OPERATOR_LESSTHAN);
+        $negative->addCondition('0');
+        $negative->getStyle()->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFFFC7CE');
+        $negative->getStyle()->getFont()->getColor()->setARGB('FF9C0006');
+
+        return [$positive, $negative];
+    }
+
+    /** หัวตารางสไตล์เดียวกันทุกชีต */
+    private function styleHeaderRow(Worksheet $sheet, string $range): void
+    {
+        $sheet->getStyle($range)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
+        $sheet->getStyle($range)->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB(self::HEADER_FILL_ARGB);
+        $sheet->getStyle($range)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     }
 
     /**

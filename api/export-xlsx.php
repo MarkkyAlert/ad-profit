@@ -69,6 +69,20 @@ $reportService = new XlsxReportService();
 $spreadsheet = $reportService->buildDailySheet($payload);
 $reportService->buildMonthlySheet($spreadsheet, (array)($annualResult['data'] ?? []));
 
+// เป้าหมาย — โผล่เฉพาะเมื่อมีเป้าอย่างน้อย 1 เดือน (ไม่งั้นได้ชีตเปล่า)
+$goalProgress = array_values((array)($annualResult['data']['goal_progress'] ?? []));
+if ($goalProgress !== []) {
+    $reportService->buildGoalSheet($spreadsheet, $goalProgress, $selectedYear);
+}
+
+// ฤดูกาล 3 ปี — +1 query · ล้มเหลวก็แค่ไม่มีชีตนี้ ไม่ทำทั้งไฟล์พัง
+$heatmapResult = (new AnnualService($recordRepository, $shopRepository, new GoalRepository($pdo)))
+    ->buildMonthlyHeatmap($userId, $shopId, $selectedYear, $today);
+
+if (($heatmapResult['success'] ?? false) === true) {
+    $reportService->buildSeasonSheet($spreadsheet, (array)($heatmapResult['data'] ?? []));
+}
+
 // portfolio ทุกร้าน — โผล่เฉพาะเมื่อมี ≥ 2 ร้าน (กฎเดียวกับหน้ารวมร้าน)
 // ใช้ $today ตัวเดียวกับสองแท็บแรก → cutoff ตรงกันทั้งไฟล์
 $overviewResult = (new OverviewAnnualService($recordRepository, $shopRepository))
