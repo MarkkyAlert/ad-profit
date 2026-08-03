@@ -300,7 +300,7 @@ require __DIR__ . '/includes/header.php';
             <?php if ($view === 'day'): ?>
                 <p class="mt-2 text-sm text-slate-500">สรุปยอดรวมทุกร้านแบบรายวัน สำหรับเดือนที่เลือก</p>
             <?php elseif ($view === 'year'): ?>
-                <p class="mt-2 text-sm text-slate-500">สรุปยอดรวมทุกร้านแบบรายปี (12 เดือน) พร้อมกราฟและจัดอันดับตามยอดขาย</p>
+                <p class="mt-2 text-sm text-slate-500">สรุปยอดรวมทุกร้านแบบรายปี พร้อมกราฟและจัดอันดับตามกำไร</p>
             <?php else: ?>
                 <p class="mt-2 text-sm text-slate-500">ตารางและกราฟเปรียบเทียบทุกร้านตามเดือนที่เลือก</p>
             <?php endif; ?>
@@ -638,7 +638,7 @@ require __DIR__ . '/includes/header.php';
             </section>
 
             <section class="section-card mt-6 p-4 sm:p-5">
-                <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางรวมรายเดือน (12 เดือน)</h2>
+                <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางรวมรายเดือน (<?= e((string)count($yearlyMonths)) ?> เดือน)</h2>
                 <div class="overflow-x-auto">
                     <table class="min-w-full text-sm">
                         <thead>
@@ -686,7 +686,7 @@ require __DIR__ . '/includes/header.php';
 
             <section class="section-card mt-6 p-4 sm:p-5">
                 <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                    <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (12 เดือน)</h2>
+                    <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (<?= e((string)count($yearlyMonths)) ?> เดือน)</h2>
                     <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
                 </div>
                 <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">

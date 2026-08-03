@@ -13,7 +13,10 @@ class OverviewAnnualService
         $this->shopRepository = $shopRepository;
     }
 
-    public function buildYearlyOverview(int $userId, int $year): array
+    /**
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
+     */
+    public function buildYearlyOverview(int $userId, int $year, ?string $today = null): array
     {
         if (!$this->isValidYear($year)) {
             return [
@@ -56,8 +59,21 @@ class OverviewAnnualService
             ];
         }
 
+        // เดือนสุดท้ายที่นับ — ปีปัจจุบันตัดที่เดือนนี้ ไม่ให้เดือนอนาคตโผล่มาเป็น ฿0
+        // (แพตเทิร์นเดียวกับ AnnualService ของร้านเดี่ยว — กราฟจะได้ไม่ดิ่งลง 0)
+        $todayObject = $this->resolveToday($today);
+        $currentYear = (int)$todayObject->format('Y');
+
+        if ($year < $currentYear) {
+            $lastMonth = 12;                              // ปีอดีต — เต็มปี
+        } elseif ($year === $currentYear) {
+            $lastMonth = (int)$todayObject->format('n');  // ปีปัจจุบัน — ถึงเดือนนี้
+        } else {
+            $lastMonth = 0;                               // ปีอนาคต — ยังไม่มีข้อมูล
+        }
+
         $startMonth = sprintf('%04d-01', $year);
-        $endMonth = sprintf('%04d-12', $year);
+        $endMonth = sprintf('%04d-%02d', $year, max(1, $lastMonth));
 
         try {
             $monthlyTotals = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange($shopIds, $startMonth, $endMonth);
@@ -70,7 +86,7 @@ class OverviewAnnualService
         }
 
         $monthTotalsByKey = [];
-        for ($month = 1; $month <= 12; $month++) {
+        for ($month = 1; $month <= $lastMonth; $month++) {
             $monthKey = sprintf('%04d-%02d', $year, $month);
             $monthTotalsByKey[$monthKey] = [
                 'month' => $month,
@@ -116,7 +132,7 @@ class OverviewAnnualService
         $totalRevenue = 0.0;
         $totalAdCost = 0.0;
 
-        for ($month = 1; $month <= 12; $month++) {
+        for ($month = 1; $month <= $lastMonth; $month++) {
             $monthKey = sprintf('%04d-%02d', $year, $month);
             $monthTotals = $monthTotalsByKey[$monthKey];
 
@@ -176,6 +192,7 @@ class OverviewAnnualService
                 'year' => $year,
                 'shops_count' => $shopsCount,
                 'can_view' => true,
+                'last_month' => $lastMonth,
                 'months' => $months,
                 'summary' => [
                     'total_revenue' => $totalRevenue,
@@ -193,6 +210,23 @@ class OverviewAnnualService
                 'shops' => $shopsRows,
             ],
         ];
+    }
+
+    /**
+     * แปลง seam $today เป็น DateTimeImmutable — รูปแบบผิด/ไม่ส่ง = วันนี้จริง
+     */
+    private function resolveToday(?string $today): DateTimeImmutable
+    {
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
+            : false;
+
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            return new DateTimeImmutable('today');
+        }
+
+        return $todayObject;
     }
 
     private function isValidYear(int $year): bool
