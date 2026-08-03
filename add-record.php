@@ -187,7 +187,7 @@ require __DIR__ . '/includes/header.php';
 
         <div class="mt-4 flex flex-wrap items-center gap-3">
             <div class="flex items-center gap-2">
-                <label for="bulk-month" class="text-sm text-slate-400">เดือน</label>
+                <label for="bulk-month" class="text-sm text-slate-400">โหลดเดือน</label>
                 <?php // ไม่มี name= โดยตั้งใจ — ใช้ฝั่ง JS อย่างเดียว ไม่ส่งไปกับฟอร์ม ?>
                 <input
                     type="month"
@@ -197,7 +197,6 @@ require __DIR__ . '/includes/header.php';
             </div>
 
             <button type="button" id="bulk-add-row" class="btn-ghost px-4 py-2 text-sm">+ เพิ่มแถว</button>
-            <button type="button" id="bulk-fill-max" class="btn-ghost px-4 py-2 text-sm">⤓ เติมทั้งเดือน</button>
             <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">✓ บันทึกทั้งหมด</button>
         </div>
     </form>
@@ -232,7 +231,6 @@ require __DIR__ . '/includes/header.php';
         const tbody = document.getElementById('bulk-rows');
         const template = document.getElementById('bulk-row-template');
         const addButton = document.getElementById('bulk-add-row');
-        const fillMaxButton = document.getElementById('bulk-fill-max');
         const counter = document.getElementById('bulk-row-count');
 
         if (!tbody || !template || !addButton) {
@@ -478,15 +476,17 @@ require __DIR__ . '/includes/header.php';
             }
         });
 
-        // ── เติมวันที่ทั้งเดือนลงตาราง ──────────────────────────────────
-        // ใช้ "วันนี้" จากเซิร์ฟเวอร์ ไม่ใช่ new Date() ของเครื่องผู้ใช้
-        // (timezone ต้องตรงกับกฎวันที่อื่นในแอปที่คิดจากฝั่ง PHP)
-        const TODAY = <?= json_encode(
-            date('Y-m-d'),
+        // ── โหลดข้อมูลทั้งเดือนมาแก้ (AJAX read-only จุดเดียวของแอป) ──────────
+        // ⚠️ แอปนี้เป็น server-render + form POST เป็นหลัก — นี่เป็นข้อยกเว้นที่ตั้งใจ
+        //    GET api/month-grid.php อ่านอย่างเดียว ไม่เปลี่ยน state จึงไม่ต้องมี CSRF
+        //    (auth ผ่าน session cookie) · การบันทึกยังเป็น form POST + CSRF เหมือนเดิม
+        const MONTH_GRID_URL = <?= json_encode(
+            app_url('/api/month-grid.php'),
             JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
         ) ?>;
 
         const monthInput = document.getElementById('bulk-month');
+        let loadedMonth = monthInput ? monthInput.value : '';
 
         const showBulkNotice = (message) => {
             if (!pasteNotice) {
@@ -502,61 +502,83 @@ require __DIR__ . '/includes/header.php';
             pasteNotice.classList.remove('hidden');
         };
 
-        // จำนวนวันในเดือน (leap-aware) — ใช้ UTC กัน timezone เลื่อนวัน
-        const daysInMonth = (year, month) => new Date(Date.UTC(year, month, 0)).getUTCDate();
+        // "มีข้อมูลผู้ใช้กรอกค้าง" = มีค่าในช่องรายได้/ค่าแอด/โน้ต
+        // (ไม่นับ record_date เพราะการโหลดเดือนเป็นคนเติมวันที่ให้เอง ไม่ใช่งานที่ผู้ใช้พิมพ์)
+        // ใช้นิยาม "แตะแล้ว" เดียวกับตอน submit
+        const tableHasInput = () => Array.from(tbody.querySelectorAll('tr')).some((row) =>
+            ['revenue[]', 'ad_cost[]', 'note[]'].some((name) => {
+                const input = row.querySelector('input[name="' + name + '"]');
+                return input !== null && input.value.trim() !== '';
+            })
+        );
 
-        const tableHasInput = () => Array.from(tbody.querySelectorAll('input'))
-            .some((input) => input.value.trim() !== '');
+        const populateFromDays = (days) => {
+            tbody.innerHTML = '';
 
-        if (fillMaxButton) {
-            fillMaxButton.addEventListener('click', () => {
-                const selectedMonth = monthInput && monthInput.value ? monthInput.value : TODAY.slice(0, 7);
-                if (!/^\d{4}-\d{2}$/.test(selectedMonth)) {
-                    showBulkNotice('กรุณาเลือกเดือนก่อน');
-                    return;
-                }
+            days.slice(0, MAX_ROWS).forEach((day) => {
+                addRow();
 
-                const todayMonth = TODAY.slice(0, 7);
-                if (selectedMonth > todayMonth) {
-                    showBulkNotice('เดือนในอนาคต ยังกรอกไม่ได้');
-                    return;
-                }
-
-                const year = Number(selectedMonth.slice(0, 4));
-                const month = Number(selectedMonth.slice(5, 7));
-                // เดือนปัจจุบัน → ตัดที่วันนี้ (ไม่เติมวันอนาคต) · เดือนอดีต → เต็มเดือน
-                const lastDay = selectedMonth === todayMonth
-                    ? Number(TODAY.slice(8, 10))
-                    : daysInMonth(year, month);
-
-                const dates = [];
-                for (let day = 1; day <= lastDay && dates.length < MAX_ROWS; day++) {
-                    dates.push(selectedMonth + '-' + String(day).padStart(2, '0'));
-                }
-
-                // ถามก่อนล้าง เฉพาะตอนที่มีข้อมูลค้างอยู่จริง
-                if (tableHasInput()
-                    && !window.confirm('ตารางมีข้อมูลอยู่ จะล้างแล้วเติมวันที่ทั้งเดือนใหม่?')) {
-                    return;
-                }
-
-                tbody.innerHTML = '';
-                dates.forEach((date) => {
-                    addRow();
-                    const rows = getRows();
-                    const dateInput = rows[rows.length - 1].querySelector('input[name="record_date[]"]');
-                    if (dateInput) {
-                        dateInput.value = date;
+                const rows = getRows();
+                const row = rows[rows.length - 1];
+                const setValue = (name, value) => {
+                    const input = row.querySelector('input[name="' + name + '"]');
+                    if (input) {
+                        input.value = value;
                     }
-                });
+                };
 
-                refresh();
+                setValue('record_date[]', day.date);
 
-                showBulkNotice(
-                    dates.length < lastDay
-                        ? 'เติมได้ ' + dates.length + ' วัน (จำกัด ' + MAX_ROWS + ' แถวต่อครั้ง)'
-                        : ''
-                );
+                // วันที่เคยบันทึกไว้ → เติมค่าเดิมมาให้แก้ · วันที่ยังไม่มี → เว้นว่าง
+                if (day.has_record) {
+                    setValue('revenue[]', day.revenue === null ? '' : String(day.revenue));
+                    setValue('ad_cost[]', day.ad_cost === null ? '' : String(day.ad_cost));
+                    setValue('note[]', day.note || '');
+                }
+            });
+
+            refresh();
+        };
+
+        if (monthInput) {
+            monthInput.addEventListener('change', async () => {
+                const selectedMonth = monthInput.value;
+                if (!/^\d{4}-\d{2}$/.test(selectedMonth)) {
+                    showBulkNotice('กรุณาเลือกเดือนให้ถูกต้อง');
+                    return;
+                }
+
+                // เตือนก่อนทับ เฉพาะตอนมีข้อมูลค้างในตาราง
+                if (tableHasInput()
+                    && !window.confirm('โหลดเดือนใหม่ ข้อมูลที่ยังไม่บันทึกจะหาย?')) {
+                    monthInput.value = loadedMonth;   // คืนค่าเดิมให้ picker
+                    return;
+                }
+
+                showBulkNotice('กำลังโหลดข้อมูลเดือนนี้...');
+
+                try {
+                    const response = await fetch(
+                        MONTH_GRID_URL + '?month=' + encodeURIComponent(selectedMonth),
+                        { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }
+                    );
+
+                    const payload = await response.json();
+
+                    // ผิดพลาด → แจ้งข้อความ แต่ไม่ล้างตารางที่ผู้ใช้กรอกไว้
+                    if (!payload || payload.success !== true) {
+                        showBulkNotice((payload && payload.error) ? payload.error : 'โหลดข้อมูลเดือนนี้ไม่สำเร็จ');
+                        return;
+                    }
+
+                    const days = (payload.data && payload.data.days) ? payload.data.days : [];
+                    populateFromDays(days);
+                    loadedMonth = selectedMonth;
+
+                    showBulkNotice(days.length === 0 ? 'เดือนนี้ยังไม่ถึงกำหนดกรอก' : '');
+                } catch (error) {
+                    showBulkNotice('โหลดข้อมูลเดือนนี้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+                }
             });
         }
 

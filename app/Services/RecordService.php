@@ -1147,6 +1147,109 @@ class RecordService
         ];
     }
 
+    /**
+     * สร้างตารางทั้งเดือนสำหรับแก้ไข — ทุกวันในช่วง พร้อมค่าที่บันทึกไว้แล้ว (ถ้ามี)
+     *
+     * ช่วงวันเหมือน getUnfilledDatesForMonth: เดือนปัจจุบันตัดที่ today,
+     * เดือนอดีตถึงสิ้นเดือน, เดือนอนาคตคืน days ว่าง
+     *
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์
+     */
+    public function buildEditableMonthGrid(int $userId, int $shopId, string $month, ?string $today = null): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+            return [
+                'success' => false,
+                'error' => 'รูปแบบเดือนต้องเป็น YYYY-MM',
+            ];
+        }
+
+        $startDate = $month . '-01';
+        $monthStart = DateTimeImmutable::createFromFormat('Y-m-d', $startDate);
+        if (!$monthStart || $monthStart->format('Y-m-d') !== $startDate) {
+            return [
+                'success' => false,
+                'error' => 'รูปแบบเดือนต้องเป็น YYYY-MM',
+            ];
+        }
+        $monthStart = $monthStart->setTime(0, 0, 0);
+
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
+            : false;
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            $todayObject = new DateTimeImmutable('today');
+        }
+        $todayObject = $todayObject->setTime(0, 0, 0);
+
+        $selectedMonthKey = $monthStart->format('Y-m');
+        $todayMonthKey = $todayObject->format('Y-m');
+
+        // เดือนอนาคต — ยังไม่ถึงกำหนดกรอก
+        if ($selectedMonthKey > $todayMonthKey) {
+            return [
+                'success' => true,
+                'data' => [
+                    'month' => $selectedMonthKey,
+                    'days' => [],
+                ],
+            ];
+        }
+
+        $cutoffObject = $selectedMonthKey === $todayMonthKey
+            ? $todayObject                                    // เดือนปัจจุบัน: ตัดที่วันนี้
+            : $monthStart->modify('last day of this month');  // เดือนอดีต: ถึงสิ้นเดือน (leap-aware)
+        $cutoffDate = $cutoffObject->format('Y-m-d');
+
+        try {
+            $records = $this->recordRepository->getByDateRange($shopId, $startDate, $cutoffDate);
+        } catch (Throwable $exception) {
+            error_log('[record] buildEditableMonthGrid failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลของเดือนนี้ได้',
+            ];
+        }
+
+        $recordByDate = [];
+        foreach ($records as $record) {
+            $recordDate = trim((string)($record['record_date'] ?? ''));
+            if ($recordDate !== '') {
+                $recordByDate[$recordDate] = $record;
+            }
+        }
+
+        $days = [];
+        for ($cursor = $monthStart; $cursor->format('Y-m-d') <= $cutoffDate; $cursor = $cursor->modify('+1 day')) {
+            $dateKey = $cursor->format('Y-m-d');
+            $record = $recordByDate[$dateKey] ?? null;
+
+            $days[] = [
+                'date' => $dateKey,
+                'has_record' => $record !== null,
+                'revenue' => $record !== null ? (float)($record['revenue'] ?? 0) : null,
+                'ad_cost' => $record !== null ? (float)($record['ad_cost'] ?? 0) : null,
+                'note' => $record !== null ? (string)($record['note'] ?? '') : '',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'month' => $selectedMonthKey,
+                'days' => $days,
+            ],
+        ];
+    }
+
     public function deleteRecord(int $userId, int $shopId, int $recordId): array
     {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {

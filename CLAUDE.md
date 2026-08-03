@@ -56,7 +56,8 @@ PHP ที่รองรับ: **≥ 8.1** (โค้ดใช้ `never` retu
 ## โครงสร้างที่ต้องรู้ (gotchas)
 
 - **Response layer:** controller ตอบผ่าน `api_respond()` — เลือก JSON (`jsonResponse`, กรณี XHR/`wants_json`) หรือ redirect+flash (กรณี form) อัตโนมัติ + `infer_http_status_from_error()`. Service คืน result-array, controller เป็นคนแปลงเป็น response
-- **Frontend เป็น server-render ล้วน ไม่มี AJAX:** state-changing = native `<form method="post" action="/api/...">` + `csrf_field()` + hidden `action` → redirect+flash; ปุ่มยืนยัน/loading/กันกดซ้ำ อยู่ใน `includes/footer.php`; **CSRF ไม่ได้ expose เป็น meta/JS**
+- **Frontend เป็น server-render เป็นหลัก:** state-changing = native `<form method="post" action="/api/...">` + `csrf_field()` + hidden `action` → redirect+flash; ปุ่มยืนยัน/loading/กันกดซ้ำ อยู่ใน `includes/footer.php`; **CSRF ไม่ได้ expose เป็น meta/JS**
+- ⚠️ **AJAX มีจุดเดียวที่ตั้งใจ (controlled exception):** `GET api/month-grid.php` — โหลดข้อมูลทั้งเดือนมาเติมตาราง bulk ในหน้า `add-record.php` **read-only ไม่เปลี่ยน state จึงไม่มี CSRF** (auth ผ่าน session เหมือน `*-data.php`) · **การเขียนทุกอย่างยังเป็น form POST + CSRF เหมือนเดิม** · **ห้ามเพิ่มจุด AJAX ใหม่เพราะ "add-record ก็ทำ"** — ถ้าจะเพิ่มต้องเป็นการตัดสินใจที่มีเหตุผลชัดเจนเฉพาะกรณีนั้น
 - **`api/dashboard-data.php`, `overview-data.php`, `annual-data.php` ไม่ถูกเรียกจาก UI** (data page เรียก Service ตรงในเพจ) — อย่าเข้าใจผิดว่าหน้าเว็บ fetch endpoint พวกนี้
 - **`idempotency_requests` + `IdempotencyRequestRepository` ยังไม่ถูกใช้จริง** — มีแค่ cron cleanup กันซ้ำจริงพึ่ง unique key ระดับ DB + row lock
 - **Schema Guard ใน `includes/bootstrap.php`:** ถ้า schema ไม่ตรง (ตาราง/คอลัมน์/index ที่กำหนด) ระบบตอบ 503 / CLI exit(1) ควบคุมด้วย flag `SCHEMA_GUARD_ENABLED` — **เวลาแก้ schema ต้องอัปเดต guard ด้วย**
