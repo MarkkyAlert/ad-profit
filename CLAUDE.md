@@ -81,21 +81,30 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 
 ## การเทสต์ (Testing)
 
-> ⚠️ **สถานะปัจจุบัน: ยังไม่มี test setup ในโปรเจกต์** — `composer.json` มีแค่ `phpmailer/phpmailer` ไม่มี `require-dev`, ไม่มี `phpunit.xml`, ไม่มีโฟลเดอร์ `tests/`, ไม่มี `vendor/bin/phpunit`
-> **ต้อง setup ก่อนถึงจะรันเทสต์ได้** (ทำครั้งเดียว — ดูขั้นตอนด้านล่าง) หลังจากนั้นคำสั่ง/workflow ในหัวข้อนี้ถึงจะใช้ได้
+> **สถานะปัจจุบัน: setup ครบแล้ว** — `phpunit/phpunit` อยู่ใน `require-dev`, มี `phpunit.xml` (testsuite `Unit`/`Integration`), มี `tests/bootstrap.php`
+> `composer test` รันได้เลย ไม่ต้อง setup อะไรเพิ่ม
 
-### ขั้นตอน setup (ทำครั้งเดียว ก่อนเริ่มเขียนเทสต์)
-1. `composer require --dev phpunit/phpunit` (ปล่อยให้ composer เลือกเวอร์ชันตาม PHP ของเครื่อง)
-2. เพิ่มใน `composer.json`: `autoload-dev` (ให้เห็นคลาสใน `app/`) + `scripts.test` = `phpunit`
-3. สร้าง `phpunit.xml` แยก testsuite เป็น `Unit` / `Integration`
-4. สร้าง `tests/bootstrap.php` (ดูกฎด้านล่าง)
+### ⚠️ ความครอบคลุมไม่เท่ากันทั้งระบบ — อย่าเชื่อตัวเลขรวม
+
+จำนวนเทสต์รวมดูเยอะ แต่กระจุกอยู่ที่ **ฝั่งอ่าน/รายงาน** เกือบทั้งหมด ฝั่ง **เขียนข้อมูล** แทบไม่มี:
+
+| พื้นที่ | สถานะ |
+|---|---|
+| Annual / Overview / Xlsx / Dashboard / Export (อ่าน) | ครอบแน่น |
+| RecordService ฝั่งอ่าน (grid, weekday, days-since, unfilled) | ครอบแน่น |
+| **ShopService / GoalService / ProfileService / AuthService** | **รวมกันไม่ถึง 10 เคส** |
+| **`RecordService::updateRecord` / `deleteRecord` / `getMonthlyRecords`** | **0** |
+| **ทุกสาขา transaction/lock/rollback** | **0** (unit test ส่ง `$db = null` จึงข้ามหมด) |
+| **ชั้น controller (`api/*.php`) ทั้งชั้น** | **0** — `grep "api/\|\$_POST\|csrf" tests/` ว่างเปล่า |
+
+**ก่อนแก้โค้ดในพื้นที่ที่เขียน 0 ไว้ ให้เขียนเทสต์ที่ครอบพฤติกรรมเดิมก่อนเสมอ** — ไม่มีตาข่ายรองรับอยู่
 
 ### Framework
-- **PHPUnit** เป็น dev dependency, รันด้วย `composer test` **(หลัง setup แล้วเท่านั้น)**
+- **PHPUnit** เป็น dev dependency, รันด้วย `composer test`
 - ⚠️ **ต้องใช้ PHP 8.4+ ในการรันเทสต์** (PHPUnit 13 require `php >= 8.4.1`) — เครื่องที่เป็น 8.2–8.3 จะ `composer install` dev dependency ไม่ผ่าน; ความเข้ากันได้กับ 8.2 คุมด้วย `php -l` ใน CI job `lint-php82` เท่านั้น (syntax ไม่ใช่ runtime)
 - `phpunit.xml` เปิด `failOnWarning="true"` + `failOnNotice="true"` → warning/notice = เทสต์แดง (CI บังคับ)
 
-### โครงสร้าง (หลัง setup)
+### โครงสร้าง
 ```
 tests/
   bootstrap.php        ← test bootstrap (ดูกฎด้านล่าง)
@@ -145,7 +154,7 @@ assert แบบ **result-array** (`assertFalse($result['success'])`, `assertStr
 - ตั้ง `$_SESSION = []` ใน `setUp()` เมื่อเทสต์โค้ดที่อ่าน session
 - error message เป็นภาษาไทย → assert ด้วย substring ที่เป็นคำไทย (เช่น `'ติดลบ'`, `'ไม่มีสิทธิ์'`)
 
-### workflow (หลังมี setup แล้ว)
+### workflow
 - เขียน/แก้โค้ดเสร็จ → รัน `composer test` ให้ผ่านทั้งหมดก่อนจบงาน
 - เพิ่มฟีเจอร์ใหม่ใน Service → เพิ่ม unit test ครอบ business rule นั้นด้วยเสมอ
 - แก้ bug → เขียน test ที่ reproduce bug ก่อน แล้วค่อยแก้ให้ผ่าน
@@ -156,8 +165,6 @@ assert แบบ **result-array** (`assertFalse($result['success'])`, `assertStr
 
 ```bash
 composer install            # ติดตั้ง dependency
-
-# หลัง setup test แล้วเท่านั้น (ดูหัวข้อ "การเทสต์"):
 composer test                          # รันเทสต์ทั้งหมด
 vendor/bin/phpunit --testsuite Unit    # รันเฉพาะ unit (เร็ว ไม่ต้อง DB)
 ```
