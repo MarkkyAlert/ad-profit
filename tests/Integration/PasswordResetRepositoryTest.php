@@ -43,6 +43,32 @@ final class PasswordResetRepositoryTest extends IntegrationTestCase
         $this->assertLessThanOrEqual(60, (int)$row['minutes_left']);
     }
 
+    /**
+     * TTL ต้องไม่ขึ้นกับ timezone ของ PHP — บังคับให้คนละโซนกับ DB เสมอ
+     *
+     * ถ้าโค้ดกลับไปคำนวณ expires_at ด้วย strtotime() ของ PHP token จะหมดอายุตั้งแต่
+     * ยังไม่ทันได้กดลิงก์ (หรืออยู่นานเกินตั้งใจ) ขึ้นกับทิศทางที่โซนต่างกัน
+     */
+    public function testExpiryIsUnaffectedByPhpTimezone(): void
+    {
+        $userId = $this->createUser('reset@example.com');
+        $hash = hash('sha256', 'token-a');
+
+        $originalTimezone = date_default_timezone_get();
+        date_default_timezone_set('Pacific/Kiritimati'); // UTC+14
+
+        try {
+            $this->repository()->createToken($userId, $hash, 1);
+
+            $this->assertIsArray(
+                $this->repository()->findByTokenHashForUpdate($hash),
+                'token หมดอายุทันทีเพราะ expires_at ถูกคิดด้วยนาฬิกา PHP'
+            );
+        } finally {
+            date_default_timezone_set($originalTimezone);
+        }
+    }
+
     public function testFreshTokenIsFoundAndCarriesUserEmail(): void
     {
         $userId = $this->createUser('reset@example.com');

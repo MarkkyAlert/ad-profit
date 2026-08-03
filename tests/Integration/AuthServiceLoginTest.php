@@ -191,6 +191,36 @@ final class AuthServiceLoginTest extends IntegrationTestCase
         $this->assertSame(2, (int)$row['attempts']);
     }
 
+    /**
+     * rate limit ต้องไม่ขึ้นกับ timezone ของ PHP
+     *
+     * connection ไม่ได้ pin time_zone ไว้ ถ้าโค้ดเอา started_at (นาฬิกา MySQL) ไปเทียบกับ
+     * time() ของ PHP อายุหน้าต่างจะเพี้ยนตามส่วนต่างของโซน แล้วถือว่าหมดอายุทุกครั้ง
+     * = ไม่มีการจำกัดเลย (เคยเกิดจริงบน CI ที่ MariaDB เป็น UTC ส่วนแอปเป็น Asia/Bangkok
+     * ขณะที่เครื่อง dev ทั้งสองฝั่งโซนเดียวกันจึงไม่เห็นอาการ)
+     *
+     * เทสต์นี้บังคับให้ PHP อยู่คนละโซนกับ DB เสมอ ไม่ว่าจะรันบนเครื่องไหน
+     */
+    public function testRateLimitIsUnaffectedByPhpTimezone(): void
+    {
+        $this->createUser('owner@example.com', 'password123');
+        $service = $this->makeService();
+
+        $originalTimezone = date_default_timezone_get();
+        date_default_timezone_set('Pacific/Kiritimati'); // UTC+14 — ไกลจากทุกโซนที่ DB จะเป็น
+
+        try {
+            for ($attempt = 0; $attempt < RATE_LIMIT_MAX_ATTEMPTS; $attempt++) {
+                $service->login('owner@example.com', 'wrong-password', self::IP);
+            }
+
+            $blocked = $service->login('owner@example.com', 'password123', self::IP);
+            $this->assertFalse($blocked['success'], 'หน้าต่าง rate limit ถูกคิดด้วยนาฬิกา PHP');
+        } finally {
+            date_default_timezone_set($originalTimezone);
+        }
+    }
+
     /** พ้นหน้าต่างเวลาแล้วตัวนับต้องเริ่มใหม่ (สาขา CASE ... THEN 1 ที่ไม่เคยถูกรัน) */
     public function testCounterRestartsAfterTheWindowExpires(): void
     {
