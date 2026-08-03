@@ -65,7 +65,9 @@ $annualData = [
 ];
 
 if (($annualResult['success'] ?? false) === true) {
-    $annualData = array_replace_recursive($annualData, (array)($annualResult['data'] ?? []));
+    // ใช้ array_replace (ไม่ recursive) — service เป็นเจ้าของจำนวนเดือนที่ควรแสดง
+    // ถ้า merge แบบ recursive เดือนอนาคตจาก default 12 เดือนจะรอดมาเป็น ฿0
+    $annualData = array_replace($annualData, (array)($annualResult['data'] ?? []));
 } else {
     $annualError = (string)($annualResult['error'] ?? 'ไม่สามารถโหลดข้อมูลสรุปประจำปีได้');
 }
@@ -103,14 +105,19 @@ $monthLabel = static function (array $row) use ($thaiMonths): string {
     return $thaiMonths[$monthNumber] ?? ('เดือน ' . $monthNumber);
 };
 
+// แสดง "กำไร" ของเดือนดี/แย่สุด (จัดอันดับด้วยกำไรแล้ว ไม่ใช่รายได้)
 $bestMonthText = '–';
+$bestMonthProfit = null;
 if ($bestMonth !== null) {
-    $bestMonthText = $monthLabel($bestMonth) . ' (' . formatMoney((float)($bestMonth['total_revenue'] ?? 0)) . ')';
+    $bestMonthProfit = (float)($bestMonth['profit'] ?? 0);
+    $bestMonthText = $monthLabel($bestMonth) . ' (' . formatMoney($bestMonthProfit) . ')';
 }
 
 $worstMonthText = '–';
+$worstMonthProfit = null;
 if ($worstMonth !== null) {
-    $worstMonthText = $monthLabel($worstMonth) . ' (' . formatMoney((float)($worstMonth['total_revenue'] ?? 0)) . ')';
+    $worstMonthProfit = (float)($worstMonth['profit'] ?? 0);
+    $worstMonthText = $monthLabel($worstMonth) . ' (' . formatMoney($worstMonthProfit) . ')';
 }
 
 $chartRaw = (array)($annualData['chart'] ?? []);
@@ -197,12 +204,16 @@ require __DIR__ . '/includes/header.php';
         <p class="mt-2 text-lg sm:text-xl font-bold text-violet-400"><?= e(formatRoas($totalRoas)) ?></p>
     </article>
     <article class="stat-card s-best">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">เดือนขายดีสุด</p>
-        <p class="mt-2 text-base font-bold text-green-400"><?= e($bestMonthText) ?></p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">เดือนกำไรดีสุด</p>
+        <p class="mt-2 text-base font-bold <?= $bestMonthProfit !== null && $bestMonthProfit < 0 ? 'text-red-400' : 'text-green-400' ?>">
+            <?= e($bestMonthText) ?>
+        </p>
     </article>
     <article class="stat-card s-worst">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">เดือนขายแย่สุด</p>
-        <p class="mt-2 text-base font-bold text-red-400"><?= e($worstMonthText) ?></p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">เดือนกำไรแย่สุด</p>
+        <p class="mt-2 text-base font-bold <?= $worstMonthProfit !== null && $worstMonthProfit >= 0 ? 'text-slate-300' : 'text-red-400' ?>">
+            <?= e($worstMonthText) ?>
+        </p>
     </article>
 </section>
 

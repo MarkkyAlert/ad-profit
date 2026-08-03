@@ -13,7 +13,10 @@ class AnnualService
         $this->shopRepository = $shopRepository;
     }
 
-    public function buildYearlySummary(int $userId, int $shopId, int $year): array
+    /**
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
+     */
+    public function buildYearlySummary(int $userId, int $shopId, int $year, ?string $today = null): array
     {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
@@ -29,8 +32,27 @@ class AnnualService
             ];
         }
 
+        // เดือนสุดท้ายที่นับ — ปีปัจจุบันตัดที่เดือนนี้ ไม่ให้เดือนอนาคตโผล่มาเป็น ฿0
+        // (ทำให้กราฟไม่ดิ่งลง 0 และ worst_month ไม่ไปเลือกเดือนที่ยังมาไม่ถึง)
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
+            : false;
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            $todayObject = new DateTimeImmutable('today');
+        }
+
+        $currentYear = (int)$todayObject->format('Y');
+        if ($year < $currentYear) {
+            $lastMonth = 12;                              // ปีอดีต — เต็มปี
+        } elseif ($year === $currentYear) {
+            $lastMonth = (int)$todayObject->format('n');  // ปีปัจจุบัน — ถึงเดือนนี้
+        } else {
+            $lastMonth = 0;                               // ปีอนาคต — ยังไม่มีข้อมูล
+        }
+
         $startMonth = sprintf('%04d-01', $year);
-        $endMonth = sprintf('%04d-12', $year);
+        $endMonth = sprintf('%04d-%02d', $year, max(1, $lastMonth));
 
         try {
             $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $startMonth, $endMonth);
@@ -56,9 +78,12 @@ class AnnualService
         $bestMonth = null;
         $worstMonth = null;
 
-        for ($month = 1; $month <= 12; $month++) {
+        $monthsWithData = 0;
+
+        for ($month = 1; $month <= $lastMonth; $month++) {
             $monthKey = sprintf('%04d-%02d', $year, $month);
             $totals = $totalsByMonthKey[$monthKey] ?? null;
+            $hasRecord = $totals !== null;
 
             $monthRevenue = (float)($totals['total_revenue'] ?? 0);
             $monthAdCost = (float)($totals['total_ad_cost'] ?? 0);
@@ -74,12 +99,18 @@ class AnnualService
                 'profit_margin' => $monthRevenue > 0 ? round(($monthProfit / $monthRevenue) * 100, 1) : null,
             ];
 
-            if ($bestMonth === null || $monthRevenue > (float)$bestMonth['total_revenue']) {
-                $bestMonth = $monthRow;
-            }
+            // จัดอันดับด้วย "กำไร" และเลือกเฉพาะเดือนที่มีข้อมูลจริง
+            // (เดือนที่ยังไม่ได้กรอกมีกำไร 0 — ไม่ควรถูกยกเป็นเดือนแย่สุด)
+            if ($hasRecord) {
+                $monthsWithData++;
 
-            if ($worstMonth === null || $monthRevenue < (float)$worstMonth['total_revenue']) {
-                $worstMonth = $monthRow;
+                if ($bestMonth === null || $monthProfit > (float)$bestMonth['profit']) {
+                    $bestMonth = $monthRow;
+                }
+
+                if ($worstMonth === null || $monthProfit < (float)$worstMonth['profit']) {
+                    $worstMonth = $monthRow;
+                }
             }
 
             $months[] = $monthRow;
@@ -93,6 +124,8 @@ class AnnualService
             'success' => true,
             'data' => [
                 'year' => $year,
+                'has_data' => $monthsWithData > 0,
+                'last_month' => $lastMonth,
                 'months' => $months,
                 'summary' => [
                     'total_revenue' => $totalRevenue,

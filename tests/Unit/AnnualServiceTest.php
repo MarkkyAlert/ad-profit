@@ -66,8 +66,10 @@ final class AnnualServiceTest extends TestCase
 
         // best/worst month by revenue
         $this->assertSame(3, $summary['best_month']['month']);
-        $this->assertSame(1000.0, $summary['best_month']['total_revenue']);
-        $this->assertSame(0.0, $summary['worst_month']['total_revenue']); // เดือนที่ไม่มีข้อมูล = 0
+        $this->assertSame(800.0, $summary['best_month']['profit']);   // 1000 - 200
+        // worst = เดือนที่ "มีข้อมูล" และกำไรน้อยสุด (ก.ค. 500-100) ไม่ใช่เดือนว่าง
+        $this->assertSame(7, $summary['worst_month']['month']);
+        $this->assertSame(400.0, $summary['worst_month']['profit']);
 
         // 12 เดือนครบ + เดือน มี.ค. (index 2) คำนวณถูก
         $this->assertCount(12, $data['months']);
