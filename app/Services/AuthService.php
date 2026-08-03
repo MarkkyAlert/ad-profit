@@ -465,7 +465,7 @@ class AuthService
             try {
                 return $this->isRateLimitedInDatabase($action, $clientIp, $subject);
             } catch (Throwable $exception) {
-                error_log('[auth][rate_limit] DB read failed, fallback to session limiter: ' . $exception->getMessage());
+                $this->demoteToSessionLimiter('DB read failed', $exception);
             }
         }
 
@@ -481,7 +481,7 @@ class AuthService
                 $this->markFailedAttemptInDatabase($action, $clientIp, $subject);
                 return;
             } catch (Throwable $exception) {
-                error_log('[auth][rate_limit] DB write failed, fallback to session limiter: ' . $exception->getMessage());
+                $this->demoteToSessionLimiter('DB write failed', $exception);
             }
         }
 
@@ -499,7 +499,7 @@ class AuthService
                 $this->clearRateLimitInDatabase($action, $clientIp, $subject);
                 return;
             } catch (Throwable $exception) {
-                error_log('[auth][rate_limit] DB clear failed, fallback to session limiter: ' . $exception->getMessage());
+                $this->demoteToSessionLimiter('DB clear failed', $exception);
             }
         }
 
@@ -541,6 +541,19 @@ class AuthService
         $_SESSION['auth_rate_limits'][$key] = $normalizedBucket;
 
         return $normalizedBucket;
+    }
+
+    /**
+     * DB rate limiter ใช้ไม่ได้ → ย้ายไปใช้ session limiter ตลอด request นี้
+     *
+     * สำคัญที่ต้องปิดทั้งฝั่งอ่านและเขียนพร้อมกัน: ถ้าเขียนลง DB ไม่ได้แต่ฝั่งอ่านยังถาม DB
+     * ต่อไป จะได้ "ไม่มีแถว = ยังไม่ถูกจำกัด" เสมอ ขณะที่ตัวนับใน session ถูกเขียนทิ้งไว้
+     * โดยไม่มีใครอ่าน — เท่ากับไม่มี rate limit เลย
+     */
+    private function demoteToSessionLimiter(string $stage, Throwable $exception): void
+    {
+        $this->databaseRateLimitReady = false;
+        error_log('[auth][rate_limit] ' . $stage . ', fallback to session limiter: ' . $exception->getMessage());
     }
 
     private function rateLimitKey(string $action, string $clientIp, string $subject = ''): string
@@ -627,15 +640,18 @@ class AuthService
 
         $key = $this->rateLimitKey($action, $clientIp, $subject);
 
+        // ⚠️ ชื่อ placeholder ห้ามซ้ำในคำสั่งเดียว — EMULATE_PREPARES=false ทำให้ MySQL
+        // native prepare ตอบ HY093 "Invalid parameter number" (เคยเป็นบั๊ก: INSERT ล้มทุกครั้ง
+        // แถวใน auth_rate_limits จึงเป็น 0 ตลอด = rate limit ไม่ทำงานเลย)
         $sql = 'INSERT INTO auth_rate_limits (bucket_key, action_type, client_ip, attempts, started_at, updated_at)
                 VALUES (:bucket_key, :action_type, :client_ip, 1, NOW(), NOW())
                 ON DUPLICATE KEY UPDATE
                     attempts = CASE
-                        WHEN TIMESTAMPDIFF(SECOND, started_at, NOW()) >= :window_seconds THEN 1
+                        WHEN TIMESTAMPDIFF(SECOND, started_at, NOW()) >= :window_attempts THEN 1
                         ELSE attempts + 1
                     END,
                     started_at = CASE
-                        WHEN TIMESTAMPDIFF(SECOND, started_at, NOW()) >= :window_seconds THEN NOW()
+                        WHEN TIMESTAMPDIFF(SECOND, started_at, NOW()) >= :window_started THEN NOW()
                         ELSE started_at
                     END,
                     updated_at = NOW()';
@@ -645,7 +661,8 @@ class AuthService
             ':bucket_key' => $key,
             ':action_type' => $action,
             ':client_ip' => $clientIp,
-            ':window_seconds' => RATE_LIMIT_WINDOW_SECONDS,
+            ':window_attempts' => RATE_LIMIT_WINDOW_SECONDS,
+            ':window_started' => RATE_LIMIT_WINDOW_SECONDS,
         ]);
     }
 
