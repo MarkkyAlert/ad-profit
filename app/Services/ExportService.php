@@ -135,8 +135,12 @@ class ExportService
      *
      * แยกจากการเขียนไฟล์โดยตั้งใจ — ชั้นนี้เทสต์ได้ตรง ๆ ส่วนการเขียน binary
      * อยู่ที่ controller (api/export-xlsx.php) ซึ่ง unit test ไม่ได้
+     *
+     * ตัดเดือนอนาคตด้วยขอบเขตเดียวกับ sheet รายเดือน เพื่อให้ยอดรวมสองแท็บตรงกัน
+     *
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
      */
-    public function buildYearlyDailyPayload(int $userId, int $shopId, int $year): array
+    public function buildYearlyDailyPayload(int $userId, int $shopId, int $year, ?string $today = null): array
     {
         if ($year < 2000 || $year > 2100) {
             return [
@@ -162,12 +166,31 @@ class ExportService
             ];
         }
 
+        $lastMonth = $this->resolveLastMonth($year, $today);
+
+        if ($lastMonth === 0) {
+            return [
+                'success' => true,
+                'data' => [
+                    'year' => $year,
+                    'shop_name' => (string)($shop['name'] ?? 'ร้านค้า'),
+                    'rows' => [],
+                    'totals' => ['revenue' => 0.0, 'ad_cost' => 0.0, 'profit' => 0.0, 'roas' => null],
+                    'note_column_index' => 6,
+                ],
+            ];
+        }
+
+        // ตัดที่ "สิ้นเดือนปัจจุบัน" ไม่ใช่ "วันนี้" — เรคอร์ดที่ลงล่วงหน้าภายในเดือนนี้ยังเก็บครบ
+        // ตรงกับ sheet รายเดือนและหน้า annual ที่นับทั้งเดือนปัจจุบัน
+        $endOfLastMonth = (new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $lastMonth)))->format('Y-m-t');
+
         try {
             $rangeResult = $this->recordService->getRecordsByDateRange(
                 $userId,
                 $shopId,
                 sprintf('%04d-01-01', $year),
-                sprintf('%04d-12-31', $year)
+                $endOfLastMonth
             );
         } catch (Throwable $exception) {
             error_log('[export] buildYearlyDailyPayload fetch failed: ' . $exception->getMessage());
@@ -259,22 +282,7 @@ class ExportService
             ];
         }
 
-        $todayInput = is_string($today) ? trim($today) : '';
-        $todayObject = $todayInput !== ''
-            ? DateTimeImmutable::createFromFormat('!Y-m-d', $todayInput)
-            : false;
-        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
-            $todayObject = new DateTimeImmutable('today');
-        }
-
-        $currentYear = (int)$todayObject->format('Y');
-        if ($year < $currentYear) {
-            $lastMonth = 12;
-        } elseif ($year === $currentYear) {
-            $lastMonth = (int)$todayObject->format('n');
-        } else {
-            $lastMonth = 0;
-        }
+        $lastMonth = $this->resolveLastMonth($year, $today);
 
         if ($lastMonth === 0) {
             return [
@@ -351,6 +359,35 @@ class ExportService
     public function buildMonthlyCsvFilename(string $shopName, string $month): string
     {
         return $this->sanitizeFilenameBase($shopName) . '_' . $month . '.csv';
+    }
+
+    /**
+     * เดือนสุดท้ายที่รายงานควรครอบคลุม — ปีอดีต 12 · ปีปัจจุบันถึงเดือนนี้ · ปีอนาคต 0
+     *
+     * ใช้ร่วมกันทั้ง sheet รายวันและรายเดือน เพื่อไม่ให้สองแท็บนิยามขอบเขตต่างกัน
+     * (เคยเป็นบั๊ก: รายวันดึงเต็มปี รายเดือนตัด → ยอดรวมในไฟล์เดียวกันไม่ตรง)
+     */
+    private function resolveLastMonth(int $year, ?string $today): int
+    {
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('!Y-m-d', $todayInput)
+            : false;
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            $todayObject = new DateTimeImmutable('today');
+        }
+
+        $currentYear = (int)$todayObject->format('Y');
+
+        if ($year < $currentYear) {
+            return 12;
+        }
+
+        if ($year === $currentYear) {
+            return (int)$todayObject->format('n');
+        }
+
+        return 0;
     }
 
     private function sanitizeFilenameBase(string $shopName): string

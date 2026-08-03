@@ -16,6 +16,8 @@ use ShopRepository;
  */
 final class ExportServiceXlsxTest extends IntegrationTestCase
 {
+    private const TODAY = '2026-08-15';
+
     private function makeService(): ExportService
     {
         $recordRepository = new RecordRepository($this->pdo);
@@ -34,15 +36,18 @@ final class ExportServiceXlsxTest extends IntegrationTestCase
 
         $this->createRecord($shopId, '2026-03-10', 3000.0, 1000.0, 'รอบเดือน มี.ค.');
         $this->createRecord($shopId, '2026-01-05', 5000.0, 1000.0);
-        $this->createRecord($shopId, '2026-12-31', 2000.0, 500.0);
+        // ในเดือนปัจจุบันแต่ลงล่วงหน้า (today = 15 ส.ค.) — cutoff ตัดที่สิ้นเดือน จึงต้องยังอยู่
+        $this->createRecord($shopId, '2026-08-31', 2000.0, 500.0);
+        // เดือนถัดไปเป็นต้นไป = อนาคตจริง ต้องถูกตัด
+        $this->createRecord($shopId, '2026-09-01', 90000.0, 0.0);
         // นอกปี — ต้องไม่หลุดเข้ามา
         $this->createRecord($shopId, '2025-12-31', 90000.0, 0.0);
         $this->createRecord($shopId, '2027-01-01', 90000.0, 0.0);
 
-        $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026)['data'];
+        $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026, self::TODAY)['data'];
 
         $dates = array_map(static fn(array $row): string => (string)$row['record_date'], $data['rows']);
-        $this->assertSame(['2026-01-05', '2026-03-10', '2026-12-31'], $dates);
+        $this->assertSame(['2026-01-05', '2026-03-10', '2026-08-31'], $dates);
 
         $this->assertSame('ร้านคอร์ส', $data['shop_name']);
         $this->assertSame(10000.0, $data['totals']['revenue']);
@@ -59,7 +64,7 @@ final class ExportServiceXlsxTest extends IntegrationTestCase
 
         $intruderId = $this->createUser('intruder@example.com');
 
-        $result = $this->makeService()->buildYearlyDailyPayload($intruderId, $shopId, 2026);
+        $result = $this->makeService()->buildYearlyDailyPayload($intruderId, $shopId, 2026, self::TODAY);
 
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('ไม่มีสิทธิ์', $result['error']);
@@ -74,7 +79,7 @@ final class ExportServiceXlsxTest extends IntegrationTestCase
         $this->createRecord($shopId, '2026-01-05', 3000.0, 1000.0);
         $this->createRecord($otherShopId, '2026-01-05', 99999.0, 0.0);
 
-        $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026)['data'];
+        $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026, self::TODAY)['data'];
 
         $this->assertCount(1, $data['rows']);
         $this->assertSame(3000.0, $data['totals']['revenue']);
@@ -87,7 +92,7 @@ final class ExportServiceXlsxTest extends IntegrationTestCase
 
         $this->createRecord($shopId, '2026-01-05', 3000.0, 1000.0, '=SUM(A1:A9)');
 
-        $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026)['data'];
+        $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026, self::TODAY)['data'];
 
         // service คืนโน้ตดิบ — การเติม ' กัน formula injection เป็นหน้าที่ controller
         $this->assertSame('=SUM(A1:A9)', $data['rows'][0]['note']);
@@ -99,7 +104,7 @@ final class ExportServiceXlsxTest extends IntegrationTestCase
         $userId = $this->createUser();
         $shopId = $this->createShop($userId, 'ร้านว่าง');
 
-        $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026)['data'];
+        $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026, self::TODAY)['data'];
 
         $this->assertSame('ร้านว่าง', $data['shop_name']);
         $this->assertSame([], $data['rows']);

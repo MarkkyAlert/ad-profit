@@ -33,8 +33,12 @@ $shopRepository = new ShopRepository($pdo);
 $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 $exportService = new ExportService($recordService, $shopRepository);
 
-$dailyResult = $exportService->buildYearlyDailyPayload($userId, $shopId, $selectedYear);
-$monthlyResult = $exportService->buildYearlyMonthlyPayload($userId, $shopId, $selectedYear);
+// today ตัวเดียวกันทั้งสอง payload — รับประกันว่าสองแท็บใช้ขอบเขตเดียวกัน
+// (กันเคสข้ามเที่ยงคืน/ข้ามเดือนระหว่างสองคำสั่ง แล้วยอดรวมไม่ตรง)
+$today = date('Y-m-d');
+
+$dailyResult = $exportService->buildYearlyDailyPayload($userId, $shopId, $selectedYear, $today);
+$monthlyResult = $exportService->buildYearlyMonthlyPayload($userId, $shopId, $selectedYear, $today);
 
 foreach ([$dailyResult, $monthlyResult] as $result) {
     if (($result['success'] ?? false) === true) {
