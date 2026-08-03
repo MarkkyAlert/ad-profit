@@ -270,76 +270,106 @@ class XlsxReportService
      *
      * @param array<string,mixed> $summary ผลจาก AnnualService::buildYearlySummary()['data']['summary']
      */
-    public function buildAnnualSheet(Spreadsheet $spreadsheet, array $summary, int $year, string $shopName): void
-    {
+    public function buildAnnualSheet(
+        Spreadsheet $spreadsheet,
+        array $summary,
+        int $year,
+        string $shopName,
+        ?string $generatedAt = null
+    ): void {
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('รายปี');
         $this->applyReportLook($sheet, self::TAB_COLORS['รายปี']);
 
+        // ── หัวรายงาน ──────────────────────────────────────────────
+        $sheet->mergeCells('A1:H1');
+        $sheet->setCellValueExplicit('A1', sprintf('สรุปรายปี %d', $year + 543), DataType::TYPE_STRING);
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(20)->getColor()->setARGB('FFFFFFFF');
+        $sheet->getStyle('A1')->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB(self::HEADER_FILL_ARGB);
+        $sheet->getStyle('A1')->getAlignment()
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setIndent(1);
+        $sheet->getRowDimension(1)->setRowHeight(38);
+
+        $generated = is_string($generatedAt) && trim($generatedAt) !== ''
+            ? trim($generatedAt)
+            : date('Y-m-d');
+
+        $sheet->mergeCells('A2:H2');
         $sheet->setCellValueExplicit(
-            'A1',
-            sprintf('สรุปรายปี %s ปี %d', $shopName, $year + 543),
+            'A2',
+            sprintf('%s · ออกรายงาน %s', $shopName, $generated),
             DataType::TYPE_STRING
         );
-        $sheet->mergeCells('A1:C1');
-        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+        $sheet->getStyle('A2')->getFont()->setSize(9)->getColor()->setARGB('FF808080');
+        $sheet->getStyle('A2')->getAlignment()->setIndent(1);
+        $sheet->getRowDimension(2)->setRowHeight(16);
+        $sheet->getRowDimension(3)->setRowHeight(6);
 
+        // ── การ์ดตัวเลขหลัก ────────────────────────────────────────
         $profit = (float)($summary['profit'] ?? 0);
-
-        $rowNumber = 3;
-        $sheet->setCellValueExplicit('A' . $rowNumber, 'ยอดรวมทั้งปี', DataType::TYPE_STRING);
-        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
-        $rowNumber++;
-
-        $moneyRows = [
-            ['รายได้', (float)($summary['total_revenue'] ?? 0)],
-            ['ค่าแอด', (float)($summary['total_ad_cost'] ?? 0)],
-            ['กำไร', $profit],
+        $cards = [
+            ['A', 'B', 'กำไรทั้งปี', $profit, self::MONEY_FORMAT],
+            ['C', 'D', 'รายได้', (float)($summary['total_revenue'] ?? 0), self::MONEY_FORMAT],
+            ['E', 'F', 'ค่าแอด', (float)($summary['total_ad_cost'] ?? 0), self::MONEY_FORMAT],
+            ['G', 'H', 'อัตรากำไร', $summary['profit_margin'] ?? null, self::PERCENT_FORMAT],
         ];
-        foreach ($moneyRows as [$label, $value]) {
-            $sheet->setCellValueExplicit('A' . $rowNumber, $label, DataType::TYPE_STRING);
-            $sheet->setCellValue('B' . $rowNumber, $value);
-            $sheet->getStyle('B' . $rowNumber)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
-            if ($value < 0) {
-                $sheet->getStyle('B' . $rowNumber)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
+
+        foreach ($cards as [$left, $right, $label, $value, $format]) {
+            $sheet->mergeCells($left . '4:' . $right . '4');
+            $sheet->mergeCells($left . '5:' . $right . '5');
+
+            $sheet->setCellValueExplicit($left . '4', $label, DataType::TYPE_STRING);
+            $sheet->getStyle($left . '4')->getFont()->setSize(9)->getColor()->setARGB('FF595959');
+            $sheet->getStyle($left . '4')->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+                ->setVertical(Alignment::VERTICAL_CENTER);
+
+            if ($value === null) {
+                $sheet->setCellValueExplicit($left . '5', '–', DataType::TYPE_STRING);
+            } else {
+                $sheet->setCellValue($left . '5', (float)$value);
+                $sheet->getStyle($left . '5')->getNumberFormat()->setFormatCode($format);
             }
-            $rowNumber++;
+
+            $sheet->getStyle($left . '5')->getFont()->setBold(true)->setSize(16);
+            $sheet->getStyle($left . '5')->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+                ->setVertical(Alignment::VERTICAL_CENTER);
+
+            // พื้นการ์ด + เส้นขอบ ให้แยกจากพื้นหลังชัด
+            $cardRange = $left . '4:' . $right . '5';
+            $sheet->getStyle($cardRange)->getFill()
+                ->setFillType(Fill::FILL_SOLID)
+                ->getStartColor()->setARGB(self::BAND_FILL_ARGB);
+            $sheet->getStyle($cardRange)->getBorders()->getAllBorders()
+                ->setBorderStyle(Border::BORDER_THIN)
+                ->getColor()->setARGB(self::GRID_LINE_ARGB);
         }
 
-        $sheet->setCellValueExplicit('A' . $rowNumber, 'ROAS', DataType::TYPE_STRING);
-        if (isset($summary['roas']) && $summary['roas'] !== null) {
-            $sheet->setCellValue('B' . $rowNumber, (float)$summary['roas']);
-            $sheet->getStyle('B' . $rowNumber)->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
-        } else {
-            $sheet->setCellValueExplicit('B' . $rowNumber, '–', DataType::TYPE_STRING);
-        }
-        $rowNumber++;
+        $this->paintNegative($sheet, 'A5', $profit);
+        $sheet->getRowDimension(4)->setRowHeight(16);
+        $sheet->getRowDimension(5)->setRowHeight(28);
+        $sheet->getRowDimension(6)->setRowHeight(8);
 
-        $sheet->setCellValueExplicit('A' . $rowNumber, 'อัตรากำไร', DataType::TYPE_STRING);
-        if (isset($summary['profit_margin']) && $summary['profit_margin'] !== null) {
-            $sheet->setCellValue('B' . $rowNumber, (float)$summary['profit_margin']);
-            $sheet->getStyle('B' . $rowNumber)->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
-        } else {
-            $sheet->setCellValueExplicit('B' . $rowNumber, '–', DataType::TYPE_STRING);
-        }
-        $rowNumber += 2;
-
-        // YoY เทียบช่วงเดียวกันของปีก่อน
-        $percent = $summary['yoy_profit_change_percent'] ?? null;
-        $sheet->setCellValueExplicit(
-            'A' . $rowNumber,
-            sprintf('เทียบ %d (ช่วงเดียวกัน)', (int)($summary['prev_year'] ?? ($year - 1)) + 543),
-            DataType::TYPE_STRING
+        // ── บล็อกเทียบปีก่อน ───────────────────────────────────────
+        $this->writeSectionHeader(
+            $sheet,
+            7,
+            sprintf('เทียบ %d (ช่วงเดียวกัน)', (int)($summary['prev_year'] ?? ($year - 1)) + 543)
         );
-        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
 
+        $percent = $summary['yoy_profit_change_percent'] ?? null;
+        $sheet->mergeCells('A8:H8');
         if ($percent === null) {
-            $sheet->setCellValueExplicit('B' . $rowNumber, 'ไม่มีข้อมูลปีก่อน', DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('A8', 'ไม่มีข้อมูลปีก่อน', DataType::TYPE_STRING);
         } else {
             $percentValue = (float)$percent;
             $change = (float)($summary['yoy_profit_change'] ?? 0);
             $sheet->setCellValueExplicit(
-                'B' . $rowNumber,
+                'A8',
                 sprintf(
                     'กำไร %s%s%% (%s%s) · ปีก่อน %s',
                     $percentValue > 0 ? '↑' : ($percentValue < 0 ? '↓' : ''),
@@ -350,56 +380,78 @@ class XlsxReportService
                 ),
                 DataType::TYPE_STRING
             );
+            $sheet->getStyle('A8')->getFont()->setBold(true)->setSize(12);
 
             if (abs($percentValue) >= 0.05) {
-                $sheet->getStyle('B' . $rowNumber)->getFont()->getColor()->setARGB(
+                $sheet->getStyle('A8')->getFont()->getColor()->setARGB(
                     $percentValue > 0 ? self::POSITIVE_FONT_ARGB : self::NEGATIVE_FONT_ARGB
                 );
             }
         }
-        $rowNumber += 2;
+        $sheet->getStyle('A8')->getAlignment()->setIndent(1);
+        $sheet->getRowDimension(9)->setRowHeight(8);
 
-        $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนกำไรดีสุด', DataType::TYPE_STRING);
-        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
-        $sheet->setCellValueExplicit(
-            'B' . $rowNumber,
-            $this->describeMonth($summary['best_month'] ?? null),
-            DataType::TYPE_STRING
-        );
+        // ── บล็อกเดือนที่โดดเด่น ───────────────────────────────────
+        $this->writeSectionHeader($sheet, 10, 'เดือนที่โดดเด่น');
+
+        $facts = [
+            ['เดือนกำไรดีสุด', $this->describeMonth($summary['best_month'] ?? null)],
+            ['เดือนกำไรแย่สุด', $this->describeMonth($summary['worst_month'] ?? null)],
+            [
+                'เดือนที่มีข้อมูล',
+                sprintf(
+                    '%d เดือน · กำไร %d / ขาดทุน %d',
+                    (int)($summary['months_with_data'] ?? 0),
+                    (int)($summary['profit_months'] ?? 0),
+                    (int)($summary['loss_months'] ?? 0)
+                ),
+            ],
+        ];
+
+        $rowNumber = 11;
+        foreach ($facts as [$label, $value]) {
+            $sheet->setCellValueExplicit('A' . $rowNumber, $label, DataType::TYPE_STRING);
+            $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
+            $sheet->getStyle('A' . $rowNumber)->getAlignment()->setIndent(1);
+
+            $sheet->mergeCells('C' . $rowNumber . ':H' . $rowNumber);
+            $sheet->setCellValueExplicit('C' . $rowNumber, $value, DataType::TYPE_STRING);
+            $rowNumber++;
+        }
+
+        $sheet->getRowDimension($rowNumber)->setRowHeight(8);
         $rowNumber++;
 
-        $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนกำไรแย่สุด', DataType::TYPE_STRING);
-        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
-        $sheet->setCellValueExplicit(
-            'B' . $rowNumber,
-            $this->describeMonth($summary['worst_month'] ?? null),
-            DataType::TYPE_STRING
-        );
-        $rowNumber++;
+        // ── บล็อกประมาณการ ─────────────────────────────────────────
+        $this->writeSectionHeader($sheet, $rowNumber, '🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)');
+        $this->writeProjection($sheet, (array)($summary['projection'] ?? []), $rowNumber + 1);
 
-        $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนที่มีข้อมูล', DataType::TYPE_STRING);
-        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
-        $sheet->setCellValueExplicit(
-            'B' . $rowNumber,
-            sprintf(
-                '%d เดือน · กำไร %d / ขาดทุน %d',
-                (int)($summary['months_with_data'] ?? 0),
-                (int)($summary['profit_months'] ?? 0),
-                (int)($summary['loss_months'] ?? 0)
-            ),
-            DataType::TYPE_STRING
-        );
-        $rowNumber += 2;
-
-        $this->writeProjection($sheet, (array)($summary['projection'] ?? []), $rowNumber);
-
-        foreach (range('A', 'C') as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
+        $sheet->getColumnDimension('A')->setWidth(20);
+        foreach (['B', 'C', 'D', 'E', 'F', 'G', 'H'] as $column) {
+            $sheet->getColumnDimension($column)->setWidth(14);
         }
 
         // สรุปทั้งปีมาก่อนทุกอย่าง
         $spreadsheet->setIndexByName('รายปี', 0);
         $spreadsheet->setActiveSheetIndex(0);
+    }
+
+    /** หัวข้อบล็อกในชีตรายปี — ตัวหนาสีเข้ม + เส้นใต้ ให้แยกส่วนด้วยตา */
+    private function writeSectionHeader(Worksheet $sheet, int $rowNumber, string $title): void
+    {
+        $sheet->mergeCells('A' . $rowNumber . ':H' . $rowNumber);
+        $sheet->setCellValueExplicit('A' . $rowNumber, $title, DataType::TYPE_STRING);
+        $sheet->getStyle('A' . $rowNumber)->getFont()
+            ->setBold(true)
+            ->setSize(11)
+            ->getColor()->setARGB(self::HEADER_FILL_ARGB);
+        $sheet->getStyle('A' . $rowNumber)->getAlignment()
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setIndent(1);
+        $sheet->getStyle('A' . $rowNumber . ':H' . $rowNumber)->getBorders()->getBottom()
+            ->setBorderStyle(Border::BORDER_THIN)
+            ->getColor()->setARGB(self::HEADER_FILL_ARGB);
+        $sheet->getRowDimension($rowNumber)->setRowHeight(20);
     }
 
     /**
@@ -883,26 +935,24 @@ class XlsxReportService
      */
     private function writeProjection(Worksheet $sheet, array $projection, int $startRow): void
     {
-        $sheet->setCellValueExplicit(
-            'A' . $startRow,
-            '🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)',
-            DataType::TYPE_STRING
-        );
-        $sheet->getStyle('A' . $startRow)->getFont()->setBold(true)->setItalic(true);
+        // หัวข้อวาดโดย writeSectionHeader แล้ว — ที่นี่เขียนเฉพาะเนื้อ
+        $sheet->mergeCells('A' . $startRow . ':H' . $startRow);
+        $sheet->getStyle('A' . $startRow)->getAlignment()->setIndent(1);
 
         if (($projection['available'] ?? false) !== true) {
             $sheet->setCellValueExplicit(
-                'B' . $startRow,
+                'A' . $startRow,
                 'ข้อมูลยังไม่พอประมาณการ',
                 DataType::TYPE_STRING
             );
-            $sheet->getStyle('B' . $startRow)->getFont()->setItalic(true);
+            $sheet->getStyle('A' . $startRow)->getFont()->setItalic(true)
+                ->getColor()->setARGB('FF808080');
 
             return;
         }
 
         $sheet->setCellValueExplicit(
-            'B' . $startRow,
+            'A' . $startRow,
             sprintf(
                 '%s – %s (กลาง %s)',
                 number_format((float)($projection['projection_low'] ?? 0), 2),
@@ -911,10 +961,12 @@ class XlsxReportService
             ),
             DataType::TYPE_STRING
         );
-        $sheet->getStyle('B' . $startRow)->getFont()->setItalic(true);
+        $sheet->getStyle('A' . $startRow)->getFont()->setItalic(true)->setBold(true)->setSize(12);
 
+        $sheet->mergeCells('A' . ($startRow + 1) . ':H' . ($startRow + 1));
+        $sheet->getStyle('A' . ($startRow + 1))->getAlignment()->setIndent(1);
         $sheet->setCellValueExplicit(
-            'B' . ($startRow + 1),
+            'A' . ($startRow + 1),
             sprintf(
                 'สมมติเดือนที่เหลือ (%d) ทำได้เท่า %d เดือนล่าสุด · ไม่คิดฤดูกาล — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง',
                 (int)($projection['months_remaining'] ?? 0),
@@ -922,7 +974,8 @@ class XlsxReportService
             ),
             DataType::TYPE_STRING
         );
-        $sheet->getStyle('B' . ($startRow + 1))->getFont()->setItalic(true)->setSize(9);
+        $sheet->getStyle('A' . ($startRow + 1))->getFont()->setItalic(true)->setSize(9)
+            ->getColor()->setARGB('FF808080');
     }
 
     /** ทาแดงเฉพาะค่าติดลบ — ใช้ร่วมทุกชีตให้สัญญาณสีสม่ำเสมอ */

@@ -193,11 +193,11 @@ final class XlsxReportServiceUsabilityTest extends TestCase
         $sheet = $spreadsheet->getSheetByName('รายปี');
         $this->assertNotNull($sheet);
 
-        $this->assertSame('🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)', $sheet->getCell('A16')->getValue());
-        $this->assertSame('21,000.00 – 29,000.00 (กลาง 25,000.00)', $sheet->getCell('B16')->getValue());
-        $this->assertStringContainsString('ไม่ใช่ตัวเลขที่เกิดขึ้นจริง', (string)$sheet->getCell('B17')->getValue());
+        $this->assertSame('🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)', $sheet->getCell('A15')->getValue());
+        $this->assertSame('21,000.00 – 29,000.00 (กลาง 25,000.00)', $sheet->getCell('A16')->getValue());
+        $this->assertStringContainsString('ไม่ใช่ตัวเลขที่เกิดขึ้นจริง', (string)$sheet->getCell('A17')->getValue());
         // ตัวเอียง = สัญญาณสายตาว่าไม่ใช่ข้อมูลจริง
-        $this->assertTrue($sheet->getStyle('B16')->getFont()->getItalic());
+        $this->assertTrue($sheet->getStyle('A16')->getFont()->getItalic());
 
         $spreadsheet->disconnectWorksheets();
     }
@@ -215,7 +215,7 @@ final class XlsxReportServiceUsabilityTest extends TestCase
 
         $sheet = $spreadsheet->getSheetByName('รายปี');
         $this->assertNotNull($sheet);
-        $this->assertSame('ข้อมูลยังไม่พอประมาณการ', $sheet->getCell('B16')->getValue());
+        $this->assertSame('ข้อมูลยังไม่พอประมาณการ', $sheet->getCell('A16')->getValue());
 
         $spreadsheet->disconnectWorksheets();
     }

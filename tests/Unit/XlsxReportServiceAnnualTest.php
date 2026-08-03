@@ -6,6 +6,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use XlsxReportService;
 
@@ -66,48 +67,51 @@ final class XlsxReportServiceAnnualTest extends TestCase
     {
         $sheet = $this->buildSheet($this->summary());
 
-        $this->assertSame('สรุปรายปี ร้านคอร์สออนไลน์ ปี 2569', $sheet->getCell('A1')->getValue());
+        $this->assertSame('สรุปรายปี 2569', $sheet->getCell('A1')->getValue());
+        $this->assertStringContainsString('ร้านคอร์สออนไลน์', (string)$sheet->getCell('A2')->getValue());
 
-        $this->assertSame('รายได้', $sheet->getCell('A4')->getValue());
-        $this->assertSame(36000.0, $sheet->getCell('B4')->getValue());
-        $this->assertSame('ค่าแอด', $sheet->getCell('A5')->getValue());
-        $this->assertSame(26500.0, $sheet->getCell('B5')->getValue());
-        $this->assertSame('กำไร', $sheet->getCell('A6')->getValue());
-        $this->assertSame(9500.0, $sheet->getCell('B6')->getValue());
-        $this->assertSame(1.36, $sheet->getCell('B7')->getValue());
-        $this->assertSame(26.4, $sheet->getCell('B8')->getValue());
+        // การ์ด 4 ใบ: label แถว 4 · ค่าแถว 5
+        $this->assertSame('กำไรทั้งปี', $sheet->getCell('A4')->getValue());
+        $this->assertSame(9500.0, $sheet->getCell('A5')->getValue());
+        $this->assertSame('รายได้', $sheet->getCell('C4')->getValue());
+        $this->assertSame(36000.0, $sheet->getCell('C5')->getValue());
+        $this->assertSame('ค่าแอด', $sheet->getCell('E4')->getValue());
+        $this->assertSame(26500.0, $sheet->getCell('E5')->getValue());
+        $this->assertSame('อัตรากำไร', $sheet->getCell('G4')->getValue());
+        $this->assertSame(26.4, $sheet->getCell('G5')->getValue());
 
-        $this->assertSame('#,##0.00', $sheet->getStyle('B4')->getNumberFormat()->getFormatCode());
-        $this->assertSame('0.00', $sheet->getStyle('B7')->getNumberFormat()->getFormatCode());
-        $this->assertSame('0.0"%"', $sheet->getStyle('B8')->getNumberFormat()->getFormatCode());
+        $this->assertSame('#,##0.00', $sheet->getStyle('A5')->getNumberFormat()->getFormatCode());
+        $this->assertSame('0.0"%"', $sheet->getStyle('G5')->getNumberFormat()->getFormatCode());
+        // ตัวเลขการ์ดต้องเด่นกว่าเนื้อความทั่วไป
+        $this->assertSame(16.0, $sheet->getStyle('A5')->getFont()->getSize());
     }
 
     public function testNegativeYearProfitIsRed(): void
     {
         $sheet = $this->buildSheet($this->summary(['profit' => -3000.0]));
 
-        $this->assertSame(-3000.0, $sheet->getCell('B6')->getValue());
-        $this->assertSame('FFC00000', $sheet->getStyle('B6')->getFont()->getColor()->getARGB());
+        $this->assertSame(-3000.0, $sheet->getCell('A5')->getValue());
+        $this->assertSame('FFC00000', $sheet->getStyle('A5')->getFont()->getColor()->getARGB());
     }
 
     public function testNullRoasAndMarginShowDash(): void
     {
-        $sheet = $this->buildSheet($this->summary(['roas' => null, 'profit_margin' => null]));
+        $sheet = $this->buildSheet($this->summary(['profit_margin' => null]));
 
-        $this->assertSame('–', $sheet->getCell('B7')->getValue());
-        $this->assertSame('–', $sheet->getCell('B8')->getValue());
+        // ไม่มีอัตรากำไร → การ์ดโชว์ขีด ไม่ใช่ 0
+        $this->assertSame('–', $sheet->getCell('G5')->getValue());
     }
 
     public function testPositiveYoyIsGreen(): void
     {
         $sheet = $this->buildSheet($this->summary());
 
-        $this->assertSame('เทียบ 2568 (ช่วงเดียวกัน)', $sheet->getCell('A10')->getValue());
+        $this->assertSame('เทียบ 2568 (ช่วงเดียวกัน)', $sheet->getCell('A7')->getValue());
         $this->assertSame(
             'กำไร ↑375.0% (+7,500.00) · ปีก่อน 2,000.00',
-            $sheet->getCell('B10')->getValue()
+            $sheet->getCell('A8')->getValue()
         );
-        $this->assertSame('FF107C41', $sheet->getStyle('B10')->getFont()->getColor()->getARGB());
+        $this->assertSame('FF107C41', $sheet->getStyle('A8')->getFont()->getColor()->getARGB());
     }
 
     public function testNegativeYoyIsRed(): void
@@ -120,28 +124,29 @@ final class XlsxReportServiceAnnualTest extends TestCase
 
         $this->assertSame(
             'กำไร ↓52.5% (-10,500.00) · ปีก่อน 20,000.00',
-            $sheet->getCell('B10')->getValue()
+            $sheet->getCell('A8')->getValue()
         );
-        $this->assertSame('FFC00000', $sheet->getStyle('B10')->getFont()->getColor()->getARGB());
+        $this->assertSame('FFC00000', $sheet->getStyle('A8')->getFont()->getColor()->getARGB());
     }
 
     public function testNullYoySaysNoPreviousYear(): void
     {
         $sheet = $this->buildSheet($this->summary(['yoy_profit_change_percent' => null]));
 
-        $this->assertSame('ไม่มีข้อมูลปีก่อน', $sheet->getCell('B10')->getValue());
+        $this->assertSame('ไม่มีข้อมูลปีก่อน', $sheet->getCell('A8')->getValue());
     }
 
     public function testBestWorstMonthAndCounts(): void
     {
         $sheet = $this->buildSheet($this->summary());
 
-        $this->assertSame('เดือนกำไรดีสุด', $sheet->getCell('A12')->getValue());
-        $this->assertSame('ม.ค. (7,000.00)', $sheet->getCell('B12')->getValue());
-        $this->assertSame('เดือนกำไรแย่สุด', $sheet->getCell('A13')->getValue());
-        $this->assertSame('ก.ค. (-2,500.00)', $sheet->getCell('B13')->getValue());
-        $this->assertSame('เดือนที่มีข้อมูล', $sheet->getCell('A14')->getValue());
-        $this->assertSame('4 เดือน · กำไร 3 / ขาดทุน 1', $sheet->getCell('B14')->getValue());
+        $this->assertSame('เดือนที่โดดเด่น', $sheet->getCell('A10')->getValue());
+        $this->assertSame('เดือนกำไรดีสุด', $sheet->getCell('A11')->getValue());
+        $this->assertSame('ม.ค. (7,000.00)', $sheet->getCell('C11')->getValue());
+        $this->assertSame('เดือนกำไรแย่สุด', $sheet->getCell('A12')->getValue());
+        $this->assertSame('ก.ค. (-2,500.00)', $sheet->getCell('C12')->getValue());
+        $this->assertSame('เดือนที่มีข้อมูล', $sheet->getCell('A13')->getValue());
+        $this->assertSame('4 เดือน · กำไร 3 / ขาดทุน 1', $sheet->getCell('C13')->getValue());
     }
 
     public function testMissingBestWorstShowDash(): void
@@ -154,9 +159,77 @@ final class XlsxReportServiceAnnualTest extends TestCase
             'loss_months' => 0,
         ]));
 
-        $this->assertSame('–', $sheet->getCell('B12')->getValue());
-        $this->assertSame('–', $sheet->getCell('B13')->getValue());
-        $this->assertSame('0 เดือน · กำไร 0 / ขาดทุน 0', $sheet->getCell('B14')->getValue());
+        $this->assertSame('–', $sheet->getCell('C11')->getValue());
+        $this->assertSame('–', $sheet->getCell('C12')->getValue());
+        $this->assertSame('0 เดือน · กำไร 0 / ขาดทุน 0', $sheet->getCell('C13')->getValue());
+    }
+
+    public function testCoverHeaderIsBrandedAndDated(): void
+    {
+        $service = new XlsxReportService();
+        $spreadsheet = $this->emptyDailySpreadsheet();
+        $service->buildAnnualSheet($spreadsheet, $this->summary(), 2026, 'ร้านคอร์ส', '2026-08-03');
+
+        $sheet = $spreadsheet->getSheetByName('รายปี');
+        $this->assertNotNull($sheet);
+
+        // แถบหัวเต็มความกว้าง พื้นน้ำเงินเข้ม ตัวอักษรขาว
+        $this->assertContains('A1:H1', array_keys($sheet->getMergeCells()));
+        $this->assertSame(20.0, $sheet->getStyle('A1')->getFont()->getSize());
+        $this->assertSame('FFFFFFFF', $sheet->getStyle('A1')->getFont()->getColor()->getARGB());
+        $this->assertSame('FF1F4E79', $sheet->getStyle('A1')->getFill()->getStartColor()->getARGB());
+        $this->assertSame(38.0, $sheet->getRowDimension(1)->getRowHeight());
+
+        // บรรทัดรอง: ชื่อร้าน + วันที่ออกรายงาน (seam ส่งเข้ามาได้)
+        $this->assertSame('ร้านคอร์ส · ออกรายงาน 2026-08-03', $sheet->getCell('A2')->getValue());
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testGeneratedDateFallsBackToToday(): void
+    {
+        $sheet = $this->buildSheet($this->summary());
+
+        $this->assertStringContainsString(date('Y-m-d'), (string)$sheet->getCell('A2')->getValue());
+    }
+
+    public function testKpiCardsHaveFillAndBorder(): void
+    {
+        $sheet = $this->buildSheet($this->summary());
+
+        foreach (['A', 'C', 'E', 'G'] as $column) {
+            $this->assertSame(
+                'FFF4F7FB',
+                $sheet->getStyle($column . '5')->getFill()->getStartColor()->getARGB(),
+                'การ์ด ' . $column . ' ต้องมีพื้นหลัง'
+            );
+            $this->assertSame(
+                Border::BORDER_THIN,
+                $sheet->getStyle($column . '5')->getBorders()->getTop()->getBorderStyle()
+            );
+            $this->assertSame(
+                'center',
+                $sheet->getStyle($column . '5')->getAlignment()->getHorizontal()
+            );
+        }
+    }
+
+    public function testSectionHeadersAreUnderlinedAndColored(): void
+    {
+        $sheet = $this->buildSheet($this->summary());
+
+        foreach ([7, 10, 15] as $row) {
+            $this->assertSame(
+                'FF1F4E79',
+                $sheet->getStyle('A' . $row)->getFont()->getColor()->getARGB(),
+                'หัวข้อบล็อกแถว ' . $row
+            );
+            $this->assertTrue($sheet->getStyle('A' . $row)->getFont()->getBold());
+            $this->assertSame(
+                Border::BORDER_THIN,
+                $sheet->getStyle('A' . $row)->getBorders()->getBottom()->getBorderStyle()
+            );
+        }
     }
 
     public function testAnnualSheetHasNoChart(): void
