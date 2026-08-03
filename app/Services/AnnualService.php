@@ -104,6 +104,12 @@ class AnnualService
         $bestMonth = null;
         $worstMonth = null;
 
+        // ซีรีส์สำหรับกราฟ — index ตรงกับ $months (เดือน 1..lastMonth) ทั้งหมด
+        $previousProfitSeries = [];
+        $cumulativeSeries = [];
+        $previousCumulativeSeries = [];
+        $cumulativeProfit = 0.0;
+
         $monthsWithData = 0;
 
         for ($month = 1; $month <= $lastMonth; $month++) {
@@ -122,6 +128,13 @@ class AnnualService
                 - (float)($previousMonthTotals['total_ad_cost'] ?? 0);
             $previousYearProfit += $previousMonthProfit;
 
+            $monthDaysCount = (int)($totals['days_count'] ?? 0);
+            $cumulativeProfit += $monthProfit;
+
+            $previousProfitSeries[] = $previousMonthProfit;
+            $cumulativeSeries[] = $cumulativeProfit;
+            $previousCumulativeSeries[] = $previousYearProfit;
+
             $monthRow = [
                 'month' => $month,
                 'month_key' => $monthKey,
@@ -131,7 +144,9 @@ class AnnualService
                 'roas' => $monthAdCost > 0 ? round($monthRevenue / $monthAdCost, 2) : null,
                 'profit_margin' => $monthRevenue > 0 ? round(($monthProfit / $monthRevenue) * 100, 1) : null,
                 // query คืน days_count มาอยู่แล้ว — กันเทียบเดือนที่กรอก 3 วันกับเดือนที่กรอก 30 วัน
-                'days_count' => (int)($totals['days_count'] ?? 0),
+                'days_count' => $monthDaysCount,
+                // ปรับฐานให้เทียบกันได้จริง — เดือนที่กรอกวันเดียวอาจแรงกว่าเดือนที่กรอกครบแต่ยอดรวมสูงกว่า
+                'profit_per_day' => $monthDaysCount > 0 ? round($monthProfit / $monthDaysCount, 2) : null,
                 'prev_year_profit' => $previousMonthProfit,
                 'yoy_change_percent' => $this->calculateChangePercent($monthProfit, $previousMonthProfit),
             ];
@@ -182,6 +197,10 @@ class AnnualService
                     'revenue' => array_values(array_map(static fn(array $row): float => (float)$row['total_revenue'], $months)),
                     'ad_cost' => array_values(array_map(static fn(array $row): float => (float)$row['total_ad_cost'], $months)),
                     'profit' => array_values(array_map(static fn(array $row): float => (float)$row['profit'], $months)),
+                    // กำไรปีก่อนเดือนเดียวกัน — index ตรงกับแกน x ปีนี้ (same-period ไม่เกิน lastMonth)
+                    'prev_profit' => $previousProfitSeries,
+                    'cumulative_profit' => $cumulativeSeries,
+                    'prev_cumulative_profit' => $previousCumulativeSeries,
                 ],
             ],
         ];

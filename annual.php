@@ -42,6 +42,7 @@ for ($month = 1; $month <= 12; $month++) {
         'roas' => null,
         'profit_margin' => null,
         'days_count' => 0,
+        'profit_per_day' => null,
         'prev_year_profit' => 0.0,
         'yoy_change_percent' => null,
     ];
@@ -68,6 +69,9 @@ $annualData = [
         'revenue' => array_fill(0, 12, 0.0),
         'ad_cost' => array_fill(0, 12, 0.0),
         'profit' => array_fill(0, 12, 0.0),
+        'prev_profit' => array_fill(0, 12, 0.0),
+        'cumulative_profit' => array_fill(0, 12, 0.0),
+        'prev_cumulative_profit' => array_fill(0, 12, 0.0),
     ],
 ];
 
@@ -128,6 +132,7 @@ if ($worstMonth !== null) {
 }
 
 $totalDaysCount = array_sum(array_map(static fn(array $row): int => (int)($row['days_count'] ?? 0), $months));
+$totalProfitPerDay = $totalDaysCount > 0 ? round($totalProfit / $totalDaysCount, 2) : null;
 
 // YoY เทียบช่วงเดียวกันของปีก่อน (service ตัดเดือนอนาคตให้แล้ว)
 $prevYear = (int)($summary['prev_year'] ?? ($selectedYear - 1));
@@ -169,6 +174,10 @@ $chartPayload = [
     'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['revenue'] ?? []))),
     'ad_cost' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['ad_cost'] ?? []))),
     'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['profit'] ?? []))),
+    'prev_profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['prev_profit'] ?? []))),
+    'cumulative_profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['cumulative_profit'] ?? []))),
+    'prev_cumulative_profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['prev_cumulative_profit'] ?? []))),
+    'prev_year_label' => (string)($prevYear + 543),
 ];
 
 $availableYears = [];
@@ -274,6 +283,20 @@ require __DIR__ . '/includes/header.php';
             </span>
         <?php endif; ?>
     </div>
+
+    <?php if (count($months) > 0): ?>
+        <div class="mt-2 border-t border-white/[0.06] pt-2 text-sm text-slate-400">
+            กำไรสะสม ณ <?= e($thaiMonths[count($months)] ?? '') ?>
+            <span class="font-bold <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></span>
+            <span class="text-slate-600">·</span>
+            ปีก่อนช่วงเดียวกัน <span class="font-medium text-slate-300"><?= e(formatMoney($prevYearProfit)) ?></span>
+            <?php if ($yoyPercent !== null): ?>
+                <span class="font-medium <?= e($yoyToneClass($yoyPercent)) ?>">
+                    (<?= e($yoyChange >= 0 ? 'นำอยู่ ' : 'ตามอยู่ ') ?><?= e(formatMoney(abs($yoyChange))) ?>)
+                </span>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 </section>
 
 <section class="section-card mt-6 p-4 sm:p-5">
@@ -289,6 +312,7 @@ require __DIR__ . '/includes/header.php';
                     <th class="px-3 py-2">ROAS</th>
                     <th class="px-3 py-2">อัตรากำไร</th>
                     <th class="px-3 py-2">วันที่กรอก</th>
+                    <th class="px-3 py-2">กำไร/วัน</th>
                     <th class="px-3 py-2">เทียบ <?= e((string)($prevYear + 543)) ?></th>
                 </tr>
             </thead>
@@ -301,6 +325,9 @@ require __DIR__ . '/includes/header.php';
                     $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                     $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                     $rowDaysCount = (int)($row['days_count'] ?? 0);
+                    $rowProfitPerDay = isset($row['profit_per_day']) && $row['profit_per_day'] !== null
+                        ? (float)$row['profit_per_day']
+                        : null;
                     $rowYoyPercent = isset($row['yoy_change_percent']) && $row['yoy_change_percent'] !== null
                         ? (float)$row['yoy_change_percent']
                         : null;
@@ -313,6 +340,9 @@ require __DIR__ . '/includes/header.php';
                         <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                         <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
                         <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : '—') ?></td>
+                        <td class="px-3 py-2 font-medium <?= $rowProfitPerDay === null ? 'text-slate-500' : ($rowProfitPerDay >= 0 ? 'text-green-400' : 'text-red-400') ?>">
+                            <?= e($rowProfitPerDay === null ? '—' : formatMoney($rowProfitPerDay)) ?>
+                        </td>
                         <td class="px-3 py-2 font-medium <?= e($yoyToneClass($rowYoyPercent)) ?>"><?= e($formatYoyPercent($rowYoyPercent)) ?></td>
                     </tr>
                 <?php endforeach; ?>
@@ -326,6 +356,9 @@ require __DIR__ . '/includes/header.php';
                     <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
                     <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
                     <td class="px-3 py-3 text-slate-300"><?= e($totalDaysCount > 0 ? $totalDaysCount . ' วัน' : '—') ?></td>
+                    <td class="px-3 py-3 <?= $totalProfitPerDay === null ? 'text-slate-500' : ($totalProfitPerDay >= 0 ? 'text-green-400' : 'text-red-400') ?>">
+                        <?= e($totalProfitPerDay === null ? '—' : formatMoney($totalProfitPerDay)) ?>
+                    </td>
                     <td class="px-3 py-3 <?= e($yoyToneClass($yoyPercent)) ?>"><?= e($formatYoyPercent($yoyPercent)) ?></td>
                 </tr>
             </tfoot>
@@ -336,11 +369,23 @@ require __DIR__ . '/includes/header.php';
 <section class="section-card mt-6 p-4 sm:p-5">
     <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
         <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (<?= e((string)count($months)) ?> เดือน)</h2>
-        <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
+        <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร · เส้นประ = กำไรปีก่อน</span>
     </div>
     <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
         <div style="min-width: 600px; height: 100%;">
             <canvas id="annual-bar-chart"></canvas>
+        </div>
+    </div>
+</section>
+
+<section class="section-card mt-6 p-4 sm:p-5">
+    <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+        <h2 class="text-base sm:text-lg font-semibold text-slate-100">กำไรสะสม ปีนี้ vs ปีก่อน</h2>
+        <span class="text-xs text-slate-400">ช่วงเดียวกัน · เส้นห่างกันมาก = ทิ้งห่าง/ตามหลัง</span>
+    </div>
+    <div class="h-52 sm:h-64 w-full overflow-x-auto">
+        <div style="min-width: 600px; height: 100%;">
+            <canvas id="annual-cumulative-chart"></canvas>
         </div>
     </div>
 </section>
@@ -372,6 +417,93 @@ require __DIR__ . '/includes/header.php';
                         label: 'กำไร',
                         data: chartPayload.profit,
                         backgroundColor: '#22c55e'
+                    },
+                    {
+                        // เส้นประกำไรปีก่อน — เทียบรูปทรงฤดูกาล ไม่ใช่แค่ตัวเลขรวม
+                        type: 'line',
+                        label: 'กำไรปีก่อน (' + chartPayload.prev_year_label + ')',
+                        data: chartPayload.prev_profit,
+                        borderColor: '#94a3b8',
+                        backgroundColor: '#94a3b8',
+                        borderDash: [6, 4],
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.25,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: '#94a3b8'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.06)'
+                        }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#94a3b8',
+                            callback: (value) => '฿' + Number(value).toLocaleString('th-TH')
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.06)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#cbd5e1'
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => context.dataset.label + ': ฿' + Number(context.raw || 0).toLocaleString('th-TH')
+                        }
+                    }
+                }
+            }
+        });
+
+        const cumulativeCanvas = document.getElementById('annual-cumulative-chart');
+
+        if (!cumulativeCanvas) {
+            return;
+        }
+
+        new Chart(cumulativeCanvas, {
+            type: 'line',
+            data: {
+                labels: chartPayload.labels,
+                datasets: [{
+                        label: 'กำไรสะสมปีนี้',
+                        data: chartPayload.cumulative_profit,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.12)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.25,
+                        fill: true
+                    },
+                    {
+                        label: 'กำไรสะสมปีก่อน (' + chartPayload.prev_year_label + ')',
+                        data: chartPayload.prev_cumulative_profit,
+                        borderColor: '#94a3b8',
+                        backgroundColor: '#94a3b8',
+                        borderDash: [6, 4],
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.25,
+                        fill: false
                     }
                 ]
             },
