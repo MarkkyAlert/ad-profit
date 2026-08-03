@@ -73,7 +73,7 @@ PHP ที่รองรับ: **≥ 8.1** (โค้ดใช้ `never` retu
 - **ปี (พ.ศ. + clamp):** controller (`annual.php:19-26`, `overview.php:31-38`, `api/annual-data.php:26-33`) แปลง พ.ศ. −543 (ช่วง 2400–2700) แล้ว clamp 2000–2100 (นอกช่วง → ปีปัจจุบัน) — **ตรรกะซ้ำ 3 ที่**; `AnnualService`/`OverviewAnnualService` `isValidYear` แค่ reject (2000–2100) **ไม่แปลง/ไม่ clamp**
 - **Rate-limit ของ profile:** อยู่ใน `api/profile.php:31-91` เป็น closure session-based (5 ครั้ง/60s → 429) **ไม่ได้อยู่ใน `ProfileService`** — ต่างจาก `AuthService` ที่ rate-limit อยู่ใน service (ระวังตอนแก้/เพิ่ม rate-limit อย่าถือว่าเป็น pattern เดียวกัน)
 - **Shop delete:** `api/shops.php:152-160` เรียก `ShopRepository->findByIdAndUserId` **ตรง** + ตัดชื่อร้าน 20 ตัวแรก (`mb_substr`) เทียบ `confirm_shop_name` เอง — เป็นจุดเดียวใน `api/` ที่ controller แตะ repo ตรงเพื่อ logic; typed-confirm rule อยู่ที่ controller **ไม่ใช่ `ShopService`**
-- **สูตร profit/ROAS/margin ซ้ำใน view:** `RecordService->getRecentRecords()` คืน row ดิบ → `add-record.php:138-141` คำนวณ profit/ROAS เองในเพจ; `AnnualService` summary **ไม่มี** `profit_margin` → `annual.php:80` คำนวณ margin เอง (`OverviewAnnualService` มีให้แล้ว) ⚠️ **แก้สูตร profit/ROAS/margin ต้องตามไปอัปเดต view เหล่านี้ด้วย ไม่ใช่แค่ service**
+- **สูตร profit/ROAS ซ้ำใน view:** `RecordService->getRecentRecords()` คืน row ดิบ → `add-record.php:138-141` คำนวณ profit/ROAS เองในเพจ ⚠️ **แก้สูตร profit/ROAS ต้องตามไปอัปเดต view นี้ด้วย ไม่ใช่แค่ service** (`AnnualService` summary มี `profit_margin` ให้แล้วเหมือน `OverviewAnnualService` — `annual.php` อ่านจาก service ไม่คำนวณเองแล้ว)
 
 ---
 

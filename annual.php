@@ -59,6 +59,10 @@ $annualData = [
         'total_ad_cost' => 0.0,
         'profit' => 0.0,
         'roas' => null,
+        'profit_margin' => null,
+        'months_with_data' => 0,
+        'profit_months' => 0,
+        'loss_months' => 0,
         'best_month' => $zeroMonths[0],
         'worst_month' => $zeroMonths[0],
         'prev_year' => $selectedYear - 1,
@@ -92,7 +96,14 @@ $totalRevenue = (float)($summary['total_revenue'] ?? 0);
 $totalAdCost = (float)($summary['total_ad_cost'] ?? 0);
 $totalProfit = (float)($summary['profit'] ?? ($totalRevenue - $totalAdCost));
 $totalRoas = isset($summary['roas']) && $summary['roas'] !== null ? (float)$summary['roas'] : null;
-$totalProfitMargin = $totalRevenue > 0 ? round(($totalProfit / $totalRevenue) * 100, 1) : null;
+$totalProfitMargin = isset($summary['profit_margin']) && $summary['profit_margin'] !== null
+    ? (float)$summary['profit_margin']
+    : null;
+
+$monthsWithData = (int)($summary['months_with_data'] ?? 0);
+$profitMonths = (int)($summary['profit_months'] ?? 0);
+$lossMonths = (int)($summary['loss_months'] ?? 0);
+$breakEvenMonths = max(0, $monthsWithData - $profitMonths - $lossMonths);
 $hasAnnualData = abs($totalRevenue) > 0.00001 || abs($totalAdCost) > 0.00001;
 
 $bestMonth = is_array($summary['best_month'] ?? null) ? (array)$summary['best_month'] : null;
@@ -302,6 +313,20 @@ require __DIR__ . '/includes/header.php';
                 <span class="font-medium <?= e($yoyToneClass($yoyPercent)) ?>">
                     (<?= e($yoyChange >= 0 ? 'นำอยู่ ' : 'ตามอยู่ ') ?><?= e(formatMoney(abs($yoyChange))) ?>)
                 </span>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($monthsWithData > 0): ?>
+        <div class="mt-2 border-t border-white/[0.06] pt-2 text-sm text-slate-400">
+            <span class="font-medium text-slate-300"><?= e((string)$monthsWithData) ?></span> เดือนมีข้อมูล
+            <span class="text-slate-600">·</span>
+            กำไร <span class="font-medium text-green-400"><?= e((string)$profitMonths) ?></span>
+            <span class="text-slate-600">/</span>
+            ขาดทุน <span class="font-medium <?= $lossMonths > 0 ? 'text-red-400' : 'text-slate-300' ?>"><?= e((string)$lossMonths) ?></span>
+            <?php if ($breakEvenMonths > 0): ?>
+                <span class="text-slate-600">·</span>
+                เท่าทุน <span class="font-medium text-slate-300"><?= e((string)$breakEvenMonths) ?></span>
             <?php endif; ?>
         </div>
     <?php endif; ?>

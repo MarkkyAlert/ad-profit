@@ -139,6 +139,8 @@ class AnnualService
         $cumulativeProfit = 0.0;
 
         $monthsWithData = 0;
+        $profitMonths = 0;
+        $lossMonths = 0;
 
         for ($month = 1; $month <= $lastMonth; $month++) {
             $monthKey = sprintf('%04d-%02d', $year, $month);
@@ -181,8 +183,16 @@ class AnnualService
 
             // จัดอันดับด้วย "กำไร" และเลือกเฉพาะเดือนที่มีข้อมูลจริง
             // (เดือนที่ยังไม่ได้กรอกมีกำไร 0 — ไม่ควรถูกยกเป็นเดือนแย่สุด)
+            // $hasRecord ⟺ days_count > 0 (query GROUP BY คืนแถวเฉพาะเดือนที่มี record → COUNT(*) ≥ 1)
             if ($hasRecord) {
                 $monthsWithData++;
+
+                // เดือนเท่าทุนพอดี (profit == 0) ไม่นับเป็นทั้งกำไรและขาดทุน
+                if ($monthProfit > 0) {
+                    $profitMonths++;
+                } elseif ($monthProfit < 0) {
+                    $lossMonths++;
+                }
 
                 if ($bestMonth === null || $monthProfit > (float)$bestMonth['profit']) {
                     $bestMonth = $monthRow;
@@ -239,6 +249,11 @@ class AnnualService
                     'total_ad_cost' => $totalAdCost,
                     'profit' => $profit,
                     'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
+                    'profit_margin' => $totalRevenue > 0 ? round(($profit / $totalRevenue) * 100, 1) : null,
+                    // นับเฉพาะเดือนที่กรอกแล้ว — เดือนที่ยังไม่กรอกไม่ใช่ "เดือนเท่าทุน"
+                    'months_with_data' => $monthsWithData,
+                    'profit_months' => $profitMonths,
+                    'loss_months' => $lossMonths,
                     'best_month' => $bestMonth,
                     'worst_month' => $worstMonth,
                     // YoY เทียบ "ช่วงเดียวกัน" — ปีนี้ถึงเดือน lastMonth เทียบปีก่อนเดือน 1..lastMonth
