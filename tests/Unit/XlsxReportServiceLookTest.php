@@ -7,6 +7,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use XlsxReportService;
 
 /**
@@ -213,6 +214,94 @@ final class XlsxReportServiceLookTest extends TestCase
             Border::BORDER_THIN,
             $season->getStyle('D6')->getBorders()->getLeft()->getBorderStyle()
         );
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testEverySheetIsPrintReady(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+
+        foreach ($spreadsheet->getAllSheets() as $sheet) {
+            $pageSetup = $sheet->getPageSetup();
+            $this->assertSame(
+                PageSetup::ORIENTATION_LANDSCAPE,
+                $pageSetup->getOrientation(),
+                'ชีต ' . $sheet->getTitle()
+            );
+            // fit to width 1 หน้า · ยาวกี่หน้าก็ได้ → ตารางไม่ขาดกลาง
+            $this->assertSame(1, $pageSetup->getFitToWidth());
+            $this->assertSame(0, $pageSetup->getFitToHeight());
+            $this->assertStringContainsString('&P / &N', $sheet->getHeaderFooter()->getOddFooter());
+        }
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testTableSheetsRepeatHeaderRowWhenPrinted(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+
+        $expected = [
+            'รายวัน' => 1,
+            'รายเดือน' => 1,
+            'เป้าหมาย' => 3,
+            'ฤดูกาล' => 4,
+            'เทียบร้าน' => 3,
+        ];
+
+        foreach ($expected as $title => $headerRow) {
+            $sheet = $spreadsheet->getSheetByName($title);
+            $this->assertNotNull($sheet);
+            $this->assertSame(
+                [$headerRow, $headerRow],
+                $sheet->getPageSetup()->getRowsToRepeatAtTop(),
+                'ชีต ' . $title . ' ต้องซ้ำแถวหัวตอนพิมพ์'
+            );
+        }
+
+        // ชีตรายปีไม่ใช่ตาราง — ไม่ต้องซ้ำหัว
+        $annual = $spreadsheet->getSheetByName('รายปี');
+        $this->assertNotNull($annual);
+        $this->assertSame([0, 0], $annual->getPageSetup()->getRowsToRepeatAtTop());
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testChartSeriesUseBrandColors(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+        $monthly = $spreadsheet->getSheetByName('รายเดือน');
+        $this->assertNotNull($monthly);
+
+        $profitChart = $monthly->getChartByIndex(0);
+        $this->assertNotNull($profitChart);
+        $groups = $profitChart->getPlotArea()->getPlotGroup();
+
+        // แท่งกำไร = เขียว (ตรงกับสัญญาณสีในตาราง) · เส้นปีก่อน = เทา
+        $this->assertSame('2E9E5B', $groups[0]->getPlotValues()[0]->getFillColor());
+        $this->assertSame('9E9E9E', $groups[1]->getPlotValues()[0]->getFillColor());
+
+        $cumulativeChart = $monthly->getChartByIndex(1);
+        $this->assertNotNull($cumulativeChart);
+        $values = $cumulativeChart->getPlotArea()->getPlotGroup()[0]->getPlotValues();
+        $this->assertSame('2E75B6', $values[0]->getFillColor());
+        $this->assertSame('9E9E9E', $values[1]->getFillColor());
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testChartsHaveNoRoundedBorder(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+        $monthly = $spreadsheet->getSheetByName('รายเดือน');
+        $this->assertNotNull($monthly);
+
+        foreach ([0, 1] as $index) {
+            $chart = $monthly->getChartByIndex($index);
+            $this->assertNotNull($chart);
+            $this->assertFalse($chart->getRoundedCorners());
+        }
 
         $spreadsheet->disconnectWorksheets();
     }

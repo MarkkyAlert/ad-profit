@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Conditional;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
@@ -53,6 +54,11 @@ class XlsxReportService
         'เทียบร้าน' => 'FF7030A0',
     ];
 
+    /** สีกราฟให้ตรงกับสัญญาณสีในตาราง: กำไร = เขียว · ปีก่อน = เทา · สะสม = น้ำเงิน */
+    private const CHART_PROFIT_ARGB = '2E9E5B';
+    private const CHART_PREV_ARGB = '9E9E9E';
+    private const CHART_CUMULATIVE_ARGB = '2E75B6';
+
     private const PERCENT_FORMAT = '0.0"%"';
     private const MONEY_FORMAT = '#,##0.00';
     private const RATIO_FORMAT = '0.00';
@@ -83,6 +89,7 @@ class XlsxReportService
 
         // ตรึงแถวหัว — เลื่อนดูทั้งปีแล้วยังเห็นชื่อคอลัมน์
         $sheet->freezePane('A2');
+        $this->repeatHeaderOnPrint($sheet, 1);
 
         $rowNumber = 2;
         foreach ($rows as $row) {
@@ -189,6 +196,7 @@ class XlsxReportService
         $headerRange = 'A1:K1';
         $this->styleHeaderRow($sheet, $headerRange);
         $sheet->freezePane('A2');
+        $this->repeatHeaderOnPrint($sheet, 1);
 
         $rowNumber = 2;
         foreach ($months as $month) {
@@ -488,6 +496,7 @@ class XlsxReportService
         );
         $this->styleHeaderRow($sheet, 'A' . $headerRow . ':I' . $headerRow);
         $sheet->freezePane('A' . ($headerRow + 1));
+        $this->repeatHeaderOnPrint($sheet, $headerRow);
 
         $rowNumber = $headerRow + 1;
         foreach ($rows as $row) {
@@ -631,6 +640,7 @@ class XlsxReportService
         $sheet->fromArray($header, null, 'A' . $headerRow);
         $this->styleHeaderRow($sheet, 'A' . $headerRow . ':M' . $headerRow);
         $sheet->freezePane('B' . ($headerRow + 1));
+        $this->repeatHeaderOnPrint($sheet, $headerRow);
 
         $rowNumber = $headerRow + 1;
         foreach ($years as $gridYear) {
@@ -728,6 +738,22 @@ class XlsxReportService
     {
         $sheet->setShowGridlines(false);
         $sheet->getTabColor()->setARGB($tabColorArgb);
+
+        // สั่งพิมพ์แล้วต้องอ่านได้ ไม่ใช่ตารางขาดกลางหน้า
+        $sheet->getPageSetup()
+            ->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)
+            ->setPaperSize(PageSetup::PAPERSIZE_A4)
+            ->setFitToWidth(1)
+            ->setFitToHeight(0);
+
+        $sheet->getPageMargins()->setTop(0.5)->setBottom(0.5)->setLeft(0.4)->setRight(0.4);
+        $sheet->getHeaderFooter()->setOddFooter('&L&"Tahoma"&8&A&R&"Tahoma"&8หน้า &P / &N');
+    }
+
+    /** ซ้ำแถวหัวตารางทุกหน้าเวลาพิมพ์ — ตารางยาว ๆ จะได้ไม่ต้องเดาว่าคอลัมน์ไหนคืออะไร */
+    private function repeatHeaderOnPrint(Worksheet $sheet, int $headerRowNumber): void
+    {
+        $sheet->getPageSetup()->setRowsToRepeatAtTopByStartAndEnd($headerRowNumber, $headerRowNumber);
     }
 
     /**
@@ -797,6 +823,7 @@ class XlsxReportService
         $headerRange = 'A' . $headerRow . ':H' . $headerRow;
         $this->styleHeaderRow($sheet, $headerRange);
         $sheet->freezePane('A' . ($headerRow + 1));
+        $this->repeatHeaderOnPrint($sheet, $headerRow);
 
         $rowNumber = $headerRow + 1;
         foreach ($shops as $shop) {
@@ -1024,12 +1051,12 @@ class XlsxReportService
             [0],
             [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, $quotedTitle . '!$D$1', null, 1)],
             $categories,
-            [new DataSeriesValues(
+            [(new DataSeriesValues(
                 DataSeriesValues::DATASERIES_TYPE_NUMBER,
                 $quotedTitle . '!$D$2:$D$' . $lastRow,
                 null,
                 $pointCount
-            )]
+            ))->setFillColor(self::CHART_PROFIT_ARGB)]
         );
         // แท่งตั้ง — กำไรติดลบจะยื่นลงล่างเองตามค่าจริง
         $bars->setPlotDirection(DataSeries::DIRECTION_COL);
@@ -1041,12 +1068,12 @@ class XlsxReportService
             [0],
             [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, $quotedTitle . '!$I$1', null, 1)],
             $categories,
-            [new DataSeriesValues(
+            [(new DataSeriesValues(
                 DataSeriesValues::DATASERIES_TYPE_NUMBER,
                 $quotedTitle . '!$I$2:$I$' . $lastRow,
                 null,
                 $pointCount
-            )]
+            ))->setFillColor(self::CHART_PREV_ARGB)->setLineWidth(20000)]
         );
 
         $chart = new Chart(
@@ -1055,6 +1082,9 @@ class XlsxReportService
             null,
             new PlotArea(null, [$bars, $prevLine])
         );
+        // ไม่มีกรอบ/มุมมน — ให้กลืนกับพื้นรายงาน
+        $chart->setRoundedCorners(false);
+        $chart->getBorderLines()->setLineColorProperties('FFFFFF');
         // ต้องพ้นคอลัมน์ K (สะสมปีก่อน) ไม่งั้นทับข้อมูล
         $chart->setTopLeftPosition('M2');
         $chart->setBottomRightPosition('U20');
@@ -1089,18 +1119,18 @@ class XlsxReportService
             ],
             $categories,
             [
-                new DataSeriesValues(
+                (new DataSeriesValues(
                     DataSeriesValues::DATASERIES_TYPE_NUMBER,
                     $quotedTitle . '!$J$2:$J$' . $lastRow,
                     null,
                     $pointCount
-                ),
-                new DataSeriesValues(
+                ))->setFillColor(self::CHART_CUMULATIVE_ARGB)->setLineWidth(24000),
+                (new DataSeriesValues(
                     DataSeriesValues::DATASERIES_TYPE_NUMBER,
                     $quotedTitle . '!$K$2:$K$' . $lastRow,
                     null,
                     $pointCount
-                ),
+                ))->setFillColor(self::CHART_PREV_ARGB)->setLineWidth(20000),
             ]
         );
 
@@ -1110,6 +1140,9 @@ class XlsxReportService
             null,
             new PlotArea(null, [$series])
         );
+        // ไม่มีกรอบ/มุมมน — ให้กลืนกับพื้นรายงาน
+        $chart->setRoundedCorners(false);
+        $chart->getBorderLines()->setLineColorProperties('FFFFFF');
         $chart->setTopLeftPosition('M22');
         $chart->setBottomRightPosition('U40');
 
