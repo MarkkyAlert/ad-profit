@@ -559,6 +559,57 @@ require __DIR__ . '/includes/header.php';
                 );
             });
         }
+
+        // ── ไม่ส่งแถวที่ "เติมวันที่ให้ล่วงหน้า แต่ผู้ใช้ยังไม่ได้กรอก" ────────
+        // ปุ่มเติมทั้งเดือน/เติมวันที่ขาด ใส่ record_date ให้ทุกแถว ทำให้แถวนั้นไม่ "ว่างสนิท"
+        // ฝั่ง server จึงมองว่ากรอกไม่ครบแล้ว reject ทั้งชุด → ตัดออกตั้งแต่ฝั่ง client
+        // เกณฑ์: มี record_date แต่ revenue/ad_cost/note ว่างทั้งหมด = ยังไม่ได้แตะ
+        // (แถวที่แตะแล้วแม้กรอกไม่ครบ ยังส่งไปให้ server validate ตามกฎเดิม)
+        const bulkForm = tbody.closest('form');
+
+        if (bulkForm) {
+            bulkForm.addEventListener('submit', (event) => {
+                const untouchedRows = [];
+                let touchedRowCount = 0;
+
+                getRows().forEach((row) => {
+                    const dateInput = row.querySelector('input[name="record_date[]"]');
+                    const hasDate = dateInput !== null && dateInput.value.trim() !== '';
+                    const hasOtherValue = ['revenue[]', 'ad_cost[]', 'note[]'].some((name) => {
+                        const input = row.querySelector('input[name="' + name + '"]');
+                        return input !== null && input.value.trim() !== '';
+                    });
+
+                    if (hasOtherValue) {
+                        touchedRowCount++;
+                        return;
+                    }
+
+                    if (hasDate) {
+                        untouchedRows.push(row);
+                    }
+                    // แถวว่างสนิท → ปล่อยไป server ข้ามเองตามเดิม
+                });
+
+                if (touchedRowCount === 0) {
+                    // มีแต่แถววันที่ล่วงหน้า → ถ้าตัดออกจะเหลือ 0 แถว ไม่ต้องส่งฟอร์มเปล่า
+                    if (untouchedRows.length > 0) {
+                        event.preventDefault();
+                        showBulkNotice('ยังไม่ได้กรอกข้อมูลวันไหนเลย');
+                    }
+
+                    // ตารางว่างสนิท → ปล่อยให้ server ตอบเหมือนเดิม
+                    return;
+                }
+
+                // disable ทั้งแถว (ครบทุกคอลัมน์) เพื่อให้ index ของ name[] ยังตรงกัน
+                untouchedRows.forEach((row) => {
+                    row.querySelectorAll('input').forEach((input) => {
+                        input.disabled = true;
+                    });
+                });
+            });
+        }
     })();
 </script>
 
