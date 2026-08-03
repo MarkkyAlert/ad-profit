@@ -85,6 +85,29 @@ class OverviewAnnualService
             ];
         }
 
+        // ปีก่อน — ขอเฉพาะเดือน 1..lastMonth เพื่อให้เทียบ "ช่วงเดียวกัน"
+        // (ปีนี้ถึงแค่ ส.ค. ก็ต้องเทียบ ม.ค.–ส.ค. ของปีก่อน ไม่ใช่ทั้ง 12 เดือน)
+        $previousYearProfit = null;
+        if ($lastMonth > 0) {
+            $previousYear = $year - 1;
+
+            try {
+                $previousTotals = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange(
+                    $shopIds,
+                    sprintf('%04d-01', $previousYear),
+                    sprintf('%04d-%02d', $previousYear, $lastMonth)
+                );
+            } catch (Throwable $exception) {
+                error_log('[overview-annual] buildYearlyOverview previous year failed: ' . $exception->getMessage());
+                $previousTotals = [];
+            }
+
+            $previousYearProfit = 0.0;
+            foreach ($previousTotals as $row) {
+                $previousYearProfit += (float)($row['total_revenue'] ?? 0) - (float)($row['total_ad_cost'] ?? 0);
+            }
+        }
+
         $monthTotalsByKey = [];
         for ($month = 1; $month <= $lastMonth; $month++) {
             $monthKey = sprintf('%04d-%02d', $year, $month);
@@ -229,6 +252,13 @@ class OverviewAnnualService
                     'profit_margin' => $totalRevenue > 0 ? round(($profit / $totalRevenue) * 100, 1) : null,
                     'best_month' => $bestMonth,
                     'worst_month' => $worstMonth,
+                    // YoY รวมทุกร้าน เทียบ "ช่วงเดียวกัน" ของปีก่อน (1..lastMonth)
+                    'prev_year' => $year - 1,
+                    'prev_year_profit' => $previousYearProfit,
+                    'yoy_profit_change' => $previousYearProfit !== null ? $profit - $previousYearProfit : null,
+                    'yoy_profit_change_percent' => $previousYearProfit !== null
+                        ? $this->calculateChangePercent($profit, $previousYearProfit)
+                        : null,
                 ],
                 'chart' => [
                     'months' => array_values(array_map(static fn(array $row): string => (string)($row['month_key'] ?? ''), $months)),
@@ -239,6 +269,20 @@ class OverviewAnnualService
                 'shops' => $shopsRows,
             ],
         ];
+    }
+
+    /**
+     * เปอร์เซ็นต์การเปลี่ยนแปลงเทียบฐานปีก่อน
+     * ฐาน 0 (ไม่มีข้อมูลปีก่อน/เท่าทุนพอดี) → null เพราะหารไม่ได้
+     * ฐานติดลบ → หารด้วย abs เพื่อให้เครื่องหมายสื่อทิศทางจริง (ขาดทุนน้อยลง = บวก)
+     */
+    private function calculateChangePercent(float $current, float $previous): ?float
+    {
+        if (abs($previous) < 0.00001) {
+            return null;
+        }
+
+        return round((($current - $previous) / abs($previous)) * 100, 1);
     }
 
     /**

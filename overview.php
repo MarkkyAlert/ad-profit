@@ -212,6 +212,35 @@ if ($view === 'day') {
     $yearlyBestMonth = is_array($yearlySummary['best_month'] ?? null) ? (array)$yearlySummary['best_month'] : null;
     $yearlyWorstMonth = is_array($yearlySummary['worst_month'] ?? null) ? (array)$yearlySummary['worst_month'] : null;
 
+    // YoY รวมทุกร้าน — service เทียบช่วงเดียวกันของปีก่อนให้แล้ว
+    $yearlyPrevYear = (int)($yearlySummary['prev_year'] ?? ($selectedYear - 1));
+    $yearlyPrevProfit = isset($yearlySummary['prev_year_profit']) && $yearlySummary['prev_year_profit'] !== null
+        ? (float)$yearlySummary['prev_year_profit']
+        : null;
+    $yearlyYoyChange = isset($yearlySummary['yoy_profit_change']) && $yearlySummary['yoy_profit_change'] !== null
+        ? (float)$yearlySummary['yoy_profit_change']
+        : null;
+    $yearlyYoyPercent = isset($yearlySummary['yoy_profit_change_percent']) && $yearlySummary['yoy_profit_change_percent'] !== null
+        ? (float)$yearlySummary['yoy_profit_change_percent']
+        : null;
+
+    $yearlyYoyText = static function (?float $percent): string {
+        if ($percent === null) {
+            return '—';
+        }
+
+        $arrow = $percent > 0 ? '↑' : ($percent < 0 ? '↓' : '');
+        return $arrow . number_format(abs($percent), 1) . '%';
+    };
+
+    $yearlyYoyTone = static function (?float $percent): string {
+        if ($percent === null || abs($percent) < 0.00001) {
+            return 'text-slate-400';
+        }
+
+        return $percent > 0 ? 'text-green-400' : 'text-red-400';
+    };
+
     $chartRaw = (array)($yearlyData['chart'] ?? []);
     $chartLabels = array_map(
         static function (string $monthKey) use ($thaiMonths): string {
@@ -651,6 +680,32 @@ require __DIR__ . '/includes/header.php';
                     <p class="mt-2 text-lg sm:text-xl font-bold text-slate-100"><?= e(formatPercent($yearProfitMargin)) ?></p>
                 </article>
             </section>
+
+            <?php if ($yearlyPrevProfit !== null): ?>
+                <section class="section-card mt-4 px-4 py-3 sm:px-5">
+                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">
+                            เทียบ <?= e((string)($yearlyPrevYear + 543)) ?>
+                            <?php if (count($yearlyMonths) > 0 && count($yearlyMonths) < 12): ?>
+                                (ม.ค.–<?= e($thaiMonths[count($yearlyMonths)] ?? '') ?>)
+                            <?php endif; ?>
+                        </span>
+                        <?php if ($yearlyYoyPercent === null): ?>
+                            <span class="text-base font-bold text-slate-400">ไม่มีข้อมูลปีก่อน</span>
+                        <?php else: ?>
+                            <span class="text-base font-bold <?= e($yearlyYoyTone($yearlyYoyPercent)) ?>">
+                                กำไรรวม <?= e($yearlyYoyText($yearlyYoyPercent)) ?>
+                            </span>
+                            <span class="text-sm <?= e($yearlyYoyTone($yearlyYoyPercent)) ?>">
+                                (<?= e((($yearlyYoyChange ?? 0) >= 0 ? '+' : '-') . formatMoney(abs($yearlyYoyChange ?? 0))) ?>)
+                            </span>
+                            <span class="text-xs text-slate-500">
+                                ปีก่อน <?= e(formatMoney($yearlyPrevProfit)) ?>
+                            </span>
+                        <?php endif; ?>
+                    </div>
+                </section>
+            <?php endif; ?>
 
             <?php if ($yearlyBestMonth !== null || $yearlyWorstMonth !== null): ?>
                 <?php
