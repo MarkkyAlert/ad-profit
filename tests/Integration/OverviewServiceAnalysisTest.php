@@ -85,6 +85,57 @@ final class OverviewServiceAnalysisTest extends IntegrationTestCase
         $this->assertSame(0.0, $byName['ร้านเก่า']['profit_change_percent']);   // เท่าเดิม
     }
 
+    public function testPerShopDayCountsAndProfitTrendFromRealData(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        // มิ.ย.: A กรอก 3 วัน · B กรอก 1 วัน
+        $this->createRecord($shopA, '2026-06-01', 1000.0, 200.0);
+        $this->createRecord($shopA, '2026-06-02', 1000.0, 200.0);
+        $this->createRecord($shopA, '2026-06-03', 1000.0, 200.0);
+        $this->createRecord($shopB, '2026-06-01', 5000.0, 4000.0);
+
+        // พ.ค. (อยู่ในช่วงเทรนด์ 6 เดือน): A รายได้น้อยกว่าแต่กำไรดีกว่า
+        $this->createRecord($shopA, '2026-05-10', 800.0, 100.0);
+
+        $data = $this->makeService()->buildOverview($userId, '2026-06')['data'];
+
+        $byName = [];
+        foreach ($data['comparison']['rows'] as $row) {
+            $byName[$row['shop_name']] = $row;
+        }
+
+        // days_count ต่อร้าน — เห็นชัดว่า B กรอกน้อยกว่า
+        $this->assertSame(3, $byName['ร้าน A']['days_count']);
+        $this->assertSame(1, $byName['ร้าน B']['days_count']);
+
+        // เทรนด์กำไร: A พ.ค. = 700 · มิ.ย. = 2400 · B มิ.ย. = 1000
+        $seriesByName = [];
+        foreach ($data['charts']['trend']['series'] as $series) {
+            $seriesByName[$series['shop_name']] = $series;
+        }
+
+        $months = $data['charts']['trend']['months'];
+        $mayIndex = array_search('2026-05', $months, true);
+        $juneIndex = array_search('2026-06', $months, true);
+
+        $this->assertSame(700.0, $seriesByName['ร้าน A']['profit'][$mayIndex]);
+        $this->assertSame(2400.0, $seriesByName['ร้าน A']['profit'][$juneIndex]);
+        $this->assertSame(1000.0, $seriesByName['ร้าน B']['profit'][$juneIndex]);
+
+        // B รายได้สูงกว่า A ในเดือน มิ.ย. แต่กำไรน้อยกว่า
+        $this->assertGreaterThan(
+            $seriesByName['ร้าน A']['revenue'][$juneIndex],
+            $seriesByName['ร้าน B']['revenue'][$juneIndex]
+        );
+        $this->assertLessThan(
+            $seriesByName['ร้าน A']['profit'][$juneIndex],
+            $seriesByName['ร้าน B']['profit'][$juneIndex]
+        );
+    }
+
     public function testUsersAreIsolated(): void
     {
         $ownerId = $this->createUser('owner@example.com');

@@ -114,6 +114,9 @@ class OverviewService
                 'profit' => $profit,
                 'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
                 'profit_margin' => $totalRevenue > 0 ? round(($profit / $totalRevenue) * 100, 1) : null,
+                // จำนวนวันที่มีข้อมูลจริง — กันตีความผิดเวลาแต่ละร้านกรอกไม่เท่ากัน
+                // (query คืน days_count มาให้อยู่แล้ว)
+                'days_count' => (int)($totals['days_count'] ?? 0),
             ];
         }
 
@@ -291,14 +294,21 @@ class OverviewService
             $rowByMonth = $rowByShopIdAndMonth[$shopId] ?? [];
 
             $revenues = [];
+            $profits = [];
             foreach ($months as $month) {
-                $revenues[] = (float)($rowByMonth[$month]['total_revenue'] ?? 0);
+                $monthRevenue = (float)($rowByMonth[$month]['total_revenue'] ?? 0);
+                $monthAdCost = (float)($rowByMonth[$month]['total_ad_cost'] ?? 0);
+
+                $revenues[] = $monthRevenue;
+                // query คืน total_ad_cost มาอยู่แล้ว → คิดกำไรได้โดยไม่ต้องยิง query เพิ่ม
+                $profits[] = $monthRevenue - $monthAdCost;
             }
 
             $series[] = [
                 'shop_id' => $shopId,
                 'shop_name' => $shopName,
-                'revenue' => $revenues,
+                'revenue' => $revenues,   // คงไว้เผื่อทำ toggle ทีหลัง
+                'profit' => $profits,
             ];
         }
 

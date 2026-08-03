@@ -280,6 +280,7 @@ if ($view === 'day') {
                     'shop_id' => (int)($row['shop_id'] ?? 0),
                     'shop_name' => (string)($row['shop_name'] ?? 'ร้านค้า'),
                     'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($row['revenue'] ?? []))),
+                    'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($row['profit'] ?? []))),
                 ];
             },
             $trendSeriesRaw
@@ -839,6 +840,7 @@ require __DIR__ . '/includes/header.php';
                             <th class="px-3 py-1.5">เทียบเดือนก่อน</th>
                             <th class="px-3 py-1.5">ROAS</th>
                             <th class="px-3 py-1.5">อัตรากำไร</th>
+                            <th class="px-3 py-1.5">วันที่กรอก</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -877,6 +879,7 @@ require __DIR__ . '/includes/header.php';
                                 </td>
                                 <td class="px-3 py-1.5 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                 <td class="px-3 py-1.5 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                                <td class="px-3 py-1.5 text-xs text-slate-500"><?= e((string)(int)($row['days_count'] ?? 0)) ?> วัน</td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -897,6 +900,7 @@ require __DIR__ . '/includes/header.php';
                             <td class="px-3 py-2 text-slate-500">—</td>
                             <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
                             <td class="px-3 py-2 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
+                            <td class="px-3 py-2 text-slate-500">—</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -917,7 +921,7 @@ require __DIR__ . '/includes/header.php';
             <section class="section-card mt-6 p-5">
                 <div class="mb-3 flex items-center justify-between gap-2">
                     <h2 class="text-lg font-semibold text-slate-100">กราฟเส้นแนวโน้มทุกร้าน (6 เดือนย้อนหลัง)</h2>
-                    <span class="text-xs text-slate-400">เส้นแต่ละร้าน = ยอดขายรายเดือน</span>
+                    <span class="text-xs text-slate-400">เส้นแต่ละร้าน = กำไรรายเดือน</span>
                 </div>
                 <div class="h-80">
                     <canvas id="overview-trend-chart"></canvas>
@@ -1002,7 +1006,8 @@ require __DIR__ . '/includes/header.php';
 
                             return {
                                 label: series.shop_name || 'ร้านค้า',
-                                data: series.revenue || [],
+                                // plot กำไร ให้สอดคล้องกับทั้งแอปที่วัดด้วยกำไร (ค่าติดลบ plot ได้)
+                                data: series.profit || [],
                                 borderColor: color,
                                 backgroundColor: color,
                                 tension: 0.3,
