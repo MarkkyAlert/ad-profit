@@ -131,7 +131,7 @@ final class XlsxReportServiceLookTest extends TestCase
         $spreadsheet = $this->fullWorkbook();
 
         $this->assertSame('Tahoma', $spreadsheet->getDefaultStyle()->getFont()->getName());
-        $this->assertEqualsWithDelta(10.0, $spreadsheet->getDefaultStyle()->getFont()->getSize(), 0.01);
+        $this->assertEqualsWithDelta(11.0, $spreadsheet->getDefaultStyle()->getFont()->getSize(), 0.01);
 
         $spreadsheet->disconnectWorksheets();
     }
@@ -142,13 +142,13 @@ final class XlsxReportServiceLookTest extends TestCase
 
         $daily = $spreadsheet->getSheetByName('รายวัน');
         $this->assertNotNull($daily);
-        $this->assertSame(22.0, $daily->getRowDimension(1)->getRowHeight());
+        $this->assertSame(24.0, $daily->getRowDimension(1)->getRowHeight());
         $this->assertSame('center', $daily->getStyle('A1')->getAlignment()->getVertical());
 
         // ชีตที่หัวตารางไม่ได้อยู่แถว 1 ก็ต้องสูงเหมือนกัน
         $comparison = $spreadsheet->getSheetByName('เทียบร้าน');
         $this->assertNotNull($comparison);
-        $this->assertSame(22.0, $comparison->getRowDimension(3)->getRowHeight());
+        $this->assertSame(24.0, $comparison->getRowDimension(3)->getRowHeight());
 
         $spreadsheet->disconnectWorksheets();
     }
@@ -301,6 +301,110 @@ final class XlsxReportServiceLookTest extends TestCase
             $chart = $monthly->getChartByIndex($index);
             $this->assertNotNull($chart);
             $this->assertFalse($chart->getRoundedCorners());
+        }
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testMoneyShowsBahtSymbolAndRightPrecision(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+
+        // ตารางรายวัน = สมุดบัญชี → ต้องมีสตางค์
+        $daily = $spreadsheet->getSheetByName('รายวัน');
+        $this->assertNotNull($daily);
+        $this->assertSame('"฿"#,##0.00', $daily->getStyle('B2')->getNumberFormat()->getFormatCode());
+
+        // ที่เหลือเป็นสรุป → ไม่ต้องมีสตางค์ให้รก
+        foreach ([['รายเดือน', 'B2'], ['เทียบร้าน', 'B4'], ['ฤดูกาล', 'D5'], ['รายปี', 'A5']] as [$title, $cell]) {
+            $sheet = $spreadsheet->getSheetByName($title);
+            $this->assertNotNull($sheet);
+            $this->assertSame(
+                '"฿"#,##0',
+                $sheet->getStyle($cell)->getNumberFormat()->getFormatCode(),
+                'ชีต ' . $title
+            );
+        }
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testColumnWidthsAreExplicitAndBalanced(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+
+        foreach ($spreadsheet->getAllSheets() as $sheet) {
+            $widths = [];
+            // เช็คเฉพาะคอลัมน์ที่ชีตนั้นใช้จริง (แต่ละชีตกว้างไม่เท่ากัน)
+            foreach (range('A', $sheet->getHighestDataColumn()) as $column) {
+                $dimension = $sheet->getColumnDimension($column);
+                $this->assertFalse(
+                    $dimension->getAutoSize(),
+                    'ชีต ' . $sheet->getTitle() . ' คอลัมน์ ' . $column . ' ยังใช้ autoSize'
+                );
+                $this->assertGreaterThan(
+                    0,
+                    $dimension->getWidth(),
+                    'ชีต ' . $sheet->getTitle() . ' คอลัมน์ ' . $column . ' ไม่ได้ตั้งความกว้าง'
+                );
+                $widths[] = $dimension->getWidth();
+            }
+
+            // ไม่มีคอลัมน์ไหนกว้างเกิน 3 เท่าของคอลัมน์ที่แคบสุด → ตารางไม่เบี้ยว
+            $this->assertLessThan(
+                3 * min($widths),
+                max($widths),
+                'ชีต ' . $sheet->getTitle() . ' มีคอลัมน์กว้างผิดสัดส่วน'
+            );
+        }
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testProfitColumnIsEmphasized(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+
+        foreach ([['รายวัน', 'D2'], ['รายเดือน', 'D2'], ['เทียบร้าน', 'D4']] as [$title, $cell]) {
+            $sheet = $spreadsheet->getSheetByName($title);
+            $this->assertNotNull($sheet);
+            $this->assertSame(
+                'FFEAF1F8',
+                $sheet->getStyle($cell)->getFill()->getStartColor()->getARGB(),
+                'คอลัมน์กำไรของชีต ' . $title . ' ต้องถูกเน้น'
+            );
+            $this->assertTrue($sheet->getStyle($cell)->getFont()->getBold());
+        }
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testTotalsRowIsHeavierThanDataRows(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+
+        $daily = $spreadsheet->getSheetByName('รายวัน');
+        $this->assertNotNull($daily);
+
+        // 3 แถวข้อมูล → เว้น 1 → แถวรวมอยู่แถว 6
+        $this->assertSame('รวมทั้งปี', $daily->getCell('A6')->getValue());
+        $this->assertSame('FFDCE6F1', $daily->getStyle('A6')->getFill()->getStartColor()->getARGB());
+        $this->assertTrue($daily->getStyle('A6')->getFont()->getBold());
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function testHeadingsHaveNoEmoji(): void
+    {
+        $spreadsheet = $this->fullWorkbook();
+
+        $annual = $spreadsheet->getSheetByName('รายปี');
+        $this->assertNotNull($annual);
+
+        // รายงานธุรกิจ — ไม่ใส่ emoji ในหัวข้อ
+        for ($row = 1; $row <= 18; $row++) {
+            $value = (string)$annual->getCell('A' . $row)->getValue();
+            $this->assertDoesNotMatchRegularExpression('/[\x{1F300}-\x{1FAFF}]/u', $value);
         }
 
         $spreadsheet->disconnectWorksheets();

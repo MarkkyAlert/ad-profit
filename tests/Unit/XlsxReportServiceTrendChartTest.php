@@ -79,7 +79,7 @@ final class XlsxReportServiceTrendChartTest extends TestCase
         $this->assertSame(3500.0, $sheet->getCell('J4')->getValue());
         $this->assertSame(5000.0, $sheet->getCell('K4')->getValue());
 
-        $this->assertSame('#,##0.00', $sheet->getStyle('I2')->getNumberFormat()->getFormatCode());
+        $this->assertSame('"฿"#,##0', $sheet->getStyle('I2')->getNumberFormat()->getFormatCode());
     }
 
     public function testNegativeCumulativeIsRed(): void

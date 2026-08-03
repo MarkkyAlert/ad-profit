@@ -164,7 +164,7 @@ final class XlsxReportServiceTest extends TestCase
 
         $this->assertSame(3000.0, $sheet->getCell('B2')->getValue());
         $this->assertSame(-1000.0, $sheet->getCell('D2')->getValue());
-        $this->assertSame('#,##0.00', $sheet->getStyle('B2')->getNumberFormat()->getFormatCode());
+        $this->assertSame('"฿"#,##0.00', $sheet->getStyle('B2')->getNumberFormat()->getFormatCode());
         $this->assertSame('0.00', $sheet->getStyle('E2')->getNumberFormat()->getFormatCode());
 
         $spreadsheet->disconnectWorksheets();

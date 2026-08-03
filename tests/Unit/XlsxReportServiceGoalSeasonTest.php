@@ -17,8 +17,9 @@ use ZipArchive;
  */
 final class XlsxReportServiceGoalSeasonTest extends TestCase
 {
-    private const GOAL_HEADER_ROW = 3;
-    private const GOAL_FIRST_ROW = 4;
+    private const GOAL_GROUP_ROW = 3;
+    private const GOAL_HEADER_ROW = 4;
+    private const GOAL_FIRST_ROW = 5;
     private const SEASON_HEADER_ROW = 4;
     private const SEASON_FIRST_ROW = 5;
 
@@ -179,12 +180,22 @@ final class XlsxReportServiceGoalSeasonTest extends TestCase
             ],
         ]);
 
-        $this->assertSame('เดือน', $sheet->getCell('A' . self::GOAL_HEADER_ROW)->getValue());
-        $this->assertSame('เป้ากำไร', $sheet->getCell('F' . self::GOAL_HEADER_ROW)->getValue());
-        $this->assertTrue($sheet->getStyle('A' . self::GOAL_HEADER_ROW)->getFont()->getBold());
-        $this->assertSame('A3:I4', $sheet->getAutoFilter()->getRange());
-        $this->assertSame('#,##0.00', $sheet->getStyle('B4')->getNumberFormat()->getFormatCode());
-        $this->assertSame('0.0"%"', $sheet->getStyle('D4')->getNumberFormat()->getFormatCode());
+        // หัวชั้นบน = กลุ่ม · ชั้นล่าง = ชื่อคอลัมน์ (แก้ปัญหา "ทำได้/ถึงเป้า" ซ้ำโดยไม่รู้ฝั่ง)
+        $this->assertSame('เดือน', $sheet->getCell('A' . self::GOAL_GROUP_ROW)->getValue());
+        $this->assertSame('รายได้', $sheet->getCell('B' . self::GOAL_GROUP_ROW)->getValue());
+        $this->assertSame('กำไร', $sheet->getCell('F' . self::GOAL_GROUP_ROW)->getValue());
+        $this->assertContains('B3:E3', array_keys($sheet->getMergeCells()));
+        $this->assertContains('F3:I3', array_keys($sheet->getMergeCells()));
+
+        $this->assertSame('เป้า', $sheet->getCell('B' . self::GOAL_HEADER_ROW)->getValue());
+        $this->assertSame('ทำได้จริง', $sheet->getCell('C' . self::GOAL_HEADER_ROW)->getValue());
+        $this->assertSame('คิดเป็น', $sheet->getCell('D' . self::GOAL_HEADER_ROW)->getValue());
+        $this->assertSame('สถานะ', $sheet->getCell('E' . self::GOAL_HEADER_ROW)->getValue());
+        $this->assertTrue($sheet->getStyle('A' . self::GOAL_GROUP_ROW)->getFont()->getBold());
+
+        $this->assertSame('A4:I5', $sheet->getAutoFilter()->getRange());
+        $this->assertSame('"฿"#,##0', $sheet->getStyle('B5')->getNumberFormat()->getFormatCode());
+        $this->assertSame('0.0"%"', $sheet->getStyle('D5')->getNumberFormat()->getFormatCode());
     }
 
     public function testSeasonGridPlacesProfitByYearAndMonth(): void

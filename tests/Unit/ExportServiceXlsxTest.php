@@ -168,9 +168,10 @@ final class ExportServiceXlsxTest extends TestCase
     {
         $service = $this->makeService();
 
-        $this->assertSame('ร้านคอร์ส_2026.xlsx', $service->buildYearlyXlsxFilename('ร้านคอร์ส', 2026));
-        $this->assertSame('a_b_2026.xlsx', $service->buildYearlyXlsxFilename('a/b', 2026));
-        $this->assertSame('shop_2026.xlsx', $service->buildYearlyXlsxFilename('   ', 2026));
+        // ชื่อไฟล์ใช้ พ.ศ. ให้ตรงกับปีในรายงาน
+        $this->assertSame('ร้านคอร์ส_2569.xlsx', $service->buildYearlyXlsxFilename('ร้านคอร์ส', 2026));
+        $this->assertSame('a_b_2569.xlsx', $service->buildYearlyXlsxFilename('a/b', 2026));
+        $this->assertSame('shop_2569.xlsx', $service->buildYearlyXlsxFilename('   ', 2026));
     }
 
     public function testCsvFilenameStillWorksAfterRefactor(): void

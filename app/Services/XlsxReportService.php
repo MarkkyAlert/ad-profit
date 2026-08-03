@@ -38,11 +38,14 @@ class XlsxReportService
     private const PENDING_FONT_ARGB = 'FFB45309';
     private const GRID_LINE_ARGB = 'FFD9D9D9';
     private const BAND_FILL_ARGB = 'FFF4F7FB';
-    private const HEADER_ROW_HEIGHT = 22;
+    private const EMPHASIS_FILL_ARGB = 'FFEAF1F8';
+    private const TOTALS_FILL_ARGB = 'FFDCE6F1';
+    private const HEADER_ROW_HEIGHT = 24;
 
     /** ฟอนต์ทั้ง workbook — Tahoma เรนเดอร์ไทยคมกว่า Calibri (ที่ต้อง fallback) */
     private const BASE_FONT = 'Tahoma';
-    private const BASE_FONT_SIZE = 10;
+    private const BASE_FONT_SIZE = 11;
+    private const BASE_ROW_HEIGHT = 18;
 
     /** สีแท็บแยกกลุ่ม: ร้านเดี่ยว = น้ำเงินไล่เฉด · เป้าหมาย/ฤดูกาล/พอร์ต = คนละโทน */
     private const TAB_COLORS = [
@@ -60,7 +63,10 @@ class XlsxReportService
     private const CHART_CUMULATIVE_ARGB = '2E75B6';
 
     private const PERCENT_FORMAT = '0.0"%"';
-    private const MONEY_FORMAT = '#,##0.00';
+    /** สรุป/การ์ด/ตารางเดือน — ไม่โชว์สตางค์ ให้ตาอ่านตัวเลขก้อนใหญ่ได้เร็ว */
+    private const MONEY_FORMAT = '"฿"#,##0';
+    /** ตารางรายวัน = สมุดบัญชี ต้องตรงถึงสตางค์ */
+    private const MONEY_DETAIL_FORMAT = '"฿"#,##0.00';
     private const RATIO_FORMAT = '0.00';
     private const DATE_FORMAT = 'yyyy-mm-dd';
 
@@ -77,6 +83,7 @@ class XlsxReportService
         $spreadsheet->getDefaultStyle()->getFont()
             ->setName(self::BASE_FONT)
             ->setSize(self::BASE_FONT_SIZE);
+        $spreadsheet->getDefaultStyle()->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('รายวัน');
@@ -147,16 +154,23 @@ class XlsxReportService
             $sheet->setAutoFilter('A1:' . $noteColumn . $lastDataRow);
         }
 
-        $sheet->getStyle('B2:D' . $totalsRowNumber)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+        $sheet->getStyle('B2:D' . $totalsRowNumber)->getNumberFormat()->setFormatCode(self::MONEY_DETAIL_FORMAT);
         $sheet->getStyle('E2:E' . $totalsRowNumber)->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
 
         if ($lastDataRow >= 2) {
             $this->styleTableBody($sheet, $headerRange, 'A2:' . $noteColumn . $lastDataRow);
+            $this->emphasizeColumn($sheet, 'D', 2, $lastDataRow);
         }
 
-        foreach (range('A', $noteColumn) as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
+        // แถวรวมต้องหนักกว่าแถวข้อมูล ไม่ใช่แค่เส้นบาง ๆ
+        $sheet->getStyle($totalsRange)->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB(self::TOTALS_FILL_ARGB);
+        $sheet->getRowDimension($totalsRowNumber)->setRowHeight(self::BASE_ROW_HEIGHT + 2);
+
+        $this->setColumnWidths($sheet, [
+            'A' => 14, 'B' => 15, 'C' => 15, 'D' => 15, 'E' => 11, 'F' => 30,
+        ]);
 
         return $spreadsheet;
     }
@@ -254,11 +268,13 @@ class XlsxReportService
             $sheet->getStyle('I2:K' . $lastRow)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
             $sheet->setAutoFilter('A1:K' . $lastRow);
             $this->styleTableBody($sheet, $headerRange, 'A2:K' . $lastRow);
+            $this->emphasizeColumn($sheet, 'D', 2, $lastRow);
         }
 
-        foreach (range('A', 'K') as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
+        $this->setColumnWidths($sheet, [
+            'A' => 10, 'B' => 14, 'C' => 14, 'D' => 14, 'E' => 9,
+            'F' => 11, 'G' => 14, 'H' => 12, 'I' => 14, 'J' => 14, 'K' => 14,
+        ]);
 
         if ($lastRow >= 2) {
             $sheet->addChart($this->buildProfitChart($sheet->getTitle(), $lastRow));
@@ -431,13 +447,14 @@ class XlsxReportService
         $rowNumber++;
 
         // ── บล็อกประมาณการ ─────────────────────────────────────────
-        $this->writeSectionHeader($sheet, $rowNumber, '🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)');
+        $this->writeSectionHeader($sheet, $rowNumber, 'ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)');
         $this->writeProjection($sheet, (array)($summary['projection'] ?? []), $rowNumber + 1);
 
-        $sheet->getColumnDimension('A')->setWidth(20);
-        foreach (['B', 'C', 'D', 'E', 'F', 'G', 'H'] as $column) {
-            $sheet->getColumnDimension($column)->setWidth(14);
-        }
+        // การ์ด 4 ใบ × 2 คอลัมน์ — กว้างพอให้แถบหัวด้านบนดูเต็ม ไม่ใช่แถบสั้น ๆ
+        $this->setColumnWidths($sheet, [
+            'A' => 22, 'B' => 16, 'C' => 19, 'D' => 16,
+            'E' => 19, 'F' => 16, 'G' => 19, 'H' => 16,
+        ]);
 
         // สรุปทั้งปีมาก่อนทุกอย่าง
         $spreadsheet->setIndexByName('รายปี', 0);
@@ -484,19 +501,27 @@ class XlsxReportService
         $sheet->mergeCells('A1:I1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
 
-        $headerRow = 3;
+        // หัว 2 ชั้น — ไม่งั้น "ทำได้"/"ถึงเป้า" โผล่อย่างละ 2 ครั้งโดยไม่รู้ว่าของฝั่งไหน
+        $groupRow = 3;
+        $headerRow = 4;
+
+        $sheet->mergeCells('A' . $groupRow . ':A' . $headerRow);
+        $sheet->setCellValueExplicit('A' . $groupRow, 'เดือน', DataType::TYPE_STRING);
+        $sheet->mergeCells('B' . $groupRow . ':E' . $groupRow);
+        $sheet->setCellValueExplicit('B' . $groupRow, 'รายได้', DataType::TYPE_STRING);
+        $sheet->mergeCells('F' . $groupRow . ':I' . $groupRow);
+        $sheet->setCellValueExplicit('F' . $groupRow, 'กำไร', DataType::TYPE_STRING);
+
         $sheet->fromArray(
-            [
-                'เดือน',
-                'เป้ารายได้', 'รายได้จริง', 'ทำได้', 'ถึงเป้า',
-                'เป้ากำไร', 'กำไรจริง', 'ทำได้', 'ถึงเป้า',
-            ],
+            ['', 'เป้า', 'ทำได้จริง', 'คิดเป็น', 'สถานะ', 'เป้า', 'ทำได้จริง', 'คิดเป็น', 'สถานะ'],
             null,
             'A' . $headerRow
         );
+
+        $this->styleHeaderRow($sheet, 'A' . $groupRow . ':I' . $groupRow);
         $this->styleHeaderRow($sheet, 'A' . $headerRow . ':I' . $headerRow);
         $sheet->freezePane('A' . ($headerRow + 1));
-        $this->repeatHeaderOnPrint($sheet, $headerRow);
+        $this->repeatHeaderOnPrint($sheet, $groupRow);
 
         $rowNumber = $headerRow + 1;
         foreach ($rows as $row) {
@@ -543,14 +568,15 @@ class XlsxReportService
             $sheet->setAutoFilter('A' . $headerRow . ':I' . $lastRow);
             $this->styleTableBody(
                 $sheet,
-                'A' . $headerRow . ':I' . $headerRow,
+                'A' . $groupRow . ':I' . $groupRow,
                 'A' . ($headerRow + 1) . ':I' . $lastRow
             );
         }
 
-        foreach (range('A', 'I') as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
+        $this->setColumnWidths($sheet, [
+            'A' => 10, 'B' => 14, 'C' => 14, 'D' => 11, 'E' => 13,
+            'F' => 14, 'G' => 14, 'H' => 11, 'I' => 13,
+        ]);
     }
 
     /**
@@ -679,9 +705,11 @@ class XlsxReportService
             );
         }
 
-        foreach (range('A', 'M') as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
+        $widths = ['A' => 9];
+        foreach (range('B', 'M') as $column) {
+            $widths[$column] = 12;
         }
+        $this->setColumnWidths($sheet, $widths);
     }
 
     /**
@@ -878,11 +906,13 @@ class XlsxReportService
             $this->styleTableBody($sheet, $headerRange, 'A' . ($headerRow + 1) . ':H' . $lastShopRow);
         }
 
+        $this->emphasizeColumn($sheet, 'D', $headerRow + 1, $lastShopRow);
         $this->writeComparisonSummary($sheet, $summary, $lastShopRow + 2);
 
-        foreach (range('A', 'H') as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
+        $this->setColumnWidths($sheet, [
+            'A' => 24, 'B' => 15, 'C' => 15, 'D' => 15,
+            'E' => 9, 'F' => 12, 'G' => 13, 'H' => 11,
+        ]);
     }
 
     /**
@@ -1003,6 +1033,33 @@ class XlsxReportService
         );
         $sheet->getStyle('A' . ($startRow + 1))->getFont()->setItalic(true)->setSize(9)
             ->getColor()->setARGB('FF808080');
+    }
+
+    /**
+     * ตั้งความกว้างคอลัมน์เอง — ไม่ใช้ autoSize เพราะมันไปคิดจากเซลล์ merge หัวเรื่อง
+     * แล้วยืดคอลัมน์เดียวจนตารางเบี้ยว
+     *
+     * @param array<string,int> $widths
+     */
+    private function setColumnWidths(Worksheet $sheet, array $widths): void
+    {
+        foreach ($widths as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+    }
+
+    /** เน้นคอลัมน์ที่เป็นพระเอกของตาราง (กำไร) ด้วยพื้นอ่อน + ตัวหนา */
+    private function emphasizeColumn(Worksheet $sheet, string $column, int $firstRow, int $lastRow): void
+    {
+        if ($lastRow < $firstRow) {
+            return;
+        }
+
+        $range = $column . $firstRow . ':' . $column . $lastRow;
+        $sheet->getStyle($range)->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB(self::EMPHASIS_FILL_ARGB);
+        $sheet->getStyle($range)->getFont()->setBold(true);
     }
 
     /** ทาแดงเฉพาะค่าติดลบ — ใช้ร่วมทุกชีตให้สัญญาณสีสม่ำเสมอ */

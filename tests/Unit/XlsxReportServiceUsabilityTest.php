@@ -83,7 +83,7 @@ final class XlsxReportServiceUsabilityTest extends TestCase
         $this->assertSame(2000.0, $sheet->getCell('G2')->getValue());
         $this->assertSame(50.0, $sheet->getCell('H2')->getValue());
 
-        $this->assertSame('#,##0.00', $sheet->getStyle('G2')->getNumberFormat()->getFormatCode());
+        $this->assertSame('"฿"#,##0', $sheet->getStyle('G2')->getNumberFormat()->getFormatCode());
         $this->assertSame('0.0"%"', $sheet->getStyle('H2')->getNumberFormat()->getFormatCode());
     }
 
@@ -193,7 +193,7 @@ final class XlsxReportServiceUsabilityTest extends TestCase
         $sheet = $spreadsheet->getSheetByName('รายปี');
         $this->assertNotNull($sheet);
 
-        $this->assertSame('🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)', $sheet->getCell('A15')->getValue());
+        $this->assertSame('ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)', $sheet->getCell('A15')->getValue());
         $this->assertSame('21,000.00 – 29,000.00 (กลาง 25,000.00)', $sheet->getCell('A16')->getValue());
         $this->assertStringContainsString('ไม่ใช่ตัวเลขที่เกิดขึ้นจริง', (string)$sheet->getCell('A17')->getValue());
         // ตัวเอียง = สัญญาณสายตาว่าไม่ใช่ข้อมูลจริง

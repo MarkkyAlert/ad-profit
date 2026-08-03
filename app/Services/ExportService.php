@@ -232,9 +232,10 @@ class ExportService
         ];
     }
 
+    /** ชื่อไฟล์ใช้ พ.ศ. ให้ตรงกับปีที่แสดงในรายงาน (ข้างในเขียน 2569 ไฟล์ก็ควรเป็น 2569) */
     public function buildYearlyXlsxFilename(string $shopName, int $year): string
     {
-        return $this->sanitizeFilenameBase($shopName) . '_' . $year . '.xlsx';
+        return $this->sanitizeFilenameBase($shopName) . '_' . ($year + 543) . '.xlsx';
     }
 
     public function buildMonthlyCsvFilename(string $shopName, string $month): string
