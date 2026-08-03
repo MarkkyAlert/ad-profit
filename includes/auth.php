@@ -100,6 +100,8 @@ function isSessionVersionValid(): bool
         $currentVersion = max(1, (int)($row['session_version'] ?? 1));
         return $currentVersion === $sessionVersion;
     } catch (PDOException $exception) {
+        // ข้อยกเว้นเดียวที่ยอมให้ผ่าน: schema เก่าที่ยังไม่มีคอลัมน์ session_version
+        // (ไม่งั้นอัปเกรดแล้วผู้ใช้ทุกคนถูกเตะออกพร้อมกัน)
         $isMissingColumn = (string)$exception->getCode() === '42S22'
             && str_contains(strtolower($exception->getMessage()), 'session_version');
 
@@ -107,11 +109,13 @@ function isSessionVersionValid(): bool
             return true;
         }
 
+        // นอกนั้นต้อง fail-closed — เดิมคืน true ทุกกรณี แปลว่า DB สะดุดชั่วขณะ
+        // ทำให้ session ที่ถูกยกเลิกไปแล้ว (รีเซ็ต/เปลี่ยนรหัสผ่าน) กลับมาใช้ได้
         error_log('[auth] session version check failed: ' . $exception->getMessage());
-        return true;
+        return false;
     } catch (Throwable $exception) {
         error_log('[auth] session version check failed: ' . $exception->getMessage());
-        return true;
+        return false;
     }
 }
 

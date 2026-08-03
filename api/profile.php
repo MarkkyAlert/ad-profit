@@ -185,8 +185,13 @@ if ($action === 'change_password') {
         try {
             $_SESSION['session_version'] = $userRepository->getSessionVersion($userId);
         } catch (Throwable $exception) {
-            $_SESSION['session_version'] = max(1, (int)($_SESSION['session_version'] ?? 1));
+            // อ่านค่าใหม่ไม่ได้ แต่ changePassword สำเร็จแล้ว = DB ถูก +1 ไปแน่นอน
+            // ถ้าคงค่าเดิมไว้ request ถัดไปจะไม่ตรงกับ DB แล้วเตะเจ้าของรหัสผ่านออกทันที
+            $_SESSION['session_version'] = max(1, (int)($_SESSION['session_version'] ?? 1)) + 1;
         }
+
+        // เปลี่ยน credential แล้วต้องเปลี่ยน session id ด้วย เหมือนตอน login/reset
+        session_regenerate_id(true);
 
         $respond([
             'success' => true,

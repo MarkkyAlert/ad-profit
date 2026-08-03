@@ -11,10 +11,18 @@ class PasswordResetRepository
         $this->db = $db;
     }
 
-    public function createToken(int $userId, string $tokenHash, string $expiresAt): bool
+    /**
+     * @param int $ttlHours อายุของ token — ให้ MySQL เป็นคนบวกเวลา
+     *
+     * วันหมดอายุต้องคิดด้วยนาฬิกาเดียวกับที่ใช้ตรวจ (expires_at > NOW() ใน
+     * findByTokenHashForUpdate) เดิมคำนวณด้วย strtotime() ของ PHP ขณะที่ connection
+     * ไม่ได้ pin time_zone → ถ้า PHP กับ MySQL คนละโซน token อายุ 1 ชม. อาจอยู่ได้ 8 ชม.
+     * หรือหมดอายุตั้งแต่ยังไม่ทันได้กดลิงก์
+     */
+    public function createToken(int $userId, string $tokenHash, int $ttlHours): bool
     {
         $sql = 'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
-                VALUES (:user_id, :token_hash, :expires_at)
+                VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL :ttl_hours HOUR))
                 ON DUPLICATE KEY UPDATE
                     token_hash = VALUES(token_hash),
                     expires_at = VALUES(expires_at),
@@ -25,7 +33,7 @@ class PasswordResetRepository
         return $stmt->execute([
             ':user_id' => $userId,
             ':token_hash' => $tokenHash,
-            ':expires_at' => $expiresAt,
+            ':ttl_hours' => max(1, $ttlHours),
         ]);
     }
 

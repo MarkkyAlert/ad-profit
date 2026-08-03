@@ -225,21 +225,16 @@ class AuthService
         ];
     }
 
+    /**
+     * ล้าง session ทั้งก้อน ไม่ใช่เฉพาะ key ที่ระบุไว้
+     *
+     * เดิม unset ทีละ key ทำให้ของที่ไม่ได้อยู่ในลิสต์ติดข้ามการ logout ไป เช่น
+     * auth_rate_limits (ตัวนับ fallback) — คนถัดไปที่ใช้เครื่องเดียวกันรับตัวนับนั้นต่อ
+     * flash ที่ตอบหลัง logout ถูกเขียนทีหลัง จึงไม่ได้รับผลกระทบ
+     */
     public function logout(): void
     {
-        unset(
-            $_SESSION['user_id'],
-            $_SESSION['email'],
-            $_SESSION['display_name'],
-            $_SESSION['session_version'],
-            $_SESSION['auth_started_at'],
-            $_SESSION['last_activity_at'],
-            $_SESSION['current_shop_id'],
-            $_SESSION['current_shop_name'],
-            $_SESSION['password_reset_token']
-        );
-
-        unset($_SESSION['csrf_token']);
+        $_SESSION = [];
         session_regenerate_id(true);
     }
 
@@ -291,10 +286,9 @@ class AuthService
         $userId = (int)$user['id'];
         $token = bin2hex(random_bytes(32));
         $tokenHash = hash('sha256', $token);
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+' . PASSWORD_RESET_TOKEN_TTL_HOURS . ' hours'));
-
         try {
-            $this->passwordResetRepository->createToken($userId, $tokenHash, $expiresAt);
+            // ส่งเป็นชั่วโมง ให้ MySQL บวกเวลาเอง — นาฬิกาเดียวกับตอนตรวจ expires_at > NOW()
+            $this->passwordResetRepository->createToken($userId, $tokenHash, (int)PASSWORD_RESET_TOKEN_TTL_HOURS);
         } catch (Throwable $exception) {
             error_log('[auth][password_reset] ' . $exception->getMessage());
             return [
@@ -594,7 +588,11 @@ class AuthService
     {
         $key = $this->rateLimitKey($action, $clientIp, $subject);
 
-        $sql = 'SELECT attempts, started_at
+        // อายุของหน้าต่างคิดด้วยนาฬิกา MySQL ตัวเดียวกับตอนเขียน (NOW()/TIMESTAMPDIFF)
+        // ห้ามเอา started_at มาเทียบกับ time() ของ PHP — connection ไม่ได้ pin time_zone ไว้
+        // ถ้า PHP กับ MySQL คนละโซน อายุจะเพี้ยนจนหน้าต่างไม่หมุน (ล็อกถาวร) หรือหมุนทุกครั้ง
+        // (ไม่จำกัดอะไรเลย) ขึ้นกับทิศทางที่เอียง
+        $sql = 'SELECT attempts, TIMESTAMPDIFF(SECOND, started_at, NOW()) AS window_age_seconds
                 FROM auth_rate_limits
                 WHERE bucket_key = :bucket_key
                 LIMIT 1';
@@ -607,20 +605,14 @@ class AuthService
             return false;
         }
 
-        $attempts = max(0, (int)($row['attempts'] ?? 0));
-        $startedAtRaw = (string)($row['started_at'] ?? '');
-        $startedAtTimestamp = strtotime($startedAtRaw);
-        if ($startedAtTimestamp === false) {
+        $windowAge = $row['window_age_seconds'] ?? null;
+        if ($windowAge === null || (int)$windowAge >= RATE_LIMIT_WINDOW_SECONDS) {
+            // started_at เสีย (NULL) หรือหน้าต่างหมดอายุ → เริ่มนับใหม่
             $this->resetRateLimitWindowInDatabase($action, $clientIp, $key);
             return false;
         }
 
-        if ((time() - $startedAtTimestamp) >= RATE_LIMIT_WINDOW_SECONDS) {
-            $this->resetRateLimitWindowInDatabase($action, $clientIp, $key);
-            return false;
-        }
-
-        return $attempts >= $this->getMaxAttemptsForAction($action);
+        return max(0, (int)($row['attempts'] ?? 0)) >= $this->getMaxAttemptsForAction($action);
     }
 
     private function getMaxAttemptsForAction(string $action): int
@@ -705,12 +697,12 @@ class AuthService
 
     private function cleanupStaleRateLimitBucketsInDatabase(): void
     {
-        $retentionSeconds = max(RATE_LIMIT_WINDOW_SECONDS * 10, 600);
-        $thresholdTime = date('Y-m-d H:i:s', time() - $retentionSeconds);
+        // เทียบอายุด้วยนาฬิกา MySQL เหมือนกัน — เดิมสร้าง threshold ด้วย date() ของ PHP
+        // แล้วเอาไปเทียบกับ updated_at ที่ MySQL เขียน ถ้าคนละโซนจะลบแถวสดทิ้งทั้งตาราง
         $sql = 'DELETE FROM auth_rate_limits
-                WHERE updated_at < :threshold_time';
+                WHERE TIMESTAMPDIFF(SECOND, updated_at, NOW()) >= :retention_seconds';
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':threshold_time' => $thresholdTime]);
+        $stmt->execute([':retention_seconds' => max(RATE_LIMIT_WINDOW_SECONDS * 10, 600)]);
     }
 }

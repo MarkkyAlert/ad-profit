@@ -228,4 +228,24 @@ final class AuthServiceLoginTest extends IntegrationTestCase
             $this->assertArrayNotHasKey($key, $_SESSION, "logout ไม่ได้ล้าง '{$key}'");
         }
     }
+
+    /**
+     * logout ต้องล้าง session ทั้งก้อน ไม่ใช่เฉพาะ key ที่ระบุไว้
+     *
+     * เดิม unset ทีละ key → ตัวนับ rate limit แบบ session ติดข้าม logout ไปหาคนถัดไป
+     * ที่ใช้เครื่องเดียวกัน
+     */
+    public function testLogoutLeavesNothingBehindInTheSession(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'password123');
+        $this->createShop($userId);
+
+        $service = $this->makeService();
+        $service->login('owner@example.com', 'password123', self::IP);
+        $_SESSION['auth_rate_limits'] = ['บางคีย์' => ['attempts' => 4, 'started_at' => time()]];
+
+        $service->logout();
+
+        $this->assertSame([], $_SESSION);
+    }
 }

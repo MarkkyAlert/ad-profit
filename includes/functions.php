@@ -455,9 +455,16 @@ function is_valid_email(string $email): bool
     return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
 }
 
+/**
+ * ใช้เฉพาะตอน "ตั้งรหัสผ่านใหม่" (สมัคร / รีเซ็ต / เปลี่ยนรหัส) ไม่ได้ใช้ตอนล็อกอิน
+ * → ผู้ใช้เดิมที่รหัสผ่านสั้นกว่าเกณฑ์ยังเข้าระบบได้ตามปกติ
+ */
 function validate_password_length(string $password, string $fieldLabel = 'รหัสผ่าน'): ?string
 {
-    if (strlen($password) < PASSWORD_MIN_LENGTH) {
+    // นับ "ตัวอักษร" ไม่ใช่ byte — strlen ทำให้รหัสผ่านไทย 3 ตัว (9 byte) ผ่านเกณฑ์ 8 ตัวอักษร
+    $length = function_exists('mb_strlen') ? mb_strlen($password) : strlen($password);
+
+    if ($length < PASSWORD_MIN_LENGTH) {
         return $fieldLabel . 'ต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร';
     }
     return null;
