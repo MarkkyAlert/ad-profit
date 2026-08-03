@@ -30,7 +30,7 @@ class GoalService
             ];
         }
 
-        if (!preg_match('/^\d{4}-\d{2}$/', $goalMonth)) {
+        if (!$this->isValidGoalMonth($goalMonth)) {
             return [
                 'success' => false,
                 'error' => 'รูปแบบเดือนต้องเป็น YYYY-MM',
@@ -97,7 +97,7 @@ class GoalService
             ];
         }
 
-        if (!preg_match('/^\d{4}-\d{2}$/', $goalMonth)) {
+        if (!$this->isValidGoalMonth($goalMonth)) {
             return [
                 'success' => false,
                 'error' => 'รูปแบบเดือนต้องเป็น YYYY-MM',
@@ -142,5 +142,22 @@ class GoalService
         return [
             'success' => true,
         ];
+    }
+
+    /**
+     * เดือนเป้าหมายต้องเป็น YYYY-MM ที่มีอยู่จริง
+     *
+     * regex \d{4}-\d{2} อย่างเดียวไม่พอ — '2024-00' และ '2024-13' ผ่านได้แล้วถูกบันทึกลง DB
+     * (CHECK ใน schema ก็ตรวจแค่รูปแบบเหมือนกัน) กลายเป็นแถวที่ไม่มีหน้าไหนแสดง
+     */
+    private function isValidGoalMonth(string $goalMonth): bool
+    {
+        if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $goalMonth) !== 1) {
+            return false;
+        }
+
+        $year = (int)substr($goalMonth, 0, 4);
+
+        return $year >= 2000 && $year <= 2100;
     }
 }

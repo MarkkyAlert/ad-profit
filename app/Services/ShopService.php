@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 class ShopService
 {
+    /** จำนวนร้านสูงสุดต่อผู้ใช้ 1 คน */
+    public const MAX_SHOPS_PER_USER = 20;
+
+    private const SHOP_LIMIT_ERROR = 'ไม่สามารถสร้างร้านค้าเพิ่มได้ (จำกัดสูงสุด '
+        . self::MAX_SHOPS_PER_USER . ' ร้านต่อผู้ใช้งาน)';
+
     private ShopRepository $shopRepository;
     private UserRepository $userRepository;
     private ?PDO $db;
@@ -58,11 +64,12 @@ class ShopService
             ];
         }
 
-        $currentShopCount = $this->shopRepository->countByUserId($userId);
-        if ($currentShopCount >= 20) {
+        // ตรวจเบื้องต้นนอกล็อก เพื่อตอบเร็วโดยไม่ต้องเปิดทรานแซกชัน
+        // (ค่าที่ใช้ตัดสินจริงคือค่าที่อ่านใต้ล็อกด้านล่าง)
+        if ($this->shopRepository->countByUserId($userId) >= self::MAX_SHOPS_PER_USER) {
             return [
                 'success' => false,
-                'error' => 'ไม่สามารถสร้างร้านค้าเพิ่มได้ (จำกัดสูงสุด 20 ร้านต่อผู้ใช้งาน)',
+                'error' => self::SHOP_LIMIT_ERROR,
             ];
         }
 
@@ -78,7 +85,20 @@ class ShopService
                 $canLockRows = $this->db->inTransaction();
                 if ($canLockRows) {
                     $this->userRepository->lockForUpdate($userId);
-                    $this->shopRepository->countByUserIdForUpdate($userId);
+
+                    // ต้องเทียบซ้ำใต้ล็อก — เดิมเรียกแล้วทิ้งค่าไป ทำให้ค่าที่ใช้ตัดสินเป็นค่าที่
+                    // อ่านก่อนเข้าล็อก สองแท็บที่กดพร้อมกันตอนมี 19-20 ร้านจึงทะลุ 20 ได้
+                    // (ไม่มี constraint ระดับ DB มากั้น)
+                    if ($this->shopRepository->countByUserIdForUpdate($userId) >= self::MAX_SHOPS_PER_USER) {
+                        if ($startedTransaction && $this->db->inTransaction()) {
+                            $this->db->rollBack();
+                        }
+
+                        return [
+                            'success' => false,
+                            'error' => self::SHOP_LIMIT_ERROR,
+                        ];
+                    }
                 }
             }
 

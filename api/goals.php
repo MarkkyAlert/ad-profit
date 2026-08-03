@@ -33,7 +33,9 @@ if ($action === 'upsert') {
     ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
-    $goalMonth = normalize_month_input(isset($_POST['goal_month']) ? (string)$_POST['goal_month'] : null);
+    // ส่งค่าดิบให้ service ตรวจเอง — normalize_month_input() จะ "ซ่อม" เดือนที่ผิดรูปแบบ
+    // ให้กลายเป็นเดือนปัจจุบันเงียบ ๆ = เขียนทับเป้าของเดือนที่ผู้ใช้ไม่ได้ระบุ
+    $goalMonth = trim((string)($_POST['goal_month'] ?? ''));
     $targetRevenueParsed = parse_decimal_input($_POST['target_revenue'] ?? null, true);
     $targetProfitParsed = parse_decimal_input($_POST['target_profit'] ?? null, true);
 
@@ -70,7 +72,8 @@ if ($action === 'delete') {
     ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
-    $goalMonth = normalize_month_input(isset($_POST['goal_month']) ? (string)$_POST['goal_month'] : null);
+    // ค่าดิบเช่นกัน — ถ้าปล่อยให้ normalize เป็นเดือนปัจจุบัน การลบจะไปโดนเป้าที่ผู้ใช้ไม่ได้สั่ง
+    $goalMonth = trim((string)($_POST['goal_month'] ?? ''));
     $result = $goalService->deleteGoal($userId, $shopId, $goalMonth);
 
     if (($result['success'] ?? false) === true) {

@@ -5,13 +5,22 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/auth.php';
 
-requireGuest();
-
+// รับ token ก่อน requireGuest() เสมอ
+// ผู้ที่ยังล็อกอินค้างในเบราว์เซอร์แล้วกดลิงก์จากอีเมล เดิมจะถูกเด้งไป /dashboard.php
+// ตั้งแต่บรรทัดถัดไป โดยที่ token ถูกทิ้งเงียบ ๆ และไม่มีข้อความบอกว่าเกิดอะไรขึ้น
 $tokenFromQuery = trim((string)($_GET['token'] ?? ''));
 if ($tokenFromQuery !== '') {
+    // ออกจากระบบให้อัตโนมัติ — คนที่มาถึงหน้านี้ตั้งใจจะตั้งรหัสผ่านใหม่
+    // (ล้าง session ทั้งก้อน + เปลี่ยน session id ผ่าน clearAuthSession)
+    if (isset($_SESSION['user_id'])) {
+        clearAuthSession();
+    }
+
     $_SESSION['password_reset_token'] = $tokenFromQuery;
     redirect('/reset-password.php');
 }
+
+requireGuest();
 
 $token = trim((string)($_SESSION['password_reset_token'] ?? ''));
 

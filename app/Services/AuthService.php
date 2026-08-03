@@ -300,8 +300,18 @@ class AuthService
         $resetLink = app_url('/reset-password.php?token=' . $token);
         $emailSent = false;
 
-        if ($this->emailService !== null && $this->emailService->isEnabled()) {
+        // ไม่ได้ตั้ง SMTP = ระบบสร้าง token แล้วทิ้ง ผู้ใช้รอลิงก์ที่ไม่มีวันมา
+        // ต้องมีร่องรอยใน log เสมอ ไม่งั้นสืบไม่ได้ว่าทำไม "ลืมรหัสผ่าน" ใช้ไม่ได้
+        // (ข้อความที่ตอบผู้ใช้ยังเหมือนเดิมทุกกรณี เพื่อไม่ให้เดาได้ว่าอีเมลไหนมีในระบบ)
+        if ($this->emailService === null || !$this->emailService->isEnabled()) {
+            error_log('[auth][password_reset] mail is not configured (MAIL_ENABLED/credentials) '
+                . '- reset link was generated but not delivered');
+        } else {
             $emailSent = $this->emailService->sendPasswordResetEmail($normalizedEmail, $resetLink);
+
+            if (!$emailSent) {
+                error_log('[auth][password_reset] mail delivery failed after retries');
+            }
         }
 
         $response = [

@@ -72,14 +72,22 @@ class PasswordResetRepository
         return $token ?: null;
     }
 
+    /**
+     * @return bool ลบไปจริงอย่างน้อย 1 แถวหรือไม่
+     *
+     * เดิมคืนผลของ execute() ซึ่งภายใต้ ERRMODE_EXCEPTION เป็น true เสมอ (ไม่งั้น throw)
+     * → ผู้เรียกที่เช็กค่านี้ (AuthService::resetPassword) มีสาขา rollback ที่ไม่มีวันทำงาน
+     * และการลบที่ไม่โดนแถวไหนเลยถูกรายงานว่าสำเร็จ
+     */
     public function deleteByUserId(int $userId): bool
     {
         $sql = 'DELETE FROM password_reset_tokens
                 WHERE user_id = :user_id';
 
         $stmt = $this->db->prepare($sql);
+        $stmt->execute([':user_id' => $userId]);
 
-        return $stmt->execute([':user_id' => $userId]);
+        return $stmt->rowCount() > 0;
     }
 
     public function deleteByTokenHash(string $tokenHash): bool
