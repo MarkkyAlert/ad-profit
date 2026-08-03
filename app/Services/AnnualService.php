@@ -255,6 +255,12 @@ class AnnualService
                     'prev_year_profit' => $previousYearProfit,
                     'yoy_profit_change' => $profit - $previousYearProfit,
                     'yoy_profit_change_percent' => $this->calculateChangePercent($profit, $previousYearProfit),
+                    'projection' => $this->calculateYearEndProjection(
+                        $months,
+                        $cumulativeProfit,
+                        $lastMonth,
+                        $year === $currentYear
+                    ),
                 ],
                 'chart' => [
                     'months' => array_values(array_map(static fn(array $row): string => (string)$row['month_key'], $months)),
@@ -267,6 +273,64 @@ class AnnualService
                     'prev_cumulative_profit' => $previousCumulativeSeries,
                 ],
             ],
+        ];
+    }
+
+    /** จำนวนเดือนล่าสุดที่ใช้เป็นฐานประมาณการ */
+    private const PROJECTION_BASIS_MONTHS = 3;
+
+    /**
+     * ประมาณการกำไรสิ้นปีแบบ run-rate — pure ไม่แตะ repo
+     *
+     * คืนเป็น "ช่วง" ไม่ใช่เลขเดียว เพราะ run-rate ไม่รู้จักฤดูกาล/การเปิดรอบขาย
+     * เลขเดียวจะถูกอ่านว่าเป็นคำสัญญา ช่วงบอกความไม่แน่นอนตามจริง
+     *
+     * @param array<int,array<string,mixed>> $months แถวเดือน 1..lastMonth จาก buildYearlySummary
+     */
+    public function calculateYearEndProjection(
+        array $months,
+        float $cumulativeProfit,
+        int $lastMonth,
+        bool $isCurrentYear
+    ): array {
+        // ปีที่จบไปแล้ว/ยังไม่เริ่ม ไม่ต้องเดา — มีตัวเลขจริงอยู่แล้วหรือยังไม่มีอะไรให้เดา
+        if (!$isCurrentYear) {
+            return ['available' => false, 'reason' => 'not_current_year'];
+        }
+
+        $monthsRemaining = 12 - $lastMonth;
+        if ($monthsRemaining <= 0) {
+            return ['available' => false, 'reason' => 'year_complete'];
+        }
+
+        // ฐาน = เฉพาะเดือนที่กรอกแล้ว — เดือนที่ยังไม่กรอกมีกำไร 0 ซึ่งจะลากค่าเฉลี่ยลงผิด ๆ
+        $filledProfits = [];
+        foreach ($months as $row) {
+            if ((int)($row['month'] ?? 0) > $lastMonth) {
+                continue;
+            }
+
+            if ((int)($row['days_count'] ?? 0) > 0) {
+                $filledProfits[] = (float)($row['profit'] ?? 0);
+            }
+        }
+
+        // เดือนเดียวเดาไม่ได้ว่าเป็นแนวโน้มหรือฟลุ๊ค
+        $basis = array_slice($filledProfits, -self::PROJECTION_BASIS_MONTHS);
+        if (count($basis) < 2) {
+            return ['available' => false, 'reason' => 'insufficient_data'];
+        }
+
+        $average = array_sum($basis) / count($basis);
+
+        return [
+            'available' => true,
+            'months_remaining' => $monthsRemaining,
+            'basis_month_count' => count($basis),
+            'avg_recent' => round($average, 2),
+            'projection_low' => round($cumulativeProfit + ($monthsRemaining * min($basis)), 2),
+            'projection_mid' => round($cumulativeProfit + ($monthsRemaining * $average), 2),
+            'projection_high' => round($cumulativeProfit + ($monthsRemaining * max($basis)), 2),
         ];
     }
 

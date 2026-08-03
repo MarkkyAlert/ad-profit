@@ -61,6 +61,7 @@ $annualData = [
         'profit' => 0.0,
         'roas' => null,
         'profit_margin' => null,
+        'projection' => ['available' => false, 'reason' => 'insufficient_data'],
         'months_with_data' => 0,
         'profit_months' => 0,
         'loss_months' => 0,
@@ -144,6 +145,11 @@ if ($worstMonth !== null) {
     $worstMonthProfit = (float)($worstMonth['profit'] ?? 0);
     $worstMonthText = $monthLabel($worstMonth) . ' (' . formatMoney($worstMonthProfit) . ')';
 }
+
+// ประมาณการสิ้นปี — "ไม่ใช่ตัวเลขจริง" ต้องแยกออกจากการ์ดสรุปให้ชัด
+$projection = (array)($summary['projection'] ?? []);
+$hasProjection = ($projection['available'] ?? false) === true;
+$projectionReason = (string)($projection['reason'] ?? '');
 
 // heat map ฤดูกาล 3 ปี — ล้มเหลวก็แค่ไม่แสดง section (ไม่กระทบสรุปประจำปี)
 $heatmapYears = [];
@@ -578,6 +584,45 @@ require __DIR__ . '/includes/header.php';
             </span>
             <span class="text-slate-500">· ยิ่งเข้มยิ่งกำไร/ขาดทุนมาก (เทียบกับเดือนที่สุดในกริด)</span>
         </div>
+    </section>
+<?php endif; ?>
+
+<?php if ($hasProjection): ?>
+    <?php
+    $projectionLow = (float)($projection['projection_low'] ?? 0);
+    $projectionMid = (float)($projection['projection_mid'] ?? 0);
+    $projectionHigh = (float)($projection['projection_high'] ?? 0);
+    $projectionRemaining = (int)($projection['months_remaining'] ?? 0);
+    $projectionBasisCount = (int)($projection['basis_month_count'] ?? 0);
+    // ช่วงคร่อม 0 = ยังบอกไม่ได้ว่าจะจบปีบวกหรือลบ — ไม่ควรระบายเขียว
+    $projectionTone = $projectionHigh < 0
+        ? 'text-red-400'
+        : ($projectionLow >= 0 ? 'text-slate-200' : 'text-amber-400');
+    ?>
+    <section class="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.015] p-4 sm:p-5">
+        <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+            <h2 class="text-sm font-semibold text-slate-400">🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)</h2>
+            <span class="text-xs text-slate-500">เหลืออีก <?= e((string)$projectionRemaining) ?> เดือน</span>
+        </div>
+
+        <p class="text-xl sm:text-2xl font-bold <?= e($projectionTone) ?>">
+            <?= e(formatMoney($projectionLow)) ?> – <?= e(formatMoney($projectionHigh)) ?>
+        </p>
+        <p class="mt-1 text-sm text-slate-500">
+            กลาง <span class="font-medium text-slate-400"><?= e(formatMoney($projectionMid)) ?></span>
+        </p>
+
+        <p class="mt-3 border-t border-white/[0.06] pt-2 text-xs leading-relaxed text-slate-500">
+            สมมติเดือนที่เหลือ (<?= e((string)$projectionRemaining) ?>) ทำได้เท่า <?= e((string)$projectionBasisCount) ?> เดือนล่าสุด
+            <span class="text-slate-600">·</span>
+            ไม่คิดฤดูกาล/การเปิดรอบ — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง
+        </p>
+    </section>
+<?php elseif ($projectionReason === 'insufficient_data' && $hasAnnualData): ?>
+    <section class="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-3 sm:px-5">
+        <p class="text-xs text-slate-500">
+            🔮 ข้อมูลยังไม่พอประมาณการสิ้นปี — ต้องมีอย่างน้อย 2 เดือนที่กรอกแล้ว
+        </p>
     </section>
 <?php endif; ?>
 
