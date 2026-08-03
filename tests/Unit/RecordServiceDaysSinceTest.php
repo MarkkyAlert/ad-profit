@@ -18,7 +18,7 @@ final class RecordServiceDaysSinceTest extends TestCase
     private const TODAY = '2026-08-10';
 
     /**
-     * @param array<int,string> $recentDates วันที่ของ record ล่าสุด (เรียง DESC เหมือน repo จริง)
+     * @param array<int,string> $recentDates วันที่ของ record ทั้งหมด (เรียง DESC เหมือน repo จริง)
      */
     private function makeService(array $recentDates, bool $canAccess = true): RecordService
     {
@@ -28,7 +28,20 @@ final class RecordServiceDaysSinceTest extends TestCase
         );
 
         $recordRepository = $this->createStub(RecordRepository::class);
-        $recordRepository->method('getRecentByShopId')->willReturn($rows);
+        $recordRepository->method('getRecentByShopId')
+            ->willReturnCallback(static fn(int $shopId, int $limit = 7): array => array_slice($rows, 0, $limit));
+
+        // จำลอง SQL จริง: แถวล่าสุดที่ record_date <= cutoff (rows เรียง DESC อยู่แล้ว)
+        $recordRepository->method('findLatestOnOrBeforeDate')
+            ->willReturnCallback(static function (int $shopId, string $cutoff) use ($rows): ?array {
+                foreach ($rows as $row) {
+                    if ($row['record_date'] <= $cutoff) {
+                        return $row;
+                    }
+                }
+
+                return null;
+            });
 
         $shopRepository = $this->createStub(ShopRepository::class);
         $shopRepository->method('userCanAccessShop')->willReturn($canAccess);
@@ -97,14 +110,48 @@ final class RecordServiceDaysSinceTest extends TestCase
         $this->assertSame(222, $result['data']['days_since']);
     }
 
-    public function testFutureDatedRecordIsClampedToZero(): void
+    /**
+     * รายการที่ลงล่วงหน้าต้องไม่กลบคำเตือน
+     *
+     * เดิม clamp เป็น 0 ("มีรายการอนาคต = ไม่ถือว่าขาดการกรอก") → พิมพ์ปีผิดเป็น 2027
+     * ครั้งเดียว คำเตือน "ไม่ได้กรอกนาน" เงียบไปจนถึงปี 2027 จริง
+     */
+    public function testFutureDatedRecordDoesNotHideTheReminder(): void
     {
-        $service = $this->makeService(['2026-08-20']);
+        $service = $this->makeService(['2027-08-20', '2026-08-01']);
 
         $result = $service->getDaysSinceLastRecord(1, 1, self::TODAY);
 
         $this->assertTrue($result['data']['has_records']);
-        $this->assertSame(0, $result['data']['days_since']); // ไม่ติดลบ
+        $this->assertSame('2026-08-01', $result['data']['last_record_date']);
+        $this->assertSame(9, $result['data']['days_since']);
+    }
+
+    /** ลงล่วงหน้าแค่พรุ่งนี้ แต่วันนี้ก็กรอกแล้ว → ยังนับเป็น 0 เหมือนเดิม */
+    public function testRecordingAheadWhileAlsoRecordingTodayStaysAtZero(): void
+    {
+        $service = $this->makeService(['2026-08-11', '2026-08-10']);
+
+        $result = $service->getDaysSinceLastRecord(1, 1, self::TODAY);
+
+        $this->assertSame(0, $result['data']['days_since']);
+    }
+
+    /**
+     * มีแต่รายการล่วงหน้าอย่างเดียว → ไม่มีอะไรให้นับ แต่ก็ไม่ใช่ "ยังไม่เคยกรอก"
+     *
+     * has_records ต้องยังเป็น true ไม่งั้น dashboard จะขึ้นแบนเนอร์ชวนกรอกครั้งแรก
+     * ทั้งที่ผู้ใช้มีข้อมูลอยู่ (dashboard.php:145)
+     */
+    public function testOnlyFutureRecordsGivesNullDaysWithoutFirstRecordInvite(): void
+    {
+        $service = $this->makeService(['2027-08-20']);
+
+        $result = $service->getDaysSinceLastRecord(1, 1, self::TODAY);
+
+        $this->assertTrue($result['data']['has_records']);
+        $this->assertNull($result['data']['days_since']);
+        $this->assertNull($result['data']['last_record_date']);
     }
 
     public function testFailsWhenUserCannotAccessShop(): void

@@ -1021,9 +1021,12 @@ class RecordService
     /**
      * นับจำนวนวันนับจากรายการล่าสุดที่กรอกไว้ (ใช้เตือนว่าไม่ได้กรอกนานแล้ว)
      *
-     * แยก 2 เคสให้ชัด:
-     *  - ไม่เคยกรอกเลย  → has_records = false, days_since = null
-     *  - กรอกวันนี้      → has_records = true,  days_since = 0
+     * แยก 3 เคสให้ชัด:
+     *  - ไม่เคยกรอกเลย       → has_records = false, days_since = null
+     *  - กรอกวันนี้           → has_records = true,  days_since = 0
+     *  - มีแต่รายการล่วงหน้า  → has_records = true,  days_since = null (ไม่เตือน แต่ไม่ชวนกรอกครั้งแรก)
+     *
+     * นับจาก "วันล่าสุดที่ไม่เกินวันนี้" — รายการที่ลงล่วงหน้า (หรือพิมพ์ปีผิด) จะไม่บังคำเตือน
      *
      * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์, ไม่ส่ง = วันนี้จริง
      */
@@ -1080,10 +1083,41 @@ class RecordService
         }
         $lastObject = $lastObject->setTime(0, 0, 0);
 
-        $daysSince = (int)$lastObject->diff($todayObject)->format('%r%a');
-        if ($daysSince < 0) {
-            // รายการลงวันที่ล่วงหน้า — ไม่ถือว่าขาดการกรอก
-            $daysSince = 0;
+        // รายการล่าสุดลงวันที่ล่วงหน้า (ตั้งใจ หรือพิมพ์ปีผิด) → ถอยไปหาวันล่าสุดที่กรอกจริง
+        // ไม่งั้นรายการเดียวที่ลงปีหน้าจะกลบคำเตือน "ไม่ได้กรอกนาน" ไปทั้งปี
+        if ($lastObject > $todayObject) {
+            try {
+                $fallbackRecord = $this->recordRepository->findLatestOnOrBeforeDate(
+                    $shopId,
+                    $todayObject->format('Y-m-d')
+                );
+            } catch (Throwable $exception) {
+                error_log('[record] getDaysSinceLastRecord fallback failed: ' . $exception->getMessage());
+                return [
+                    'success' => false,
+                    'error' => 'ไม่สามารถตรวจสอบข้อมูลล่าสุดได้',
+                ];
+            }
+
+            $fallbackDate = trim((string)($fallbackRecord['record_date'] ?? ''));
+            $fallbackObject = $fallbackDate !== ''
+                ? DateTimeImmutable::createFromFormat('Y-m-d', $fallbackDate)
+                : false;
+
+            if (!$fallbackObject || $fallbackObject->format('Y-m-d') !== $fallbackDate) {
+                // มีแต่รายการล่วงหน้า — มีข้อมูลอยู่จริง จึงไม่ชวนกรอกครั้งแรก แต่ก็ยังไม่มีอะไรให้นับ
+                return [
+                    'success' => true,
+                    'data' => [
+                        'has_records' => true,
+                        'last_record_date' => null,
+                        'days_since' => null,
+                    ],
+                ];
+            }
+
+            $lastDate = $fallbackDate;
+            $lastObject = $fallbackObject->setTime(0, 0, 0);
         }
 
         return [
@@ -1091,7 +1125,7 @@ class RecordService
             'data' => [
                 'has_records' => true,
                 'last_record_date' => $lastDate,
-                'days_since' => $daysSince,
+                'days_since' => (int)$lastObject->diff($todayObject)->format('%r%a'),
             ],
         ];
     }

@@ -77,6 +77,31 @@ class RecordRepository
         return $stmt->fetchAll();
     }
 
+    /**
+     * รายการล่าสุดที่วันที่ไม่เกิน $date — ใช้นับ "ไม่ได้กรอกมากี่วัน" โดยข้ามรายการที่ลงล่วงหน้า
+     *
+     * @return array<string,mixed>|null
+     */
+    public function findLatestOnOrBeforeDate(int $shopId, string $date): ?array
+    {
+        $sql = 'SELECT id, shop_id, record_date, revenue, ad_cost, note, created_at, updated_at
+                FROM daily_records
+                WHERE shop_id = :shop_id
+                  AND record_date <= :cutoff_date
+                ORDER BY record_date DESC
+                LIMIT 1';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':shop_id' => $shopId,
+            ':cutoff_date' => $date,
+        ]);
+
+        $row = $stmt->fetch();
+
+        return is_array($row) ? $row : null;
+    }
+
     public function getByDateRange(int $shopId, string $startDate, string $endDate): array
     {
         $sql = 'SELECT id, shop_id, record_date, revenue, ad_cost, note, created_at, updated_at

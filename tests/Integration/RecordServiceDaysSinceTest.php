@@ -77,4 +77,39 @@ final class RecordServiceDaysSinceTest extends IntegrationTestCase
         $this->assertTrue($resultB['data']['has_records']);
         $this->assertSame(1, $resultB['data']['days_since']);
     }
+
+    /**
+     * พิสูจน์ SQL ของ findLatestOnOrBeforeDate กับ DB จริง
+     * (unit test จำลอง repo ไว้ จึงไม่ได้ยิง WHERE record_date <= :cutoff จริง)
+     */
+    public function testFutureDatedRecordFallsBackToLatestRecordUpToToday(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $this->createRecord($shopId, '2026-08-01', 200.0, 20.0);
+        $this->createRecord($shopId, '2026-07-15', 100.0, 10.0);
+        $this->createRecord($shopId, '2027-08-20', 500.0, 50.0); // พิมพ์ปีผิด
+
+        $result = $this->makeService()->getDaysSinceLastRecord($userId, $shopId, self::TODAY);
+
+        $this->assertSame('2026-08-01', $result['data']['last_record_date']);
+        $this->assertSame(9, $result['data']['days_since']);
+    }
+
+    public function testFallbackIsScopedToTheSameShop(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        $this->createRecord($shopA, '2027-08-20', 500.0, 50.0); // ร้าน A มีแต่รายการอนาคต
+        $this->createRecord($shopB, '2026-08-05', 100.0, 10.0); // ร้าน B ต้องไม่ถูกหยิบมาใช้
+
+        $result = $this->makeService()->getDaysSinceLastRecord($userId, $shopA, self::TODAY);
+
+        $this->assertTrue($result['data']['has_records']);
+        $this->assertNull($result['data']['days_since']);
+        $this->assertNull($result['data']['last_record_date']);
+    }
 }
