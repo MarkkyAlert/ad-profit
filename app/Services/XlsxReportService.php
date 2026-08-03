@@ -35,6 +35,24 @@ class XlsxReportService
     private const NEGATIVE_FONT_ARGB = 'FFC00000';
     private const POSITIVE_FONT_ARGB = 'FF107C41';
     private const PENDING_FONT_ARGB = 'FFB45309';
+    private const GRID_LINE_ARGB = 'FFD9D9D9';
+    private const BAND_FILL_ARGB = 'FFF4F7FB';
+    private const HEADER_ROW_HEIGHT = 22;
+
+    /** ฟอนต์ทั้ง workbook — Tahoma เรนเดอร์ไทยคมกว่า Calibri (ที่ต้อง fallback) */
+    private const BASE_FONT = 'Tahoma';
+    private const BASE_FONT_SIZE = 10;
+
+    /** สีแท็บแยกกลุ่ม: ร้านเดี่ยว = น้ำเงินไล่เฉด · เป้าหมาย/ฤดูกาล/พอร์ต = คนละโทน */
+    private const TAB_COLORS = [
+        'รายปี' => 'FF1F4E79',
+        'รายเดือน' => 'FF2E75B6',
+        'รายวัน' => 'FF8EA9DB',
+        'เป้าหมาย' => 'FF548235',
+        'ฤดูกาล' => 'FFBF8F00',
+        'เทียบร้าน' => 'FF7030A0',
+    ];
+
     private const PERCENT_FORMAT = '0.0"%"';
     private const MONEY_FORMAT = '#,##0.00';
     private const RATIO_FORMAT = '0.00';
@@ -50,17 +68,18 @@ class XlsxReportService
         $noteColumn = Coordinate::stringFromColumnIndex((int)($payload['note_column_index'] ?? 6));
 
         $spreadsheet = new Spreadsheet();
+        $spreadsheet->getDefaultStyle()->getFont()
+            ->setName(self::BASE_FONT)
+            ->setSize(self::BASE_FONT_SIZE);
+
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('รายวัน');
+        $this->applyReportLook($sheet, self::TAB_COLORS['รายวัน']);
 
         $sheet->fromArray(['วันที่', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'โน้ต'], null, 'A1');
 
         $headerRange = 'A1:' . $noteColumn . '1';
-        $sheet->getStyle($headerRange)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
-        $sheet->getStyle($headerRange)->getFill()
-            ->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setARGB(self::HEADER_FILL_ARGB);
-        $sheet->getStyle($headerRange)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $this->styleHeaderRow($sheet, $headerRange);
 
         // ตรึงแถวหัว — เลื่อนดูทั้งปีแล้วยังเห็นชื่อคอลัมน์
         $sheet->freezePane('A2');
@@ -124,6 +143,10 @@ class XlsxReportService
         $sheet->getStyle('B2:D' . $totalsRowNumber)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
         $sheet->getStyle('E2:E' . $totalsRowNumber)->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
 
+        if ($lastDataRow >= 2) {
+            $this->styleTableBody($sheet, $headerRange, 'A2:' . $noteColumn . $lastDataRow);
+        }
+
         foreach (range('A', $noteColumn) as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
@@ -151,6 +174,7 @@ class XlsxReportService
 
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('รายเดือน');
+        $this->applyReportLook($sheet, self::TAB_COLORS['รายเดือน']);
 
         $sheet->fromArray(
             [
@@ -163,11 +187,7 @@ class XlsxReportService
         );
 
         $headerRange = 'A1:K1';
-        $sheet->getStyle($headerRange)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
-        $sheet->getStyle($headerRange)->getFill()
-            ->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setARGB(self::HEADER_FILL_ARGB);
-        $sheet->getStyle($headerRange)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $this->styleHeaderRow($sheet, $headerRange);
         $sheet->freezePane('A2');
 
         $rowNumber = 2;
@@ -225,6 +245,7 @@ class XlsxReportService
             $sheet->getStyle('H2:H' . $lastRow)->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
             $sheet->getStyle('I2:K' . $lastRow)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
             $sheet->setAutoFilter('A1:K' . $lastRow);
+            $this->styleTableBody($sheet, $headerRange, 'A2:K' . $lastRow);
         }
 
         foreach (range('A', 'K') as $column) {
@@ -253,6 +274,7 @@ class XlsxReportService
     {
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('รายปี');
+        $this->applyReportLook($sheet, self::TAB_COLORS['รายปี']);
 
         $sheet->setCellValueExplicit(
             'A1',
@@ -392,6 +414,7 @@ class XlsxReportService
 
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('เป้าหมาย');
+        $this->applyReportLook($sheet, self::TAB_COLORS['เป้าหมาย']);
 
         $sheet->setCellValueExplicit(
             'A1',
@@ -457,6 +480,11 @@ class XlsxReportService
             $sheet->getStyle('H' . ($headerRow + 1) . ':H' . $lastRow)
                 ->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
             $sheet->setAutoFilter('A' . $headerRow . ':I' . $lastRow);
+            $this->styleTableBody(
+                $sheet,
+                'A' . $headerRow . ':I' . $headerRow,
+                'A' . ($headerRow + 1) . ':I' . $lastRow
+            );
         }
 
         foreach (range('A', 'I') as $column) {
@@ -529,6 +557,7 @@ class XlsxReportService
 
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('ฤดูกาล');
+        $this->applyReportLook($sheet, self::TAB_COLORS['ฤดูกาล']);
 
         $sheet->setCellValueExplicit('A1', 'ฤดูกาลกำไร (3 ปี)', DataType::TYPE_STRING);
         $sheet->mergeCells('A1:M1');
@@ -579,6 +608,13 @@ class XlsxReportService
             $dataRange = 'B' . ($headerRow + 1) . ':M' . $lastRow;
             $sheet->getStyle($dataRange)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
             $sheet->setConditionalStyles($dataRange, $this->buildProfitConditionals());
+            // ไม่ band — กริดนี้ใช้ conditional formatting ระบายสีอยู่แล้ว จะตีกัน
+            $this->styleTableBody(
+                $sheet,
+                'A' . $headerRow . ':M' . $headerRow,
+                'A' . ($headerRow + 1) . ':M' . $lastRow,
+                false
+            );
         }
 
         foreach (range('A', 'M') as $column) {
@@ -621,7 +657,58 @@ class XlsxReportService
         $sheet->getStyle($range)->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB(self::HEADER_FILL_ARGB);
-        $sheet->getStyle($range)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle($range)->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+            ->setVertical(Alignment::VERTICAL_CENTER);
+
+        // แถวหัวสูงขึ้น — ให้ตารางมีที่หายใจ ไม่อัดกันเป็นพืด
+        $headerRowNumber = (int)preg_replace('/\D/', '', explode(':', $range)[0]);
+        if ($headerRowNumber > 0) {
+            $sheet->getRowDimension($headerRowNumber)->setRowHeight(self::HEADER_ROW_HEIGHT);
+        }
+    }
+
+    /**
+     * ลุคพื้นฐานของทุกชีต — ปิดเส้นตารางของ Excel แล้ววาดเส้นเองเฉพาะที่ต้องการ
+     * (จุดที่เปลี่ยนความรู้สึกจาก "สเปรดชีตดิบ" เป็น "รายงาน" มากที่สุด)
+     */
+    private function applyReportLook(Worksheet $sheet, string $tabColorArgb): void
+    {
+        $sheet->setShowGridlines(false);
+        $sheet->getTabColor()->setARGB($tabColorArgb);
+    }
+
+    /**
+     * เส้นขอบบาง + แถบสลับสีให้ตารางอ่านง่าย
+     *
+     * @param string $dataRange ช่วงแถวข้อมูล (ไม่รวมหัว)
+     */
+    private function styleTableBody(Worksheet $sheet, string $headerRange, string $dataRange, bool $banded = true): void
+    {
+        // ครอบตั้งแต่มุมซ้ายบนของหัว ถึงมุมขวาล่างของข้อมูล
+        // (ต่อ string ตรง ๆ จะได้ 'A1:F1:F4' ซึ่งเป็น range ที่ Excel ไม่รู้จัก → เส้นไม่ติด)
+        $sheet->getStyle(explode(':', $headerRange)[0] . ':' . explode(':', $dataRange)[1])
+            ->getBorders()->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN)
+            ->getColor()->setARGB(self::GRID_LINE_ARGB);
+
+        if (!$banded) {
+            return;
+        }
+
+        [$start, $end] = explode(':', $dataRange);
+        $startColumn = (string)preg_replace('/\d/', '', $start);
+        $endColumn = (string)preg_replace('/\d/', '', $end);
+        $firstRow = (int)preg_replace('/\D/', '', $start);
+        $lastRow = (int)preg_replace('/\D/', '', $end);
+
+        // ระบายเว้นแถว — อ่านตารางยาว ๆ ไม่หลุดบรรทัด
+        for ($row = $firstRow + 1; $row <= $lastRow; $row += 2) {
+            $sheet->getStyle($startColumn . $row . ':' . $endColumn . $row)
+                ->getFill()
+                ->setFillType(Fill::FILL_SOLID)
+                ->getStartColor()->setARGB(self::BAND_FILL_ARGB);
+        }
     }
 
     /**
@@ -638,6 +725,7 @@ class XlsxReportService
 
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('เทียบร้าน');
+        $this->applyReportLook($sheet, self::TAB_COLORS['เทียบร้าน']);
 
         $sheet->setCellValueExplicit(
             'A1',
@@ -655,11 +743,7 @@ class XlsxReportService
         );
 
         $headerRange = 'A' . $headerRow . ':H' . $headerRow;
-        $sheet->getStyle($headerRange)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
-        $sheet->getStyle($headerRange)->getFill()
-            ->setFillType(Fill::FILL_SOLID)
-            ->getStartColor()->setARGB(self::HEADER_FILL_ARGB);
-        $sheet->getStyle($headerRange)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $this->styleHeaderRow($sheet, $headerRange);
         $sheet->freezePane('A' . ($headerRow + 1));
 
         $rowNumber = $headerRow + 1;
@@ -712,6 +796,7 @@ class XlsxReportService
             $sheet->getStyle('F' . ($headerRow + 1) . ':G' . $lastShopRow)
                 ->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
             $sheet->setAutoFilter('A' . $headerRow . ':H' . $lastShopRow);
+            $this->styleTableBody($sheet, $headerRange, 'A' . ($headerRow + 1) . ':H' . $lastShopRow);
         }
 
         $this->writeComparisonSummary($sheet, $summary, $lastShopRow + 2);
