@@ -78,8 +78,8 @@ class OverviewDailyService
             ];
         }
 
-        $dailyRows = $this->buildDailyRows($dailyTotals);
-        $summary = $this->buildSummary($dailyRows);
+        $dailyRows = $this->buildDailyRows($dailyTotals, $shopsCount);
+        $summary = $this->buildSummary($dailyRows, $shopsCount);
         $chart = $this->buildChart($dailyRows);
         $shopRows = $this->buildShopRows($shopTotals, $shopNameById);
 
@@ -97,7 +97,7 @@ class OverviewDailyService
         ];
     }
 
-    private function buildDailyRows(array $dailyTotals): array
+    private function buildDailyRows(array $dailyTotals, int $totalShops): array
     {
         $rows = [];
 
@@ -105,6 +105,7 @@ class OverviewDailyService
             $revenue = (float)($row['total_revenue'] ?? 0);
             $adCost = (float)($row['total_ad_cost'] ?? 0);
             $profit = $revenue - $adCost;
+            $shopsCount = (int)($row['shops_count'] ?? 0);
 
             $rows[] = [
                 'record_date' => (string)($row['record_date'] ?? ''),
@@ -113,21 +114,46 @@ class OverviewDailyService
                 'profit' => $profit,
                 'roas' => $adCost > 0 ? round($revenue / $adCost, 2) : null,
                 'profit_margin' => $revenue > 0 ? round(($profit / $revenue) * 100, 1) : null,
-                'shops_count' => (int)($row['shops_count'] ?? 0),
+                'shops_count' => $shopsCount,
+                // วันที่บางร้านยังไม่กรอก — ยอดรวมของวันนั้นเทียบกับวันอื่นตรง ๆ ไม่ได้
+                'is_complete' => $shopsCount >= $totalShops,
             ];
         }
 
         return $rows;
     }
 
-    private function buildSummary(array $dailyRows): array
+    private function buildSummary(array $dailyRows, int $totalShops): array
     {
         $totalRevenue = 0.0;
         $totalAdCost = 0.0;
+        $bestDay = null;
+        $worstDay = null;
+        $incompleteDays = 0;
 
         foreach ($dailyRows as $row) {
             $totalRevenue += (float)($row['total_revenue'] ?? 0);
             $totalAdCost += (float)($row['total_ad_cost'] ?? 0);
+
+            // จัดอันดับด้วยกำไร — วันรายได้สูงสุดอาจแอดหนักจนกำไรน้อย
+            // (dailyRows มีเฉพาะวันที่มี record อยู่แล้ว จึงไม่ต้องกันวันว่าง)
+            $dayProfit = (float)($row['profit'] ?? 0);
+            $day = [
+                'record_date' => (string)($row['record_date'] ?? ''),
+                'profit' => $dayProfit,
+            ];
+
+            if ($bestDay === null || $dayProfit > (float)$bestDay['profit']) {
+                $bestDay = $day;
+            }
+
+            if ($worstDay === null || $dayProfit < (float)$worstDay['profit']) {
+                $worstDay = $day;
+            }
+
+            if (($row['is_complete'] ?? true) !== true) {
+                $incompleteDays++;
+            }
         }
 
         $profit = $totalRevenue - $totalAdCost;
@@ -141,6 +167,11 @@ class OverviewDailyService
             'profit_margin' => $totalRevenue > 0 ? round(($profit / $totalRevenue) * 100, 1) : null,
             'days_count' => $daysCount,
             'avg_revenue_per_day' => $daysCount > 0 ? round($totalRevenue / $daysCount, 2) : null,
+            'avg_profit_per_day' => $daysCount > 0 ? round($profit / $daysCount, 2) : null,
+            'best_day' => $bestDay,
+            'worst_day' => $worstDay,
+            'total_shops' => $totalShops,
+            'incomplete_days' => $incompleteDays,
         ];
     }
 

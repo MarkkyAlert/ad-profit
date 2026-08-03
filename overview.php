@@ -119,6 +119,11 @@ if ($view === 'day') {
             'profit_margin' => null,
             'days_count' => 0,
             'avg_revenue_per_day' => null,
+            'avg_profit_per_day' => null,
+            'best_day' => null,
+            'worst_day' => null,
+            'total_shops' => 0,
+            'incomplete_days' => 0,
         ],
         'chart' => [
             'dates' => [],
@@ -425,6 +430,13 @@ require __DIR__ . '/includes/header.php';
             $dayAvgRevenue = isset($dailySummary['avg_revenue_per_day']) && $dailySummary['avg_revenue_per_day'] !== null
                 ? (float)$dailySummary['avg_revenue_per_day']
                 : null;
+            $dayAvgProfit = isset($dailySummary['avg_profit_per_day']) && $dailySummary['avg_profit_per_day'] !== null
+                ? (float)$dailySummary['avg_profit_per_day']
+                : null;
+            $dayBest = is_array($dailySummary['best_day'] ?? null) ? (array)$dailySummary['best_day'] : null;
+            $dayWorst = is_array($dailySummary['worst_day'] ?? null) ? (array)$dailySummary['worst_day'] : null;
+            $dayTotalShops = (int)($dailySummary['total_shops'] ?? 0);
+            $dayIncompleteDays = (int)($dailySummary['incomplete_days'] ?? 0);
             ?>
 
             <?php if (!$hasDailyData): ?>
@@ -456,6 +468,50 @@ require __DIR__ . '/includes/header.php';
                 </article>
             </section>
 
+            <?php if ($dayAvgProfit !== null || $dayBest !== null): ?>
+                <section class="section-card mt-4 px-4 py-3 sm:px-5">
+                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-400">
+                        <?php if ($dayAvgProfit !== null): ?>
+                            เฉลี่ยกำไร/วัน
+                            <span class="font-bold <?= $dayAvgProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>">
+                                <?= e(formatMoney($dayAvgProfit)) ?>
+                            </span>
+                            <?php if ($dayAvgRevenue !== null): ?>
+                                <span class="text-xs text-slate-500">(รายได้ <?= e(formatMoney($dayAvgRevenue)) ?>)</span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+
+                        <?php if ($dayBest !== null): ?>
+                            <?php
+                            $bestDayProfit = (float)($dayBest['profit'] ?? 0);
+                            $worstDayProfit = $dayWorst !== null ? (float)($dayWorst['profit'] ?? 0) : null;
+                            ?>
+                            <span class="text-slate-600">·</span>
+                            วันกำไรดีสุด
+                            <span class="font-bold <?= $bestDayProfit < 0 ? 'text-red-400' : 'text-green-400' ?>">
+                                <?= e(formatThaiDate((string)($dayBest['record_date'] ?? ''))) ?>
+                                (<?= e(formatMoney($bestDayProfit)) ?>)
+                            </span>
+                            <?php if ($dayWorst !== null): ?>
+                                <span class="text-slate-600">·</span>
+                                แย่สุด
+                                <span class="font-bold <?= ($worstDayProfit ?? 0) >= 0 ? 'text-slate-300' : 'text-red-400' ?>">
+                                    <?= e(formatThaiDate((string)($dayWorst['record_date'] ?? ''))) ?>
+                                    (<?= e(formatMoney($worstDayProfit ?? 0)) ?>)
+                                </span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if ($dayIncompleteDays > 0): ?>
+                        <p class="mt-2 border-t border-white/[0.06] pt-2 text-xs text-amber-400">
+                            ⚠️ <?= e((string)$dayIncompleteDays) ?> วันที่ยังกรอกไม่ครบทุกร้าน —
+                            <span class="text-slate-500">ยอดรวมของวันเหล่านั้นเทียบกับวันอื่นตรง ๆ ไม่ได้</span>
+                        </p>
+                    <?php endif; ?>
+                </section>
+            <?php endif; ?>
+
             <section class="section-card mt-6 p-4 sm:p-5">
                 <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางรายวัน (รวมทุกร้าน)</h2>
                 <div class="overflow-x-auto">
@@ -468,12 +524,15 @@ require __DIR__ . '/includes/header.php';
                                 <th class="px-3 py-2">กำไร</th>
                                 <th class="px-3 py-2">ROAS</th>
                                 <th class="px-3 py-2">อัตรากำไร</th>
+                                <th class="px-3 py-2">ร้านที่กรอก</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($dailyRows as $row): ?>
                                 <?php
                                 $rowDate = (string)($row['record_date'] ?? '');
+                                $rowShopsCount = (int)($row['shops_count'] ?? 0);
+                                $rowIsComplete = ($row['is_complete'] ?? true) === true;
                                 $rowRevenue = (float)($row['total_revenue'] ?? 0);
                                 $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
                                 $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
@@ -488,6 +547,9 @@ require __DIR__ . '/includes/header.php';
                                     <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
                                     <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                                    <td class="px-3 py-2 font-medium <?= $rowIsComplete ? 'text-slate-400' : 'text-amber-400' ?>">
+                                        <?= e($rowShopsCount . '/' . $dayTotalShops) ?> ร้าน<?= $rowIsComplete ? '' : ' ⚠️' ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -499,6 +561,9 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-3 py-3 <?= $dayProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($dayProfit)) ?></td>
                                 <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($dayRoas)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($dayProfitMargin)) ?></td>
+                                <td class="px-3 py-3 <?= $dayIncompleteDays > 0 ? 'text-amber-400' : 'text-slate-300' ?>">
+                                    <?= e($dayIncompleteDays > 0 ? $dayIncompleteDays . ' วันไม่ครบ' : 'ครบทุกวัน') ?>
+                                </td>
                             </tr>
                         </tfoot>
                     </table>
