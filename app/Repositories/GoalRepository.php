@@ -47,6 +47,30 @@ class GoalRepository
         return $goal ?: null;
     }
 
+    /**
+     * ดึงเป้าหลายเดือนในครั้งเดียว — goal_month เป็น CHAR(7) 'YYYY-MM' จึงเทียบ BETWEEN แบบ string ได้
+     * mirror pattern ของ RecordRepository::getMonthlyTotalsByMonthRange
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function getByShopAndMonthRange(int $shopId, string $startMonth, string $endMonth): array
+    {
+        $sql = 'SELECT id, shop_id, goal_month, target_revenue, target_profit, created_at, updated_at
+                FROM monthly_goals
+                WHERE shop_id = :shop_id
+                  AND goal_month BETWEEN :start_month AND :end_month
+                ORDER BY goal_month ASC';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':shop_id' => $shopId,
+            ':start_month' => $startMonth,
+            ':end_month' => $endMonth,
+        ]);
+
+        return $stmt->fetchAll();
+    }
+
     public function deleteByShopAndMonth(int $shopId, string $goalMonth): bool
     {
         $sql = 'DELETE FROM monthly_goals

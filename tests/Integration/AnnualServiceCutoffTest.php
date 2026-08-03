@@ -7,6 +7,7 @@ namespace Tests\Integration;
 require_once __DIR__ . '/IntegrationTestCase.php';
 
 use AnnualService;
+use GoalRepository;
 use RecordRepository;
 use ShopRepository;
 
@@ -21,7 +22,8 @@ final class AnnualServiceCutoffTest extends IntegrationTestCase
     {
         return new AnnualService(
             new RecordRepository($this->pdo),
-            new ShopRepository($this->pdo)
+            new ShopRepository($this->pdo),
+            new GoalRepository($this->pdo)
         );
     }
 

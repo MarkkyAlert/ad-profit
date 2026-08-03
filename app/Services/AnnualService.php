@@ -6,11 +6,16 @@ class AnnualService
 {
     private RecordRepository $recordRepository;
     private ShopRepository $shopRepository;
+    private GoalRepository $goalRepository;
 
-    public function __construct(RecordRepository $recordRepository, ShopRepository $shopRepository)
-    {
+    public function __construct(
+        RecordRepository $recordRepository,
+        ShopRepository $shopRepository,
+        GoalRepository $goalRepository
+    ) {
         $this->recordRepository = $recordRepository;
         $this->shopRepository = $shopRepository;
+        $this->goalRepository = $goalRepository;
     }
 
     /**
@@ -97,6 +102,29 @@ class AnnualService
             }
         }
 
+        // เป้าทั้งปี — ดึงครั้งเดียวแล้ว map ตาม goal_month (ไม่ query รายเดือนในลูป)
+        $goalsByMonthKey = [];
+        if ($lastMonth > 0) {
+            try {
+                $goals = $this->goalRepository->getByShopAndMonthRange(
+                    $shopId,
+                    sprintf('%04d-01', $year),
+                    sprintf('%04d-12', $year)
+                );
+            } catch (Throwable $exception) {
+                error_log('[annual] buildYearlySummary goals failed: ' . $exception->getMessage());
+                $goals = [];
+            }
+
+            foreach ($goals as $row) {
+                $goalMonth = (string)($row['goal_month'] ?? '');
+                if ($goalMonth !== '') {
+                    $goalsByMonthKey[$goalMonth] = $row;
+                }
+            }
+        }
+
+        $goalProgress = [];
         $previousYearProfit = 0.0;
         $months = [];
         $totalRevenue = 0.0;
@@ -165,6 +193,32 @@ class AnnualService
                 }
             }
 
+            // เฉพาะเดือนที่ "ตั้งเป้าไว้" เท่านั้น — เดือนไม่มีเป้าไม่ควรโผล่เป็นแถวว่าง
+            // (ลูปวิ่งแค่ 1..lastMonth อยู่แล้ว → เป้าเดือนอนาคตถูก cutoff ตัดทิ้งโดยปริยาย)
+            $goal = $goalsByMonthKey[$monthKey] ?? null;
+            if ($goal !== null) {
+                $targetRevenue = $goal['target_revenue'] !== null ? (float)$goal['target_revenue'] : null;
+                $targetProfit = $goal['target_profit'] !== null ? (float)$goal['target_profit'] : null;
+
+                $goalProgress[] = [
+                    'month' => $month,
+                    'month_key' => $monthKey,
+                    'target_revenue' => $targetRevenue,
+                    'target_profit' => $targetProfit,
+                    'actual_revenue' => $monthRevenue,
+                    'actual_profit' => $monthProfit,
+                    // เป้า 0 หารไม่ได้ → null (ไม่ใช่ 0% ที่จะอ่านว่า "ยังไม่คืบ")
+                    'revenue_progress' => $targetRevenue !== null && $targetRevenue > 0
+                        ? round(($monthRevenue / $targetRevenue) * 100, 1)
+                        : null,
+                    'profit_progress' => $targetProfit !== null && $targetProfit > 0
+                        ? round(($monthProfit / $targetProfit) * 100, 1)
+                        : null,
+                    'revenue_reached' => $targetRevenue !== null ? $monthRevenue >= $targetRevenue : null,
+                    'profit_reached' => $targetProfit !== null ? $monthProfit >= $targetProfit : null,
+                ];
+            }
+
             $months[] = $monthRow;
             $totalRevenue += $monthRevenue;
             $totalAdCost += $monthAdCost;
@@ -179,6 +233,7 @@ class AnnualService
                 'has_data' => $monthsWithData > 0,
                 'last_month' => $lastMonth,
                 'months' => $months,
+                'goal_progress' => $goalProgress,
                 'summary' => [
                     'total_revenue' => $totalRevenue,
                     'total_ad_cost' => $totalAdCost,

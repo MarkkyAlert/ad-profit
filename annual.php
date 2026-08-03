@@ -27,7 +27,8 @@ if ($selectedYear < 2000 || $selectedYear > 2100) {
 
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
-$annualService = new AnnualService($recordRepository, $shopRepository);
+$goalRepository = new GoalRepository($pdo);
+$annualService = new AnnualService($recordRepository, $shopRepository, $goalRepository);
 
 $annualResult = $annualService->buildYearlySummary($userId, $shopId, $selectedYear);
 
@@ -52,6 +53,7 @@ $annualError = null;
 $annualData = [
     'year' => $selectedYear,
     'months' => $zeroMonths,
+    'goal_progress' => [],
     'summary' => [
         'total_revenue' => 0.0,
         'total_ad_cost' => 0.0,
@@ -130,6 +132,12 @@ if ($worstMonth !== null) {
     $worstMonthProfit = (float)($worstMonth['profit'] ?? 0);
     $worstMonthText = $monthLabel($worstMonth) . ' (' . formatMoney($worstMonthProfit) . ')';
 }
+
+// เป้ารายเดือน — service ใส่มาเฉพาะเดือนที่ตั้งเป้าไว้ และไม่เกิน cutoff
+$goalProgress = array_values(array_filter(
+    (array)($annualData['goal_progress'] ?? []),
+    static fn($row): bool => is_array($row)
+));
 
 $totalDaysCount = array_sum(array_map(static fn(array $row): int => (int)($row['days_count'] ?? 0), $months));
 $totalProfitPerDay = $totalDaysCount > 0 ? round($totalProfit / $totalDaysCount, 2) : null;
@@ -298,6 +306,71 @@ require __DIR__ . '/includes/header.php';
         </div>
     <?php endif; ?>
 </section>
+
+<?php if (count($goalProgress) > 0): ?>
+    <section class="section-card mt-6 p-4 sm:p-5">
+        <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+            <h2 class="text-base sm:text-lg font-semibold text-slate-100">🎯 เป้าหมายรายเดือน</h2>
+            <span class="text-xs text-slate-400">เฉพาะเดือนที่ตั้งเป้าไว้ (<?= e((string)count($goalProgress)) ?> เดือน)</span>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <?php foreach ($goalProgress as $goalRow): ?>
+                <?php
+                $goalMonthLabel = $monthLabel($goalRow);
+                $goalTargetRevenue = isset($goalRow['target_revenue']) && $goalRow['target_revenue'] !== null
+                    ? (float)$goalRow['target_revenue']
+                    : null;
+                $goalTargetProfit = isset($goalRow['target_profit']) && $goalRow['target_profit'] !== null
+                    ? (float)$goalRow['target_profit']
+                    : null;
+                $goalActualRevenue = (float)($goalRow['actual_revenue'] ?? 0);
+                $goalActualProfit = (float)($goalRow['actual_profit'] ?? 0);
+                ?>
+                <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                    <p class="text-sm font-semibold text-slate-200"><?= e($goalMonthLabel) ?></p>
+
+                    <?php if ($goalTargetRevenue !== null): ?>
+                        <?php
+                        $revenueReached = ($goalRow['revenue_reached'] ?? false) === true;
+                        $revenueProgress = isset($goalRow['revenue_progress']) && $goalRow['revenue_progress'] !== null
+                            ? (float)$goalRow['revenue_progress']
+                            : null;
+                        ?>
+                        <p class="mt-2 text-xs text-slate-400">รายได้</p>
+                        <p class="text-sm font-medium <?= $revenueReached ? 'text-green-400' : 'text-amber-400' ?>">
+                            <?= e($revenueReached ? '✓ ' : '') ?><?= e(formatMoney($goalActualRevenue)) ?>
+                            <span class="text-slate-500">/ <?= e(formatMoney($goalTargetRevenue)) ?></span>
+                            <?php if ($revenueProgress !== null): ?>
+                                (<?= e(number_format($revenueProgress, 1)) ?>%)
+                            <?php endif; ?>
+                        </p>
+                    <?php endif; ?>
+
+                    <?php if ($goalTargetProfit !== null): ?>
+                        <?php
+                        $profitReached = ($goalRow['profit_reached'] ?? false) === true;
+                        $profitProgress = isset($goalRow['profit_progress']) && $goalRow['profit_progress'] !== null
+                            ? (float)$goalRow['profit_progress']
+                            : null;
+                        // กำไรติดลบต้องเด่นเป็นแดง แม้จะยังไม่ถึงเป้าเหมือนกัน
+                        $profitToneClass = $goalActualProfit < 0
+                            ? 'text-red-400'
+                            : ($profitReached ? 'text-green-400' : 'text-amber-400');
+                        ?>
+                        <p class="mt-2 text-xs text-slate-400">กำไร</p>
+                        <p class="text-sm font-medium <?= e($profitToneClass) ?>">
+                            <?= e($profitReached ? '✓ ' : '') ?><?= e(formatMoney($goalActualProfit)) ?>
+                            <span class="text-slate-500">/ <?= e(formatMoney($goalTargetProfit)) ?></span>
+                            <?php if ($profitProgress !== null): ?>
+                                (<?= e(number_format($profitProgress, 1)) ?>%)
+                            <?php endif; ?>
+                        </p>
+                    <?php endif; ?>
+                </article>
+            <?php endforeach; ?>
+        </div>
+    </section>
+<?php endif; ?>
 
 <section class="section-card mt-6 p-4 sm:p-5">
     <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางเทียบรายเดือน (<?= e((string)count($months)) ?> เดือน)</h2>

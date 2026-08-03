@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use AnnualService;
+use GoalRepository;
 use PHPUnit\Framework\TestCase;
 use RecordRepository;
 use ShopRepository;
@@ -37,7 +38,7 @@ final class AnnualServiceCutoffTest extends TestCase
         $shopRepository = $this->createStub(ShopRepository::class);
         $shopRepository->method('userCanAccessShop')->willReturn(true);
 
-        return new AnnualService($recordRepository, $shopRepository);
+        return new AnnualService($recordRepository, $shopRepository, $this->createStub(GoalRepository::class));
     }
 
     /**

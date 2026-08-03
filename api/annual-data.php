@@ -34,7 +34,8 @@ if ($selectedYear < 2000 || $selectedYear > 2100) {
 
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
-$annualService = new AnnualService($recordRepository, $shopRepository);
+$goalRepository = new GoalRepository($pdo);
+$annualService = new AnnualService($recordRepository, $shopRepository, $goalRepository);
 
 $result = $annualService->buildYearlySummary($userId, $shopId, $selectedYear);
 
