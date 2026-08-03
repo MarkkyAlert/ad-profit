@@ -475,7 +475,7 @@ require __DIR__ . '/includes/header.php';
 
             <section class="section-card mt-6 p-4 sm:p-5">
                 <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                    <h2 class="text-base sm:text-lg font-semibold text-slate-100">เปรียบเทียบระหว่างร้าน (จัดอันดับตามยอดขาย)</h2>
+                    <h2 class="text-base sm:text-lg font-semibold text-slate-100">เปรียบเทียบระหว่างร้าน (จัดอันดับตามกำไร)</h2>
                     <span class="text-xs text-slate-400">รวมทั้งเดือน <?= e($selectedMonth) ?></span>
                 </div>
                 <div class="overflow-x-auto">
@@ -698,7 +698,7 @@ require __DIR__ . '/includes/header.php';
 
             <section class="section-card mt-6 p-4 sm:p-5">
                 <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                    <h2 class="text-base sm:text-lg font-semibold text-slate-100">ตารางเปรียบเทียบรายปี (จัดอันดับตามยอดขาย)</h2>
+                    <h2 class="text-base sm:text-lg font-semibold text-slate-100">ตารางเปรียบเทียบรายปี (จัดอันดับตามกำไร)</h2>
                     <span class="text-xs text-slate-400">รวมปี <?= e((string)($selectedYear + 543)) ?> (พ.ศ.)</span>
                 </div>
                 <div class="overflow-x-auto">
