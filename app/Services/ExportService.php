@@ -70,17 +70,19 @@ class ExportService
                 : null;
             $note = (string)($record['note'] ?? '');
 
-            $compareText = '–';
+            // ค่าที่ไม่มี → เซลล์ว่าง (ให้ Excel มองเป็น blank ไม่ใช่ข้อความ '–')
+            $compareText = '';
             if ($comparePercent !== null) {
                 $compareText = ($comparePercent > 0 ? '+' : '') . number_format($comparePercent, 1) . '%';
             }
 
             $rows[] = [
-                formatThaiDate((string)($record['record_date'] ?? '')),
+                // ISO YYYY-MM-DD — Excel sort/filter/pivot ได้ตรง (record_date จาก DB เป็น Y-m-d อยู่แล้ว)
+                (string)($record['record_date'] ?? ''),
                 number_format($revenue, 2, '.', ''),
                 number_format($adCost, 2, '.', ''),
                 number_format($profit, 2, '.', ''),
-                $roas === null ? '–' : number_format($roas, 2, '.', ''),
+                $roas === null ? '' : number_format($roas, 2, '.', ''),
                 $compareText,
                 $note,
             ];
@@ -91,9 +93,9 @@ class ExportService
             number_format((float)($totals['total_revenue'] ?? 0), 2, '.', ''),
             number_format((float)($totals['total_ad_cost'] ?? 0), 2, '.', ''),
             number_format((float)($totals['total_profit'] ?? 0), 2, '.', ''),
-            isset($totals['avg_roas']) && $totals['avg_roas'] !== null ? number_format((float)$totals['avg_roas'], 2, '.', '') : '–',
-            '–',
-            '–',
+            isset($totals['avg_roas']) && $totals['avg_roas'] !== null ? number_format((float)$totals['avg_roas'], 2, '.', '') : '',
+            '',
+            '',
         ];
 
         return [
@@ -104,6 +106,10 @@ class ExportService
                 'headers' => ['วันที่', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'เทียบเมื่อวาน', 'โน้ต'],
                 'rows' => $rows,
                 'totals_row' => $totalsRow,
+                // คอลัมน์เดียวที่มาจากผู้ใช้ → controller sanitize เฉพาะช่องนี้
+                'note_column_index' => 6,
+                // ให้ controller เว้น 1 บรรทัดก่อนแถวรวม เพื่อให้ Excel ตัดขอบตารางตรงนั้น
+                'blank_row_before_totals' => true,
             ],
         ];
     }

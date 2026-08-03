@@ -52,6 +52,8 @@ $month = (string)($payload['month'] ?? $selectedMonth);
 $headers = array_values((array)($payload['headers'] ?? []));
 $rows = array_values((array)($payload['rows'] ?? []));
 $totalsRow = array_values((array)($payload['totals_row'] ?? []));
+$noteColumnIndex = isset($payload['note_column_index']) ? (int)$payload['note_column_index'] : null;
+$blankRowBeforeTotals = (bool)($payload['blank_row_before_totals'] ?? false);
 
 $filenameUtf8 = $exportService->buildMonthlyCsvFilename($shopName, $month);
 $asciiBase = preg_replace('/[^A-Za-z0-9._-]/', '_', pathinfo($filenameUtf8, PATHINFO_FILENAME)) ?? 'export';
@@ -97,16 +99,30 @@ echo "\xEF\xBB\xBF";
 // ส่ง $escape เป็น '' ทุกจุด: PHP 8.4+ deprecate การไม่ระบุค่านี้ ซึ่งถ้า display_errors เปิด
 // (โหมด development) ข้อความ deprecation จะถูกเขียนปนลงไฟล์ CSV จนไฟล์เสีย
 // '' = ปิด escape แบบ backslash ตรงตามมาตรฐาน CSV (RFC-4180) เหมือนที่ parseImportCsv ใช้กับ fgetcsv
+
+// หัวตารางเป็น text ที่ระบบกำหนดเอง ไม่ต้อง sanitize
 if (!empty($headers)) {
-    fputcsv($output, array_map($sanitizeCsvCell, $headers), ',', '"', '');
+    fputcsv($output, $headers, ',', '"', '');
 }
 
+// sanitize เฉพาะคอลัมน์โน้ต — ช่องเดียวที่ผู้ใช้พิมพ์เอง (จุดที่ inject สูตรได้จริง)
+// เซลล์ที่ระบบสร้าง (วันที่/ตัวเลข/%) ปล่อยดิบ ไม่งั้น Excel จะเห็นเป็นข้อความแทนตัวเลข
 foreach ($rows as $row) {
-    fputcsv($output, array_map($sanitizeCsvCell, (array)$row), ',', '"', '');
+    $cells = array_values((array)$row);
+    if ($noteColumnIndex !== null && array_key_exists($noteColumnIndex, $cells)) {
+        $cells[$noteColumnIndex] = $sanitizeCsvCell($cells[$noteColumnIndex]);
+    }
+
+    fputcsv($output, $cells, ',', '"', '');
 }
 
 if (!empty($totalsRow)) {
-    fputcsv($output, array_map($sanitizeCsvCell, $totalsRow), ',', '"', '');
+    // เว้นบรรทัดก่อนแถวรวม เพื่อให้ Excel ตัดขอบตารางตรงนี้ (sort/filter ไม่กินแถวรวม)
+    if ($blankRowBeforeTotals) {
+        fputcsv($output, [''], ',', '"', '');
+    }
+
+    fputcsv($output, $totalsRow, ',', '"', '');
 }
 
 fclose($output);

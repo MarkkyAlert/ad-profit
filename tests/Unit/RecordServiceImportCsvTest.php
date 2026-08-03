@@ -77,9 +77,39 @@ final class RecordServiceImportCsvTest extends TestCase
         $this->assertSame('2026-08-02', $result['rows'][0]['record_date']);
     }
 
-    public function testRoundTripsExportedFileWithBomThaiDatesAndTotalsRow(): void
+    public function testRoundTripsCurrentExportFormat(): void
     {
-        // เลียนแบบไฟล์ที่ export ออกจากระบบนี้ทุกอย่าง
+        // รูปแบบ export ปัจจุบัน: BOM · วันที่ ISO · เซลล์ว่างแทน '–' ·
+        // sanitize เฉพาะโน้ต · แถวว่างคั่นก่อนแถวรวม
+        $csv = $this->toCsv([
+            ['วันที่', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'เทียบเมื่อวาน', 'โน้ต'],
+            ['2026-08-02', '1000.00', '200.00', '800.00', '5.00', '', 'คอร์ส A'],
+            ['2026-08-03', '1500.50', '0.00', '1500.50', '', '+50.0%', "'=SUM(A1:A9)"],
+            ['2026-08-04', '100.00', '800.00', '-700.00', '0.13', '-11.1%', ''],
+            [''],                                   // แถวว่างคั่น
+            ['รวม', '2600.50', '1000.00', '1600.50', '2.60', '', ''],
+        ], true);
+
+        $result = $this->makeService()->parseImportCsv($csv);
+
+        $this->assertTrue($result['success']);
+        $this->assertCount(3, $result['rows']);      // แถวว่าง + "รวม" ถูกข้าม
+        $this->assertSame(
+            ['2026-08-02', '2026-08-03', '2026-08-04'],
+            array_column($result['rows'], 'record_date')
+        );
+        $this->assertSame('1500.50', $result['rows'][1]['revenue']);
+        // แถวขาดทุน: import อ่านเฉพาะรายได้/ค่าแอด (คอลัมน์กำไรเป็นค่าที่คำนวณ ถูกเพิกเฉย)
+        $this->assertSame('100.00', $result['rows'][2]['revenue']);
+        $this->assertSame('800.00', $result['rows'][2]['ad_cost']);
+        // โน้ตที่ถูก guard ตอน export → ถอด ' ออกได้เนื้อความเดิม
+        $this->assertSame('=SUM(A1:A9)', $result['rows'][1]['note']);
+        $this->assertNull($result['rows'][2]['note']);
+    }
+
+    public function testRoundTripsLegacyThaiDateExportFile(): void
+    {
+        // ไฟล์รูปแบบเก่า (วันที่ไทย + '–') — export ไม่ผลิตแล้ว แต่ import ต้องยังอ่านได้
         $csv = $this->toCsv([
             ['วันที่', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'เทียบเมื่อวาน', 'โน้ต'],
             ['2 ส.ค. 2569', '1000.00', '200.00', '800.00', '5.00', '–', 'คอร์ส A'],
