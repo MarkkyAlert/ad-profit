@@ -10,8 +10,9 @@ use RecordService;
 use ShopRepository;
 
 /**
- * unit test ของ cutoff ใน sheet รายวัน + invariant "สองแท็บต้องรวมเท่ากัน"
- * today คงที่ = 2026-08-15 (cutoff = สิ้นเดือน ส.ค.)
+ * unit test ของ cutoff ใน sheet รายวัน (ตัดที่ "สิ้นเดือนปัจจุบัน" ไม่ใช่ "วันนี้")
+ * ส่วน parity ระหว่างแท็บอยู่ที่ Tests\Integration\XlsxAnnualParityTest (DB จริง)
+ * today คงที่ = 2026-08-15
  */
 final class ExportServiceCutoffParityTest extends TestCase
 {
@@ -40,27 +41,6 @@ final class ExportServiceCutoffParityTest extends TestCase
                 }
 
                 return ['success' => true, 'data' => $rows];
-            }
-        );
-
-        // จำลอง GROUP BY เดือน จาก fixture ชุดเดียวกัน — สองแท็บจึงมาจากข้อมูลเดียวกันจริง
-        $recordService->method('getMonthlyTotals')->willReturnCallback(
-            static function (int $u, int $s, string $start, string $end) use ($records): array {
-                $byMonth = [];
-                foreach ($records as $record) {
-                    $monthKey = substr($record[0], 0, 7);
-                    if ($monthKey < $start || $monthKey > $end) {
-                        continue;
-                    }
-
-                    $byMonth[$monthKey] ??= ['month_key' => $monthKey, 'total_revenue' => 0.0, 'total_ad_cost' => 0.0];
-                    $byMonth[$monthKey]['total_revenue'] += $record[1];
-                    $byMonth[$monthKey]['total_ad_cost'] += $record[2];
-                }
-
-                ksort($byMonth);
-
-                return ['success' => true, 'data' => array_values($byMonth)];
             }
         );
 
@@ -127,54 +107,5 @@ final class ExportServiceCutoffParityTest extends TestCase
         // ยังต้องคืนชื่อร้าน/โครง payload ให้ writer ใช้ได้
         $this->assertSame('ร้านคอร์ส', $data['shop_name']);
         $this->assertSame(6, $data['note_column_index']);
-    }
-
-    /**
-     * invariant หลักของ commit นี้ — ไฟล์เดียวกันต้องไม่มีสองยอดรวม
-     */
-    public function testDailyAndMonthlyTotalsAgreeOnTheSameFixture(): void
-    {
-        $service = $this->makeService([
-            ['2026-01-05', 5000.0, 1000.0],
-            ['2026-01-06', 4000.0, 1000.0],
-            ['2026-03-10', 20000.0, 19500.0],
-            ['2026-07-10', 1000.0, 3500.0],    // เดือนขาดทุน
-            ['2026-08-02', 4000.0, 1000.0],
-            ['2026-08-25', 2000.0, 500.0],     // ล่วงหน้าในเดือนนี้ — ต้องนับทั้งสองแท็บ
-            ['2026-11-01', 90000.0, 0.0],      // อนาคตจริง — ต้องไม่นับทั้งสองแท็บ
-        ]);
-
-        $daily = $service->buildYearlyDailyPayload(1, 1, 2026, self::TODAY)['data'];
-        $monthly = $service->buildYearlyMonthlyPayload(1, 1, 2026, self::TODAY)['data'];
-
-        $monthlyProfit = array_sum(array_column($monthly['months'], 'profit'));
-        $monthlyRevenue = array_sum(array_column($monthly['months'], 'revenue'));
-        $monthlyAdCost = array_sum(array_column($monthly['months'], 'ad_cost'));
-
-        $this->assertSame($daily['totals']['profit'], $monthlyProfit);
-        $this->assertSame($daily['totals']['revenue'], $monthlyRevenue);
-        $this->assertSame($daily['totals']['ad_cost'], $monthlyAdCost);
-
-        // ค่าที่คาดจริง (ไม่ใช่แค่ "เท่ากันแต่ผิดทั้งคู่")
-        // ม.ค. 7,000 + มี.ค. 500 + ก.ค. -2,500 + ส.ค. 4,500 = 9,500
-        $this->assertSame(36000.0, $daily['totals']['revenue']);
-        $this->assertSame(9500.0, $daily['totals']['profit']);
-    }
-
-    public function testBothTabsAgreeForAPastYearToo(): void
-    {
-        $service = $this->makeService([
-            ['2025-02-10', 3000.0, 1000.0],
-            ['2025-12-20', 5000.0, 2000.0],
-        ]);
-
-        $daily = $service->buildYearlyDailyPayload(1, 1, 2025, self::TODAY)['data'];
-        $monthly = $service->buildYearlyMonthlyPayload(1, 1, 2025, self::TODAY)['data'];
-
-        $this->assertSame(
-            $daily['totals']['profit'],
-            array_sum(array_column($monthly['months'], 'profit'))
-        );
-        $this->assertSame(5000.0, $daily['totals']['profit']);
     }
 }

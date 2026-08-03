@@ -80,7 +80,9 @@ class XlsxReportService
 
             $sheet->setCellValue('B' . $rowNumber, (float)($row['revenue'] ?? 0));
             $sheet->setCellValue('C' . $rowNumber, (float)($row['ad_cost'] ?? 0));
-            $sheet->setCellValue('D' . $rowNumber, (float)($row['profit'] ?? 0));
+            $dayProfit = (float)($row['profit'] ?? 0);
+            $sheet->setCellValue('D' . $rowNumber, $dayProfit);
+            $this->paintNegative($sheet, 'D' . $rowNumber, $dayProfit);
 
             if (isset($row['roas']) && $row['roas'] !== null) {
                 $sheet->setCellValue('E' . $rowNumber, (float)$row['roas']);
@@ -109,6 +111,13 @@ class XlsxReportService
         $totalsRange = 'A' . $totalsRowNumber . ':' . $noteColumn . $totalsRowNumber;
         $sheet->getStyle($totalsRange)->getFont()->setBold(true);
         $sheet->getStyle($totalsRange)->getBorders()->getTop()->setBorderStyle(Border::BORDER_THIN);
+        $this->paintNegative($sheet, 'D' . $totalsRowNumber, (float)($totals['profit'] ?? 0));
+
+        // filter เฉพาะแถวข้อมูล — ไม่คลุมแถวรวม ไม่งั้นกรองแล้วยอดรวมหาย
+        $lastDataRow = $rowNumber - 1;
+        if ($lastDataRow >= 2) {
+            $sheet->setAutoFilter('A1:' . $noteColumn . $lastDataRow);
+        }
 
         $sheet->getStyle('B2:D' . $totalsRowNumber)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
         $sheet->getStyle('E2:E' . $totalsRowNumber)->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
@@ -126,7 +135,10 @@ class XlsxReportService
      *
      * ⚠️ ผู้เรียกต้อง $writer->setIncludeCharts(true) ก่อน save() ไม่งั้นกราฟหายเงียบ
      *
-     * @param array<string,mixed> $payload ผลจาก ExportService::buildYearlyMonthlyPayload()['data']
+     * รับแถวเดือนจาก AnnualService (มี days_count / profit_per_day / yoy_change_percent ครบ)
+     * รองรับทั้ง month_label และ month (แปลงชื่อไทยเอง)
+     *
+     * @param array<string,mixed> $payload ต้องมีคีย์ 'months'
      */
     public function buildMonthlySheet(Spreadsheet $spreadsheet, array $payload): void
     {
@@ -135,9 +147,13 @@ class XlsxReportService
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('รายเดือน');
 
-        $sheet->fromArray(['เดือน', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS'], null, 'A1');
+        $sheet->fromArray(
+            ['เดือน', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'วันที่กรอก', 'กำไร/วัน', 'เทียบปีก่อน'],
+            null,
+            'A1'
+        );
 
-        $headerRange = 'A1:E1';
+        $headerRange = 'A1:H1';
         $sheet->getStyle($headerRange)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
         $sheet->getStyle($headerRange)->getFill()
             ->setFillType(Fill::FILL_SOLID)
@@ -147,18 +163,31 @@ class XlsxReportService
 
         $rowNumber = 2;
         foreach ($months as $month) {
-            $sheet->setCellValueExplicit(
-                'A' . $rowNumber,
-                (string)($month['month_label'] ?? ''),
-                DataType::TYPE_STRING
-            );
-            $sheet->setCellValue('B' . $rowNumber, (float)($month['revenue'] ?? 0));
-            $sheet->setCellValue('C' . $rowNumber, (float)($month['ad_cost'] ?? 0));
-            $sheet->setCellValue('D' . $rowNumber, (float)($month['profit'] ?? 0));
+            $profit = (float)($month['profit'] ?? 0);
+            $label = (string)($month['month_label'] ?? (self::THAI_MONTHS[(int)($month['month'] ?? 0)] ?? ''));
+
+            $sheet->setCellValueExplicit('A' . $rowNumber, $label, DataType::TYPE_STRING);
+            $sheet->setCellValue('B' . $rowNumber, (float)($month['revenue'] ?? $month['total_revenue'] ?? 0));
+            $sheet->setCellValue('C' . $rowNumber, (float)($month['ad_cost'] ?? $month['total_ad_cost'] ?? 0));
+            $sheet->setCellValue('D' . $rowNumber, $profit);
 
             if (isset($month['roas']) && $month['roas'] !== null) {
                 $sheet->setCellValue('E' . $rowNumber, (float)$month['roas']);
             }
+
+            $sheet->setCellValue('F' . $rowNumber, (int)($month['days_count'] ?? 0));
+
+            if (isset($month['profit_per_day']) && $month['profit_per_day'] !== null) {
+                $sheet->setCellValue('G' . $rowNumber, (float)$month['profit_per_day']);
+            }
+
+            if (isset($month['yoy_change_percent']) && $month['yoy_change_percent'] !== null) {
+                $sheet->setCellValue('H' . $rowNumber, (float)$month['yoy_change_percent']);
+            }
+
+            $this->paintNegative($sheet, 'D' . $rowNumber, $profit);
+            $this->paintNegative($sheet, 'G' . $rowNumber, (float)($month['profit_per_day'] ?? 0));
+            $this->paintNegative($sheet, 'H' . $rowNumber, (float)($month['yoy_change_percent'] ?? 0));
 
             $rowNumber++;
         }
@@ -168,9 +197,12 @@ class XlsxReportService
         if ($lastRow >= 2) {
             $sheet->getStyle('B2:D' . $lastRow)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
             $sheet->getStyle('E2:E' . $lastRow)->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
+            $sheet->getStyle('G2:G' . $lastRow)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+            $sheet->getStyle('H2:H' . $lastRow)->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
+            $sheet->setAutoFilter('A1:H' . $lastRow);
         }
 
-        foreach (range('A', 'E') as $column) {
+        foreach (range('A', 'H') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
@@ -309,6 +341,9 @@ class XlsxReportService
             ),
             DataType::TYPE_STRING
         );
+        $rowNumber += 2;
+
+        $this->writeProjection($sheet, (array)($summary['projection'] ?? []), $rowNumber);
 
         foreach (range('A', 'C') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
@@ -406,6 +441,7 @@ class XlsxReportService
                 ->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
             $sheet->getStyle('F' . ($headerRow + 1) . ':G' . $lastShopRow)
                 ->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
+            $sheet->setAutoFilter('A' . $headerRow . ':H' . $lastShopRow);
         }
 
         $this->writeComparisonSummary($sheet, $summary, $lastShopRow + 2);
@@ -485,6 +521,64 @@ class XlsxReportService
     }
 
     /**
+     * แถบประมาณการสิ้นปี — ต้องอ่านออกทันทีว่า "ไม่ใช่ตัวเลขจริง"
+     * (เหมือนหน้าเว็บ: โชว์ช่วง ไม่ใช่เลขเดียว + บอกสมมติฐาน)
+     *
+     * @param array<string,mixed> $projection
+     */
+    private function writeProjection(Worksheet $sheet, array $projection, int $startRow): void
+    {
+        $sheet->setCellValueExplicit(
+            'A' . $startRow,
+            '🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)',
+            DataType::TYPE_STRING
+        );
+        $sheet->getStyle('A' . $startRow)->getFont()->setBold(true)->setItalic(true);
+
+        if (($projection['available'] ?? false) !== true) {
+            $sheet->setCellValueExplicit(
+                'B' . $startRow,
+                'ข้อมูลยังไม่พอประมาณการ',
+                DataType::TYPE_STRING
+            );
+            $sheet->getStyle('B' . $startRow)->getFont()->setItalic(true);
+
+            return;
+        }
+
+        $sheet->setCellValueExplicit(
+            'B' . $startRow,
+            sprintf(
+                '%s – %s (กลาง %s)',
+                number_format((float)($projection['projection_low'] ?? 0), 2),
+                number_format((float)($projection['projection_high'] ?? 0), 2),
+                number_format((float)($projection['projection_mid'] ?? 0), 2)
+            ),
+            DataType::TYPE_STRING
+        );
+        $sheet->getStyle('B' . $startRow)->getFont()->setItalic(true);
+
+        $sheet->setCellValueExplicit(
+            'B' . ($startRow + 1),
+            sprintf(
+                'สมมติเดือนที่เหลือ (%d) ทำได้เท่า %d เดือนล่าสุด · ไม่คิดฤดูกาล — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง',
+                (int)($projection['months_remaining'] ?? 0),
+                (int)($projection['basis_month_count'] ?? 0)
+            ),
+            DataType::TYPE_STRING
+        );
+        $sheet->getStyle('B' . ($startRow + 1))->getFont()->setItalic(true)->setSize(9);
+    }
+
+    /** ทาแดงเฉพาะค่าติดลบ — ใช้ร่วมทุกชีตให้สัญญาณสีสม่ำเสมอ */
+    private function paintNegative(Worksheet $sheet, string $coordinate, float $value): void
+    {
+        if ($value < 0) {
+            $sheet->getStyle($coordinate)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
+        }
+    }
+
+    /**
      * @param mixed $month แถวเดือนจาก summary (best_month/worst_month) — null ได้เมื่อยังไม่มีข้อมูล
      */
     private function describeMonth($month): string
@@ -540,9 +634,9 @@ class XlsxReportService
         $series->setPlotDirection(DataSeries::DIRECTION_COL);
 
         $chart = new Chart('profit-by-month', new Title('กำไรรายเดือน'), null, new PlotArea(null, [$series]));
-        // วางใต้ตาราง — เว้น 1 บรรทัดจากแถวสุดท้าย
-        $chart->setTopLeftPosition('G2');
-        $chart->setBottomRightPosition('O20');
+        // วางขวาตาราง — ต้องพ้นคอลัมน์ H (เทียบปีก่อน) ไม่งั้นทับข้อมูล
+        $chart->setTopLeftPosition('J2');
+        $chart->setBottomRightPosition('R20');
 
         return $chart;
     }

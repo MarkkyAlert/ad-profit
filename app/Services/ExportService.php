@@ -4,22 +4,6 @@ declare(strict_types=1);
 
 class ExportService
 {
-    /** ชื่อเดือนไทย — เก็บในนี้เองเพื่อไม่ให้ service ผูกกับ view helper */
-    private const THAI_MONTHS = [
-        1 => 'ม.ค.',
-        2 => 'ก.พ.',
-        3 => 'มี.ค.',
-        4 => 'เม.ย.',
-        5 => 'พ.ค.',
-        6 => 'มิ.ย.',
-        7 => 'ก.ค.',
-        8 => 'ส.ค.',
-        9 => 'ก.ย.',
-        10 => 'ต.ค.',
-        11 => 'พ.ย.',
-        12 => 'ธ.ค.',
-    ];
-
     private RecordService $recordService;
     private ShopRepository $shopRepository;
 
@@ -244,109 +228,6 @@ class ExportService
                 // ตำแหน่งคอลัมน์โน้ต (1-based) — controller กัน formula injection เฉพาะช่องนี้
                 // (ช่องอื่นระบบสร้างเอง ปล่อยดิบเพื่อให้ Excel อ่านเป็นวันที่/ตัวเลข)
                 'note_column_index' => 6,
-            ],
-        ];
-    }
-
-    /**
-     * ยอดรวมรายเดือนทั้งปีสำหรับ sheet "รายเดือน" + กราฟ
-     *
-     * ตัดเดือนอนาคตแบบเดียวกับ AnnualService (ไม่ให้แท่งกราฟดิ่ง ฿0)
-     * แต่ยิง monthly query ตรง ๆ — ไม่เรียก AnnualService เพราะจะ over-fetch (YoY/heatmap/goal)
-     *
-     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
-     */
-    public function buildYearlyMonthlyPayload(int $userId, int $shopId, int $year, ?string $today = null): array
-    {
-        if ($year < 2000 || $year > 2100) {
-            return [
-                'success' => false,
-                'error' => 'ปีที่เลือกไม่ถูกต้อง',
-            ];
-        }
-
-        try {
-            $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
-        } catch (Throwable $exception) {
-            error_log('[export] buildYearlyMonthlyPayload shop lookup failed: ' . $exception->getMessage());
-            return [
-                'success' => false,
-                'error' => 'ไม่สามารถโหลดข้อมูลร้านค้าได้',
-            ];
-        }
-
-        if ($shop === null) {
-            return [
-                'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
-            ];
-        }
-
-        $lastMonth = $this->resolveLastMonth($year, $today);
-
-        if ($lastMonth === 0) {
-            return [
-                'success' => true,
-                'data' => [
-                    'year' => $year,
-                    'last_month' => 0,
-                    'months' => [],
-                ],
-            ];
-        }
-
-        try {
-            $totalsResult = $this->recordService->getMonthlyTotals(
-                $userId,
-                $shopId,
-                sprintf('%04d-01', $year),
-                sprintf('%04d-%02d', $year, $lastMonth)
-            );
-        } catch (Throwable $exception) {
-            error_log('[export] buildYearlyMonthlyPayload fetch failed: ' . $exception->getMessage());
-            return [
-                'success' => false,
-                'error' => 'ไม่สามารถโหลดข้อมูลที่ต้องการ export ได้',
-            ];
-        }
-
-        if (($totalsResult['success'] ?? false) !== true) {
-            return [
-                'success' => false,
-                'error' => (string)($totalsResult['error'] ?? 'ไม่สามารถโหลดข้อมูลที่ต้องการ export ได้'),
-            ];
-        }
-
-        $totalsByMonthKey = [];
-        foreach ((array)($totalsResult['data'] ?? []) as $row) {
-            $monthKey = (string)($row['month_key'] ?? '');
-            if ($monthKey !== '') {
-                $totalsByMonthKey[$monthKey] = $row;
-            }
-        }
-
-        $months = [];
-        for ($month = 1; $month <= $lastMonth; $month++) {
-            $totals = $totalsByMonthKey[sprintf('%04d-%02d', $year, $month)] ?? null;
-            $revenue = (float)($totals['total_revenue'] ?? 0);
-            $adCost = (float)($totals['total_ad_cost'] ?? 0);
-
-            $months[] = [
-                'month' => $month,
-                'month_label' => self::THAI_MONTHS[$month] ?? (string)$month,
-                'revenue' => $revenue,
-                'ad_cost' => $adCost,
-                'profit' => $revenue - $adCost,
-                'roas' => $adCost > 0 ? round($revenue / $adCost, 2) : null,
-            ];
-        }
-
-        return [
-            'success' => true,
-            'data' => [
-                'year' => $year,
-                'last_month' => $lastMonth,
-                'months' => $months,
             ],
         ];
     }

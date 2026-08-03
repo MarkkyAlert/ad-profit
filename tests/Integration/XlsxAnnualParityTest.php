@@ -54,10 +54,11 @@ final class XlsxAnnualParityTest extends IntegrationTestCase
         $this->createRecord($shopId, '2026-11-01', 90000.0, 0.0);     // เดือนหน้า — ต้องไม่นับ
 
         $daily = $this->exportService()->buildYearlyDailyPayload($userId, $shopId, 2026, self::TODAY)['data'];
-        $monthly = $this->exportService()->buildYearlyMonthlyPayload($userId, $shopId, 2026, self::TODAY)['data'];
-        $annual = $this->annualService()->buildYearlySummary($userId, $shopId, 2026, self::TODAY)['data']['summary'];
+        $annualData = $this->annualService()->buildYearlySummary($userId, $shopId, 2026, self::TODAY)['data'];
+        $annual = $annualData['summary'];
 
-        $monthlyProfit = array_sum(array_column($monthly['months'], 'profit'));
+        // sheet รายเดือนกินแถวเดือนชุดนี้โดยตรง → เทียบกับมันคือเทียบกับสิ่งที่อยู่ในไฟล์จริง
+        $monthlyProfit = array_sum(array_column($annualData['months'], 'profit'));
 
         $this->assertSame($daily['totals']['profit'], $monthlyProfit);
         $this->assertSame($daily['totals']['profit'], (float)$annual['profit']);

@@ -33,14 +33,18 @@ $shopRepository = new ShopRepository($pdo);
 $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 $exportService = new ExportService($recordService, $shopRepository);
 
-// today ตัวเดียวกันทั้งสอง payload — รับประกันว่าสองแท็บใช้ขอบเขตเดียวกัน
-// (กันเคสข้ามเที่ยงคืน/ข้ามเดือนระหว่างสองคำสั่ง แล้วยอดรวมไม่ตรง)
+// today ตัวเดียวกันทุก payload — รับประกันว่าทุกแท็บใช้ขอบเขตเดียวกัน
+// (กันเคสข้ามเที่ยงคืน/ข้ามเดือนระหว่างคำสั่ง แล้วยอดรวมไม่ตรง)
 $today = date('Y-m-d');
 
 $dailyResult = $exportService->buildYearlyDailyPayload($userId, $shopId, $selectedYear, $today);
-$monthlyResult = $exportService->buildYearlyMonthlyPayload($userId, $shopId, $selectedYear, $today);
 
-foreach ([$dailyResult, $monthlyResult] as $result) {
+// AnnualService คืนแถวเดือนที่มี days_count/profit_per_day/yoy ครบอยู่แล้ว
+// → ใช้เป็นแหล่งเดียวของทั้งชีตรายเดือนและชีตรายปี (ไม่ต้องยิง monthly payload ซ้ำ)
+$annualResult = (new AnnualService($recordRepository, $shopRepository, new GoalRepository($pdo)))
+    ->buildYearlySummary($userId, $shopId, $selectedYear, $today);
+
+foreach ([$dailyResult, $annualResult] as $result) {
     if (($result['success'] ?? false) === true) {
         continue;
     }
@@ -63,7 +67,7 @@ $shopName = (string)($payload['shop_name'] ?? 'shop');
 
 $reportService = new XlsxReportService();
 $spreadsheet = $reportService->buildDailySheet($payload);
-$reportService->buildMonthlySheet($spreadsheet, (array)($monthlyResult['data'] ?? []));
+$reportService->buildMonthlySheet($spreadsheet, (array)($annualResult['data'] ?? []));
 
 // portfolio ทุกร้าน — โผล่เฉพาะเมื่อมี ≥ 2 ร้าน (กฎเดียวกับหน้ารวมร้าน)
 // ใช้ $today ตัวเดียวกับสองแท็บแรก → cutoff ตรงกันทั้งไฟล์
@@ -77,18 +81,12 @@ if (($overviewResult['success'] ?? false) === true
 }
 
 // รายปีต้องมาท้ายสุด — setIndexByName ของมันดันตัวเองเป็น tab แรกทับของเฟส 2
-// ($today ตัวเดียวกับทุกแท็บ → cutoff ตรงกันทั้งไฟล์)
-$annualResult = (new AnnualService($recordRepository, $shopRepository, new GoalRepository($pdo)))
-    ->buildYearlySummary($userId, $shopId, $selectedYear, $today);
-
-if (($annualResult['success'] ?? false) === true) {
-    $reportService->buildAnnualSheet(
-        $spreadsheet,
-        (array)($annualResult['data']['summary'] ?? []),
-        $selectedYear,
-        $shopName
-    );
-}
+$reportService->buildAnnualSheet(
+    $spreadsheet,
+    (array)($annualResult['data']['summary'] ?? []),
+    $selectedYear,
+    $shopName
+);
 
 $filenameUtf8 = $exportService->buildYearlyXlsxFilename($shopName, $selectedYear);
 $asciiBase = preg_replace('/[^A-Za-z0-9._-]/', '_', pathinfo($filenameUtf8, PATHINFO_FILENAME)) ?? 'export';
