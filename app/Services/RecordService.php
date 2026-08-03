@@ -686,8 +686,6 @@ class RecordService
         $previousRevenue = null;
         $totalRevenue = 0.0;
         $totalAdCost = 0.0;
-        $roasTotal = 0.0;
-        $roasCount = 0;
 
         foreach ($records as $record) {
             $revenue = (float)($record['revenue'] ?? 0);
@@ -714,11 +712,6 @@ class RecordService
             $previousRevenue = $revenue;
             $totalRevenue += $revenue;
             $totalAdCost += $adCost;
-
-            if ($roas !== null) {
-                $roasTotal += $roas;
-                $roasCount++;
-            }
         }
 
         $totalProfit = $totalRevenue - $totalAdCost;
@@ -734,7 +727,10 @@ class RecordService
                     'total_revenue' => $totalRevenue,
                     'total_ad_cost' => $totalAdCost,
                     'total_profit' => $totalProfit,
-                    'avg_roas' => $roasCount > 0 ? round($roasTotal / $roasCount, 2) : null,
+                    // ratio of sums — ไม่ใช่ค่าเฉลี่ยของ ROAS รายวัน ให้ตรงกับ dashboard/annual/weekday
+                    // (เดิมเฉลี่ย ROAS รายวันและตัดวันที่ ad_cost = 0 ออกจากตัวหาร → ตัวเลขไม่ตรงกับหน้าอื่น
+                    //  และรายได้ของวันที่ไม่ได้ยิงแอดหายไปจากตัวตั้งทั้งวัน)
+                    'avg_roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
                 ],
             ],
         ];

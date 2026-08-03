@@ -77,7 +77,7 @@ require __DIR__ . '/includes/header.php';
                     <th class="px-3 py-2">ค่าแอด</th>
                     <th class="px-3 py-2">กำไร</th>
                     <th class="px-3 py-2">ROAS</th>
-                    <th class="px-3 py-2">เทียบเมื่อวาน</th>
+                    <th class="px-3 py-2">เทียบครั้งก่อน</th>
                     <th class="px-3 py-2">โน้ต</th>
                     <th class="px-3 py-2 text-center">จัดการ</th>
                 </tr>

@@ -103,7 +103,7 @@ class ExportService
             'data' => [
                 'shop_name' => (string)($shop['name'] ?? 'ร้านค้า'),
                 'month' => $month,
-                'headers' => ['วันที่', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'เทียบเมื่อวาน', 'โน้ต'],
+                'headers' => ['วันที่', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'เทียบครั้งก่อน', 'โน้ต'],
                 'rows' => $rows,
                 'totals_row' => $totalsRow,
                 // คอลัมน์เดียวที่มาจากผู้ใช้ → controller sanitize เฉพาะช่องนี้

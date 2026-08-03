@@ -54,7 +54,7 @@ final class ExportServiceTest extends TestCase
 
         // header ตรงตามที่ ExportService กำหนด
         $this->assertSame(
-            ['วันที่', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'เทียบเมื่อวาน', 'โน้ต'],
+            ['วันที่', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'เทียบครั้งก่อน', 'โน้ต'],
             $data['headers']
         );
         $this->assertSame('ร้าน A', $data['shop_name']);
@@ -125,7 +125,7 @@ final class ExportServiceTest extends TestCase
         ]);
 
         $this->assertSame('', $data['rows'][0][4]);   // ROAS
-        $this->assertSame('', $data['rows'][0][5]);   // เทียบเมื่อวาน
+        $this->assertSame('', $data['rows'][0][5]);   // เทียบครั้งก่อน
         $this->assertSame('', $data['totals_row'][4]); // avg_roas null
     }
 
