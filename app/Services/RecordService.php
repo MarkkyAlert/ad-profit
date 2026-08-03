@@ -625,6 +625,35 @@ class RecordService
         ];
     }
 
+    /**
+     * ยอดรวมรายเดือนตามช่วงเดือน (ใช้กับ export sheet รายเดือน — ยิงครั้งเดียวคลุมทั้งช่วง)
+     *
+     * @return array{success:bool,data?:array<int,array<string,mixed>>,error?:string}
+     */
+    public function getMonthlyTotals(int $userId, int $shopId, string $startMonth, string $endMonth): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        foreach ([$startMonth, $endMonth] as $month) {
+            if (preg_match('/^\d{4}-\d{2}$/', $month) !== 1) {
+                return [
+                    'success' => false,
+                    'error' => 'รูปแบบเดือนต้องเป็น YYYY-MM',
+                ];
+            }
+        }
+
+        return [
+            'success' => true,
+            'data' => $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $startMonth, $endMonth),
+        ];
+    }
+
     public function getMonthlyRecords(int $userId, int $shopId, string $month): array
     {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {

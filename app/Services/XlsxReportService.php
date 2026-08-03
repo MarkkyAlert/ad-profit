@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Chart\Chart;
+use PhpOffice\PhpSpreadsheet\Chart\DataSeries;
+use PhpOffice\PhpSpreadsheet\Chart\DataSeriesValues;
+use PhpOffice\PhpSpreadsheet\Chart\PlotArea;
+use PhpOffice\PhpSpreadsheet\Chart\Title;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -103,5 +108,117 @@ class XlsxReportService
         }
 
         return $spreadsheet;
+    }
+
+    /**
+     * เพิ่ม sheet "รายเดือน" (ตาราง + กราฟแท่งกำไร) เข้า workbook ที่มีอยู่
+     * แล้วดันให้เป็น tab แรก — เปิดไฟล์มาเจอสรุปก่อน รายวันเป็นรายละเอียด
+     *
+     * ⚠️ ผู้เรียกต้อง $writer->setIncludeCharts(true) ก่อน save() ไม่งั้นกราฟหายเงียบ
+     *
+     * @param array<string,mixed> $payload ผลจาก ExportService::buildYearlyMonthlyPayload()['data']
+     */
+    public function buildMonthlySheet(Spreadsheet $spreadsheet, array $payload): void
+    {
+        $months = array_values((array)($payload['months'] ?? []));
+
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('รายเดือน');
+
+        $sheet->fromArray(['เดือน', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS'], null, 'A1');
+
+        $headerRange = 'A1:E1';
+        $sheet->getStyle($headerRange)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
+        $sheet->getStyle($headerRange)->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB(self::HEADER_FILL_ARGB);
+        $sheet->getStyle($headerRange)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->freezePane('A2');
+
+        $rowNumber = 2;
+        foreach ($months as $month) {
+            $sheet->setCellValueExplicit(
+                'A' . $rowNumber,
+                (string)($month['month_label'] ?? ''),
+                DataType::TYPE_STRING
+            );
+            $sheet->setCellValue('B' . $rowNumber, (float)($month['revenue'] ?? 0));
+            $sheet->setCellValue('C' . $rowNumber, (float)($month['ad_cost'] ?? 0));
+            $sheet->setCellValue('D' . $rowNumber, (float)($month['profit'] ?? 0));
+
+            if (isset($month['roas']) && $month['roas'] !== null) {
+                $sheet->setCellValue('E' . $rowNumber, (float)$month['roas']);
+            }
+
+            $rowNumber++;
+        }
+
+        $lastRow = $rowNumber - 1;
+
+        if ($lastRow >= 2) {
+            $sheet->getStyle('B2:D' . $lastRow)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+            $sheet->getStyle('E2:E' . $lastRow)->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
+        }
+
+        foreach (range('A', 'E') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        if ($lastRow >= 2) {
+            $sheet->addChart($this->buildProfitChart($sheet->getTitle(), $lastRow));
+        }
+
+        // สรุปมาก่อนรายละเอียด
+        $spreadsheet->setIndexByName('รายเดือน', 0);
+        $spreadsheet->setActiveSheetIndex(0);
+    }
+
+    /**
+     * กราฟแท่งกำไรรายเดือน — อ้าง range เซลล์ในชีต "รายเดือน" โดยตรง
+     * (แก้ตัวเลขในตาราง กราฟขยับตาม เพราะ Excel ผูกกับ range ไม่ใช่ค่าที่ copy มา)
+     */
+    private function buildProfitChart(string $sheetTitle, int $lastRow): Chart
+    {
+        $quotedTitle = '\'' . $sheetTitle . '\'';
+
+        $categories = [
+            new DataSeriesValues(
+                DataSeriesValues::DATASERIES_TYPE_STRING,
+                $quotedTitle . '!$A$2:$A$' . $lastRow,
+                null,
+                $lastRow - 1
+            ),
+        ];
+
+        $values = [
+            new DataSeriesValues(
+                DataSeriesValues::DATASERIES_TYPE_NUMBER,
+                $quotedTitle . '!$D$2:$D$' . $lastRow,
+                null,
+                $lastRow - 1
+            ),
+        ];
+
+        $legendLabels = [
+            new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, $quotedTitle . '!$D$1', null, 1),
+        ];
+
+        $series = new DataSeries(
+            DataSeries::TYPE_BARCHART,
+            DataSeries::GROUPING_CLUSTERED,
+            range(0, count($values) - 1),
+            $legendLabels,
+            $categories,
+            $values
+        );
+        // แท่งตั้ง — กำไรติดลบจะยื่นลงล่างเองตามค่าจริง
+        $series->setPlotDirection(DataSeries::DIRECTION_COL);
+
+        $chart = new Chart('profit-by-month', new Title('กำไรรายเดือน'), null, new PlotArea(null, [$series]));
+        // วางใต้ตาราง — เว้น 1 บรรทัดจากแถวสุดท้าย
+        $chart->setTopLeftPosition('G2');
+        $chart->setBottomRightPosition('O20');
+
+        return $chart;
     }
 }

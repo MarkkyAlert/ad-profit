@@ -33,9 +33,14 @@ $shopRepository = new ShopRepository($pdo);
 $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 $exportService = new ExportService($recordService, $shopRepository);
 
-$result = $exportService->buildYearlyDailyPayload($userId, $shopId, $selectedYear);
+$dailyResult = $exportService->buildYearlyDailyPayload($userId, $shopId, $selectedYear);
+$monthlyResult = $exportService->buildYearlyMonthlyPayload($userId, $shopId, $selectedYear);
 
-if (($result['success'] ?? false) !== true) {
+foreach ([$dailyResult, $monthlyResult] as $result) {
+    if (($result['success'] ?? false) === true) {
+        continue;
+    }
+
     $errorMessage = (string)($result['error'] ?? 'ไม่สามารถ export ข้อมูลได้');
 
     if ($wantsJson) {
@@ -49,10 +54,12 @@ if (($result['success'] ?? false) !== true) {
     redirect('/annual.php?year=' . ($selectedYear + 543));
 }
 
-$payload = (array)($result['data'] ?? []);
+$payload = (array)($dailyResult['data'] ?? []);
 $shopName = (string)($payload['shop_name'] ?? 'shop');
 
-$spreadsheet = (new XlsxReportService())->buildDailySheet($payload);
+$reportService = new XlsxReportService();
+$spreadsheet = $reportService->buildDailySheet($payload);
+$reportService->buildMonthlySheet($spreadsheet, (array)($monthlyResult['data'] ?? []));
 
 $filenameUtf8 = $exportService->buildYearlyXlsxFilename($shopName, $selectedYear);
 $asciiBase = preg_replace('/[^A-Za-z0-9._-]/', '_', pathinfo($filenameUtf8, PATHINFO_FILENAME)) ?? 'export';
@@ -76,6 +83,8 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 header('Pragma: no-cache');
 
 $writer = new Xlsx($spreadsheet);
+// ต้องเปิดก่อน save ไม่งั้นกราฟหายเงียบ (ไฟล์เปิดได้ปกติแต่ไม่มีกราฟ)
+$writer->setIncludeCharts(true);
 $writer->save('php://output');
 
 $spreadsheet->disconnectWorksheets();
