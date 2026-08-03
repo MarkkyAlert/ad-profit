@@ -187,7 +187,8 @@ class OverviewDailyService
             ];
         }
 
-        usort($rows, static fn(array $left, array $right): int => $right['total_revenue'] <=> $left['total_revenue']);
+        // จัดอันดับด้วยกำไร ให้สอดคล้องกับมุมเดือน/แดชบอร์ด
+        usort($rows, static fn(array $left, array $right): int => $right['profit'] <=> $left['profit']);
 
         return $rows;
     }

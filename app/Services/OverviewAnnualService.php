@@ -159,10 +159,11 @@ class OverviewAnnualService
 
         usort(
             $shopsRows,
+            // จัดอันดับด้วยกำไร ให้สอดคล้องกับมุมเดือน/แดชบอร์ด (เสมอกันค่อยใช้ shop_id)
             static function (array $left, array $right): int {
-                $revenueCompare = $right['total_revenue'] <=> $left['total_revenue'];
-                if ($revenueCompare !== 0) {
-                    return $revenueCompare;
+                $profitCompare = $right['profit'] <=> $left['profit'];
+                if ($profitCompare !== 0) {
+                    return $profitCompare;
                 }
 
                 return ($left['shop_id'] ?? 0) <=> ($right['shop_id'] ?? 0);
