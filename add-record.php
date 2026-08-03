@@ -186,10 +186,18 @@ require __DIR__ . '/includes/header.php';
         </div>
 
         <div class="mt-4 flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2">
+                <label for="bulk-month" class="text-sm text-slate-400">เดือน</label>
+                <?php // ไม่มี name= โดยตั้งใจ — ใช้ฝั่ง JS อย่างเดียว ไม่ส่งไปกับฟอร์ม ?>
+                <input
+                    type="month"
+                    id="bulk-month"
+                    value="<?= e(date('Y-m')) ?>"
+                    class="rounded-xl px-3 py-2 text-sm">
+            </div>
+
             <button type="button" id="bulk-add-row" class="btn-ghost px-4 py-2 text-sm">+ เพิ่มแถว</button>
-            <button type="button" id="bulk-fill-max" class="btn-ghost px-4 py-2 text-sm">
-                ⤓ เติมครบ <?= e((string)RecordService::BULK_MAX_ROWS) ?> แถว
-            </button>
+            <button type="button" id="bulk-fill-max" class="btn-ghost px-4 py-2 text-sm">⤓ เติมทั้งเดือน</button>
             <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">✓ บันทึกทั้งหมด</button>
         </div>
     </form>
@@ -244,15 +252,11 @@ require __DIR__ . '/includes/header.php';
                 counter.textContent = rows.length + ' / ' + MAX_ROWS + ' แถว';
             }
 
+            // หมายเหตุ: ปุ่ม "เติมทั้งเดือน" ไม่ถูก disable ตาม MAX_ROWS
+            // เพราะมันล้างตารางแล้วเติมใหม่เสมอ (ต่างจากปุ่มเพิ่มแถวที่ต่อท้าย)
             addButton.disabled = rows.length >= MAX_ROWS;
             addButton.classList.toggle('opacity-50', addButton.disabled);
             addButton.classList.toggle('cursor-not-allowed', addButton.disabled);
-
-            if (fillMaxButton) {
-                fillMaxButton.disabled = rows.length >= MAX_ROWS;
-                fillMaxButton.classList.toggle('opacity-50', fillMaxButton.disabled);
-                fillMaxButton.classList.toggle('cursor-not-allowed', fillMaxButton.disabled);
-            }
         };
 
         const addRow = () => {
@@ -288,16 +292,6 @@ require __DIR__ . '/includes/header.php';
         });
 
         addButton.addEventListener('click', addRow);
-
-        // เติมแถวจนครบเพดาน — ต่อจากแถวที่มีอยู่ ไม่ล้างของเดิม
-        // (addRow() มี guard เกิน MAX_ROWS อยู่แล้ว และเรียก refresh() ให้เอง)
-        if (fillMaxButton) {
-            fillMaxButton.addEventListener('click', () => {
-                while (tbody.querySelectorAll('tr').length < MAX_ROWS) {
-                    addRow();
-                }
-            });
-        }
 
         for (let index = 0; index < INITIAL_ROWS; index++) {
             addRow();
@@ -483,6 +477,88 @@ require __DIR__ . '/includes/header.php';
                 }
             }
         });
+
+        // ── เติมวันที่ทั้งเดือนลงตาราง ──────────────────────────────────
+        // ใช้ "วันนี้" จากเซิร์ฟเวอร์ ไม่ใช่ new Date() ของเครื่องผู้ใช้
+        // (timezone ต้องตรงกับกฎวันที่อื่นในแอปที่คิดจากฝั่ง PHP)
+        const TODAY = <?= json_encode(
+            date('Y-m-d'),
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+        ) ?>;
+
+        const monthInput = document.getElementById('bulk-month');
+
+        const showBulkNotice = (message) => {
+            if (!pasteNotice) {
+                return;
+            }
+
+            if (message === '') {
+                pasteNotice.classList.add('hidden');
+                return;
+            }
+
+            pasteNotice.textContent = message;
+            pasteNotice.classList.remove('hidden');
+        };
+
+        // จำนวนวันในเดือน (leap-aware) — ใช้ UTC กัน timezone เลื่อนวัน
+        const daysInMonth = (year, month) => new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+        const tableHasInput = () => Array.from(tbody.querySelectorAll('input'))
+            .some((input) => input.value.trim() !== '');
+
+        if (fillMaxButton) {
+            fillMaxButton.addEventListener('click', () => {
+                const selectedMonth = monthInput && monthInput.value ? monthInput.value : TODAY.slice(0, 7);
+                if (!/^\d{4}-\d{2}$/.test(selectedMonth)) {
+                    showBulkNotice('กรุณาเลือกเดือนก่อน');
+                    return;
+                }
+
+                const todayMonth = TODAY.slice(0, 7);
+                if (selectedMonth > todayMonth) {
+                    showBulkNotice('เดือนในอนาคต ยังกรอกไม่ได้');
+                    return;
+                }
+
+                const year = Number(selectedMonth.slice(0, 4));
+                const month = Number(selectedMonth.slice(5, 7));
+                // เดือนปัจจุบัน → ตัดที่วันนี้ (ไม่เติมวันอนาคต) · เดือนอดีต → เต็มเดือน
+                const lastDay = selectedMonth === todayMonth
+                    ? Number(TODAY.slice(8, 10))
+                    : daysInMonth(year, month);
+
+                const dates = [];
+                for (let day = 1; day <= lastDay && dates.length < MAX_ROWS; day++) {
+                    dates.push(selectedMonth + '-' + String(day).padStart(2, '0'));
+                }
+
+                // ถามก่อนล้าง เฉพาะตอนที่มีข้อมูลค้างอยู่จริง
+                if (tableHasInput()
+                    && !window.confirm('ตารางมีข้อมูลอยู่ จะล้างแล้วเติมวันที่ทั้งเดือนใหม่?')) {
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                dates.forEach((date) => {
+                    addRow();
+                    const rows = getRows();
+                    const dateInput = rows[rows.length - 1].querySelector('input[name="record_date[]"]');
+                    if (dateInput) {
+                        dateInput.value = date;
+                    }
+                });
+
+                refresh();
+
+                showBulkNotice(
+                    dates.length < lastDay
+                        ? 'เติมได้ ' + dates.length + ' วัน (จำกัด ' + MAX_ROWS + ' แถวต่อครั้ง)'
+                        : ''
+                );
+            });
+        }
     })();
 </script>
 
