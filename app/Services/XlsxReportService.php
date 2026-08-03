@@ -14,6 +14,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
  * ประกอบ workbook จาก payload ที่ ExportService เตรียมไว้
@@ -23,7 +24,15 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
  */
 class XlsxReportService
 {
+    /** ชื่อเดือนไทยสำหรับแสดงผล — presentation layer จึงเก็บไว้ในนี้ */
+    private const THAI_MONTHS = [
+        1 => 'ม.ค.', 2 => 'ก.พ.', 3 => 'มี.ค.', 4 => 'เม.ย.', 5 => 'พ.ค.', 6 => 'มิ.ย.',
+        7 => 'ก.ค.', 8 => 'ส.ค.', 9 => 'ก.ย.', 10 => 'ต.ค.', 11 => 'พ.ย.', 12 => 'ธ.ค.',
+    ];
+
     private const HEADER_FILL_ARGB = 'FF1F4E79';
+    private const NEGATIVE_FONT_ARGB = 'FFC00000';
+    private const PERCENT_FORMAT = '0.0"%"';
     private const MONEY_FORMAT = '#,##0.00';
     private const RATIO_FORMAT = '0.00';
     private const DATE_FORMAT = 'yyyy-mm-dd';
@@ -171,6 +180,185 @@ class XlsxReportService
         // สรุปมาก่อนรายละเอียด
         $spreadsheet->setIndexByName('รายเดือน', 0);
         $spreadsheet->setActiveSheetIndex(0);
+    }
+
+    /**
+     * เพิ่ม sheet "เทียบร้าน" (portfolio ทุกร้าน) — ตารางล้วน ไม่มีกราฟ
+     * ผู้เรียกต้องเช็ก can_view เอง (หน้ารวมร้านดูได้เมื่อมี ≥ 2 ร้าน)
+     *
+     * @param array<string,mixed> $payload ผลจาก OverviewAnnualService::buildYearlyOverview()['data']
+     */
+    public function buildShopComparisonSheet(Spreadsheet $spreadsheet, array $payload): void
+    {
+        $shops = array_values((array)($payload['shops'] ?? []));
+        $summary = (array)($payload['summary'] ?? []);
+        $year = (int)($payload['year'] ?? 0);
+
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('เทียบร้าน');
+
+        $sheet->setCellValueExplicit(
+            'A1',
+            sprintf('เทียบทุกร้าน ปี %d', $year + 543),
+            DataType::TYPE_STRING
+        );
+        $sheet->mergeCells('A1:H1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+
+        $headerRow = 3;
+        $sheet->fromArray(
+            ['ร้าน', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'อัตรากำไร', 'สัดส่วนกำไร', 'วันที่กรอก'],
+            null,
+            'A' . $headerRow
+        );
+
+        $headerRange = 'A' . $headerRow . ':H' . $headerRow;
+        $sheet->getStyle($headerRange)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
+        $sheet->getStyle($headerRange)->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB(self::HEADER_FILL_ARGB);
+        $sheet->getStyle($headerRange)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->freezePane('A' . ($headerRow + 1));
+
+        $rowNumber = $headerRow + 1;
+        foreach ($shops as $shop) {
+            $profit = (float)($shop['profit'] ?? 0);
+            $share = isset($shop['profit_share']) && $shop['profit_share'] !== null
+                ? (float)$shop['profit_share']
+                : null;
+
+            $sheet->setCellValueExplicit(
+                'A' . $rowNumber,
+                (string)($shop['shop_name'] ?? 'ร้านค้า'),
+                DataType::TYPE_STRING
+            );
+            $sheet->setCellValue('B' . $rowNumber, (float)($shop['total_revenue'] ?? 0));
+            $sheet->setCellValue('C' . $rowNumber, (float)($shop['total_ad_cost'] ?? 0));
+            $sheet->setCellValue('D' . $rowNumber, $profit);
+
+            if (isset($shop['roas']) && $shop['roas'] !== null) {
+                $sheet->setCellValue('E' . $rowNumber, (float)$shop['roas']);
+            }
+
+            if (isset($shop['profit_margin']) && $shop['profit_margin'] !== null) {
+                $sheet->setCellValue('F' . $rowNumber, (float)$shop['profit_margin']);
+            }
+
+            if ($share !== null) {
+                $sheet->setCellValue('G' . $rowNumber, $share);
+            }
+
+            $sheet->setCellValue('H' . $rowNumber, (int)($shop['days_count'] ?? 0));
+
+            // ร้านตัวถ่วง — ให้เห็นทันทีว่าใครดึงพอร์ตลง
+            if ($profit < 0) {
+                $sheet->getStyle('D' . $rowNumber)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
+            }
+            if ($share !== null && $share < 0) {
+                $sheet->getStyle('G' . $rowNumber)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
+            }
+
+            $rowNumber++;
+        }
+
+        $lastShopRow = $rowNumber - 1;
+        if ($lastShopRow >= $headerRow + 1) {
+            $sheet->getStyle('B' . ($headerRow + 1) . ':D' . $lastShopRow)
+                ->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+            $sheet->getStyle('E' . ($headerRow + 1) . ':E' . $lastShopRow)
+                ->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
+            $sheet->getStyle('F' . ($headerRow + 1) . ':G' . $lastShopRow)
+                ->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
+        }
+
+        $this->writeComparisonSummary($sheet, $summary, $lastShopRow + 2);
+
+        foreach (range('A', 'H') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+    }
+
+    /**
+     * แถบสรุปใต้ตาราง — เดือนดี/แย่สุด + YoY รวมร้าน (same-period)
+     *
+     * @param array<string,mixed> $summary
+     */
+    private function writeComparisonSummary(Worksheet $sheet, array $summary, int $startRow): void
+    {
+        $rowNumber = $startRow;
+
+        $sheet->getStyle('A' . $rowNumber . ':A' . ($rowNumber + 3))->getFont()->setBold(true);
+
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'กำไรรวมทุกร้าน', DataType::TYPE_STRING);
+        $sheet->setCellValue('B' . $rowNumber, (float)($summary['profit'] ?? 0));
+        $sheet->getStyle('B' . $rowNumber)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+        if ((float)($summary['profit'] ?? 0) < 0) {
+            $sheet->getStyle('B' . $rowNumber)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
+        }
+        $rowNumber++;
+
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนกำไรดีสุด', DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit(
+            'B' . $rowNumber,
+            $this->describeMonth($summary['best_month'] ?? null),
+            DataType::TYPE_STRING
+        );
+        $rowNumber++;
+
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนกำไรแย่สุด', DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit(
+            'B' . $rowNumber,
+            $this->describeMonth($summary['worst_month'] ?? null),
+            DataType::TYPE_STRING
+        );
+        $rowNumber++;
+
+        $previousYear = (int)($summary['prev_year'] ?? 0);
+        $percent = $summary['yoy_profit_change_percent'] ?? null;
+
+        $sheet->setCellValueExplicit(
+            'A' . $rowNumber,
+            sprintf('เทียบ %d (ช่วงเดียวกัน)', $previousYear + 543),
+            DataType::TYPE_STRING
+        );
+
+        if ($percent === null) {
+            $sheet->setCellValueExplicit('B' . $rowNumber, 'ไม่มีข้อมูลปีก่อน', DataType::TYPE_STRING);
+            return;
+        }
+
+        $percentValue = (float)$percent;
+        $change = (float)($summary['yoy_profit_change'] ?? 0);
+        $sheet->setCellValueExplicit(
+            'B' . $rowNumber,
+            sprintf(
+                '%s%s%% (%s%s) · ปีก่อน %s',
+                $percentValue > 0 ? '↑' : ($percentValue < 0 ? '↓' : ''),
+                number_format(abs($percentValue), 1),
+                $change >= 0 ? '+' : '-',
+                number_format(abs($change), 2),
+                number_format((float)($summary['prev_year_profit'] ?? 0), 2)
+            ),
+            DataType::TYPE_STRING
+        );
+
+        if ($percentValue < 0) {
+            $sheet->getStyle('B' . $rowNumber)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
+        }
+    }
+
+    /**
+     * @param mixed $month แถวเดือนจาก summary (best_month/worst_month) — null ได้เมื่อยังไม่มีข้อมูล
+     */
+    private function describeMonth($month): string
+    {
+        if (!is_array($month)) {
+            return '–';
+        }
+
+        $label = self::THAI_MONTHS[(int)($month['month'] ?? 0)] ?? '–';
+
+        return sprintf('%s (%s)', $label, number_format((float)($month['profit'] ?? 0), 2));
     }
 
     /**

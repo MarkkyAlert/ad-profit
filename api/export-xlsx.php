@@ -65,6 +65,17 @@ $reportService = new XlsxReportService();
 $spreadsheet = $reportService->buildDailySheet($payload);
 $reportService->buildMonthlySheet($spreadsheet, (array)($monthlyResult['data'] ?? []));
 
+// portfolio ทุกร้าน — โผล่เฉพาะเมื่อมี ≥ 2 ร้าน (กฎเดียวกับหน้ารวมร้าน)
+// ใช้ $today ตัวเดียวกับสองแท็บแรก → cutoff ตรงกันทั้งไฟล์
+$overviewResult = (new OverviewAnnualService($recordRepository, $shopRepository))
+    ->buildYearlyOverview($userId, $selectedYear, $today);
+
+if (($overviewResult['success'] ?? false) === true
+    && ($overviewResult['data']['can_view'] ?? false) === true
+) {
+    $reportService->buildShopComparisonSheet($spreadsheet, (array)$overviewResult['data']);
+}
+
 $filenameUtf8 = $exportService->buildYearlyXlsxFilename($shopName, $selectedYear);
 $asciiBase = preg_replace('/[^A-Za-z0-9._-]/', '_', pathinfo($filenameUtf8, PATHINFO_FILENAME)) ?? 'export';
 $asciiBase = trim($asciiBase, '_');
