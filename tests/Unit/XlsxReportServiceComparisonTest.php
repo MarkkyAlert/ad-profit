@@ -235,6 +235,7 @@ final class XlsxReportServiceComparisonTest extends TestCase
             $this->payload([$this->shop(['ร้าน A', 100.0, 10.0, 100.0, 1])])
         );
 
+        // ยังไม่เรียก buildAnnualSheet — ลำดับสุดท้าย (รายปีมาก่อน) ดู XlsxReportServiceAnnualTest
         $this->assertSame(['รายเดือน', 'รายวัน', 'เทียบร้าน'], $spreadsheet->getSheetNames());
 
         $sheet = $spreadsheet->getSheetByName('เทียบร้าน');

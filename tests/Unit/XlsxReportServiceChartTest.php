@@ -133,6 +133,7 @@ final class XlsxReportServiceChartTest extends TestCase
     {
         $spreadsheet = $this->buildWorkbook([[1, 'ม.ค.', 5000.0, 1000.0]]);
 
+        // workbook ยังไม่ได้เพิ่ม sheet รายปี — ลำดับสุดท้ายของจริงดู XlsxReportServiceAnnualTest
         $this->assertSame(['รายเดือน', 'รายวัน'], $spreadsheet->getSheetNames());
         $this->assertSame(0, $spreadsheet->getActiveSheetIndex());
 

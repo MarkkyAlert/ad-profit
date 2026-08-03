@@ -32,6 +32,7 @@ class XlsxReportService
 
     private const HEADER_FILL_ARGB = 'FF1F4E79';
     private const NEGATIVE_FONT_ARGB = 'FFC00000';
+    private const POSITIVE_FONT_ARGB = 'FF107C41';
     private const PERCENT_FORMAT = '0.0"%"';
     private const MONEY_FORMAT = '#,##0.00';
     private const RATIO_FORMAT = '0.00';
@@ -179,6 +180,142 @@ class XlsxReportService
 
         // สรุปมาก่อนรายละเอียด
         $spreadsheet->setIndexByName('รายเดือน', 0);
+        $spreadsheet->setActiveSheetIndex(0);
+    }
+
+    /**
+     * เพิ่ม sheet "รายปี" (สรุป + YoY ของร้านเดี่ยว) แล้วดันเป็น tab แรก
+     *
+     * reuse summary ที่ผู้เรียกส่งมา — ไม่ fetch เอง · ไม่มีกราฟ
+     * ต้องเรียกท้ายสุด เพื่อให้ setIndexByName ดันขึ้นหน้าได้จริง
+     *
+     * @param array<string,mixed> $summary ผลจาก AnnualService::buildYearlySummary()['data']['summary']
+     */
+    public function buildAnnualSheet(Spreadsheet $spreadsheet, array $summary, int $year, string $shopName): void
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('รายปี');
+
+        $sheet->setCellValueExplicit(
+            'A1',
+            sprintf('สรุปรายปี %s ปี %d', $shopName, $year + 543),
+            DataType::TYPE_STRING
+        );
+        $sheet->mergeCells('A1:C1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+
+        $profit = (float)($summary['profit'] ?? 0);
+
+        $rowNumber = 3;
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'ยอดรวมทั้งปี', DataType::TYPE_STRING);
+        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
+        $rowNumber++;
+
+        $moneyRows = [
+            ['รายได้', (float)($summary['total_revenue'] ?? 0)],
+            ['ค่าแอด', (float)($summary['total_ad_cost'] ?? 0)],
+            ['กำไร', $profit],
+        ];
+        foreach ($moneyRows as [$label, $value]) {
+            $sheet->setCellValueExplicit('A' . $rowNumber, $label, DataType::TYPE_STRING);
+            $sheet->setCellValue('B' . $rowNumber, $value);
+            $sheet->getStyle('B' . $rowNumber)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+            if ($value < 0) {
+                $sheet->getStyle('B' . $rowNumber)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
+            }
+            $rowNumber++;
+        }
+
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'ROAS', DataType::TYPE_STRING);
+        if (isset($summary['roas']) && $summary['roas'] !== null) {
+            $sheet->setCellValue('B' . $rowNumber, (float)$summary['roas']);
+            $sheet->getStyle('B' . $rowNumber)->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
+        } else {
+            $sheet->setCellValueExplicit('B' . $rowNumber, '–', DataType::TYPE_STRING);
+        }
+        $rowNumber++;
+
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'อัตรากำไร', DataType::TYPE_STRING);
+        if (isset($summary['profit_margin']) && $summary['profit_margin'] !== null) {
+            $sheet->setCellValue('B' . $rowNumber, (float)$summary['profit_margin']);
+            $sheet->getStyle('B' . $rowNumber)->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
+        } else {
+            $sheet->setCellValueExplicit('B' . $rowNumber, '–', DataType::TYPE_STRING);
+        }
+        $rowNumber += 2;
+
+        // YoY เทียบช่วงเดียวกันของปีก่อน
+        $percent = $summary['yoy_profit_change_percent'] ?? null;
+        $sheet->setCellValueExplicit(
+            'A' . $rowNumber,
+            sprintf('เทียบ %d (ช่วงเดียวกัน)', (int)($summary['prev_year'] ?? ($year - 1)) + 543),
+            DataType::TYPE_STRING
+        );
+        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
+
+        if ($percent === null) {
+            $sheet->setCellValueExplicit('B' . $rowNumber, 'ไม่มีข้อมูลปีก่อน', DataType::TYPE_STRING);
+        } else {
+            $percentValue = (float)$percent;
+            $change = (float)($summary['yoy_profit_change'] ?? 0);
+            $sheet->setCellValueExplicit(
+                'B' . $rowNumber,
+                sprintf(
+                    'กำไร %s%s%% (%s%s) · ปีก่อน %s',
+                    $percentValue > 0 ? '↑' : ($percentValue < 0 ? '↓' : ''),
+                    number_format(abs($percentValue), 1),
+                    $change >= 0 ? '+' : '-',
+                    number_format(abs($change), 2),
+                    number_format((float)($summary['prev_year_profit'] ?? 0), 2)
+                ),
+                DataType::TYPE_STRING
+            );
+
+            if (abs($percentValue) >= 0.05) {
+                $sheet->getStyle('B' . $rowNumber)->getFont()->getColor()->setARGB(
+                    $percentValue > 0 ? self::POSITIVE_FONT_ARGB : self::NEGATIVE_FONT_ARGB
+                );
+            }
+        }
+        $rowNumber += 2;
+
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนกำไรดีสุด', DataType::TYPE_STRING);
+        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
+        $sheet->setCellValueExplicit(
+            'B' . $rowNumber,
+            $this->describeMonth($summary['best_month'] ?? null),
+            DataType::TYPE_STRING
+        );
+        $rowNumber++;
+
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนกำไรแย่สุด', DataType::TYPE_STRING);
+        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
+        $sheet->setCellValueExplicit(
+            'B' . $rowNumber,
+            $this->describeMonth($summary['worst_month'] ?? null),
+            DataType::TYPE_STRING
+        );
+        $rowNumber++;
+
+        $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนที่มีข้อมูล', DataType::TYPE_STRING);
+        $sheet->getStyle('A' . $rowNumber)->getFont()->setBold(true);
+        $sheet->setCellValueExplicit(
+            'B' . $rowNumber,
+            sprintf(
+                '%d เดือน · กำไร %d / ขาดทุน %d',
+                (int)($summary['months_with_data'] ?? 0),
+                (int)($summary['profit_months'] ?? 0),
+                (int)($summary['loss_months'] ?? 0)
+            ),
+            DataType::TYPE_STRING
+        );
+
+        foreach (range('A', 'C') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        // สรุปทั้งปีมาก่อนทุกอย่าง
+        $spreadsheet->setIndexByName('รายปี', 0);
         $spreadsheet->setActiveSheetIndex(0);
     }
 

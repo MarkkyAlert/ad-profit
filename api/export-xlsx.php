@@ -76,6 +76,20 @@ if (($overviewResult['success'] ?? false) === true
     $reportService->buildShopComparisonSheet($spreadsheet, (array)$overviewResult['data']);
 }
 
+// รายปีต้องมาท้ายสุด — setIndexByName ของมันดันตัวเองเป็น tab แรกทับของเฟส 2
+// ($today ตัวเดียวกับทุกแท็บ → cutoff ตรงกันทั้งไฟล์)
+$annualResult = (new AnnualService($recordRepository, $shopRepository, new GoalRepository($pdo)))
+    ->buildYearlySummary($userId, $shopId, $selectedYear, $today);
+
+if (($annualResult['success'] ?? false) === true) {
+    $reportService->buildAnnualSheet(
+        $spreadsheet,
+        (array)($annualResult['data']['summary'] ?? []),
+        $selectedYear,
+        $shopName
+    );
+}
+
 $filenameUtf8 = $exportService->buildYearlyXlsxFilename($shopName, $selectedYear);
 $asciiBase = preg_replace('/[^A-Za-z0-9._-]/', '_', pathinfo($filenameUtf8, PATHINFO_FILENAME)) ?? 'export';
 $asciiBase = trim($asciiBase, '_');
