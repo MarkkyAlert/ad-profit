@@ -39,13 +39,7 @@ class AnnualService
 
         // เดือนสุดท้ายที่นับ — ปีปัจจุบันตัดที่เดือนนี้ ไม่ให้เดือนอนาคตโผล่มาเป็น ฿0
         // (ทำให้กราฟไม่ดิ่งลง 0 และ worst_month ไม่ไปเลือกเดือนที่ยังมาไม่ถึง)
-        $todayInput = is_string($today) ? trim($today) : '';
-        $todayObject = $todayInput !== ''
-            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
-            : false;
-        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
-            $todayObject = new DateTimeImmutable('today');
-        }
+        $todayObject = $this->resolveToday($today);
 
         $currentYear = (int)$todayObject->format('Y');
         if ($year < $currentYear) {
@@ -277,6 +271,90 @@ class AnnualService
     }
 
     /**
+     * กริดกำไร 12 เดือน × 3 ปี (year-2 → year) สำหรับดูฤดูกาล
+     * เทียบปีเดียวยังฟันธงไม่ได้ว่าเดือนไหน "ขายดีประจำ" — ต้องเห็นซ้ำหลายปี
+     *
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
+     */
+    public function buildMonthlyHeatmap(int $userId, int $shopId, int $year, ?string $today = null): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        if (!$this->isValidYear($year)) {
+            return [
+                'success' => false,
+                'error' => 'ปีที่เลือกไม่ถูกต้อง',
+            ];
+        }
+
+        $years = [$year - 2, $year - 1, $year];
+
+        try {
+            // ดึงครั้งเดียวคลุมทั้ง 3 ปี — reuse query เดิม ไม่เพิ่ม repo method
+            $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange(
+                $shopId,
+                sprintf('%04d-01', $years[0]),
+                sprintf('%04d-12', $year)
+            );
+        } catch (Throwable $exception) {
+            error_log('[annual] buildMonthlyHeatmap failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลฤดูกาลได้',
+            ];
+        }
+
+        $totalsByMonthKey = [];
+        foreach ($monthlyTotals as $row) {
+            $monthKey = (string)($row['month_key'] ?? '');
+            if ($monthKey !== '') {
+                $totalsByMonthKey[$monthKey] = $row;
+            }
+        }
+
+        // เดือนอนาคตต้องว่างเสมอ — สอดคล้องกับ cutoff ของ buildYearlySummary
+        // (กันเรคอร์ดลงวันที่ล่วงหน้าโผล่มาเป็นช่องเขียวในเดือนที่ยังไม่ถึง)
+        $todayObject = $this->resolveToday($today);
+        $currentYear = (int)$todayObject->format('Y');
+        $currentMonth = (int)$todayObject->format('n');
+
+        $grid = [];
+        foreach ($years as $gridYear) {
+            $row = [];
+            for ($month = 1; $month <= 12; $month++) {
+                $isFuture = $gridYear > $currentYear || ($gridYear === $currentYear && $month > $currentMonth);
+                $totals = $isFuture
+                    ? null
+                    : ($totalsByMonthKey[sprintf('%04d-%02d', $gridYear, $month)] ?? null);
+
+                // null = ยังไม่ได้กรอก · 0.0 = กรอกแล้วแต่เท่าทุนพอดี — คนละความหมาย ห้ามยุบรวม
+                $row[$month] = [
+                    'month' => $month,
+                    'profit' => $totals !== null
+                        ? (float)$totals['total_revenue'] - (float)$totals['total_ad_cost']
+                        : null,
+                    'has_data' => $totals !== null,
+                ];
+            }
+
+            $grid[$gridYear] = $row;
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'years' => $years,
+                'grid' => $grid,
+            ],
+        ];
+    }
+
+    /**
      * เปอร์เซ็นต์การเปลี่ยนแปลงเทียบฐานปีก่อน
      * ฐาน 0 (ไม่มีข้อมูลปีก่อน/เท่าทุนพอดี) → null เพราะหารไม่ได้
      * ฐานติดลบ → หารด้วย abs เพื่อให้เครื่องหมายสื่อทิศทางจริง (ขาดทุนน้อยลง = บวก)
@@ -288,6 +366,23 @@ class AnnualService
         }
 
         return round((($current - $previous) / abs($previous)) * 100, 1);
+    }
+
+    /**
+     * แปลง seam $today เป็น DateTimeImmutable — รูปแบบผิด/ไม่ส่ง = วันนี้จริง
+     */
+    private function resolveToday(?string $today): DateTimeImmutable
+    {
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
+            : false;
+
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            return new DateTimeImmutable('today');
+        }
+
+        return $todayObject;
     }
 
     private function isValidYear(int $year): bool

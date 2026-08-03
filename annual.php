@@ -31,6 +31,7 @@ $goalRepository = new GoalRepository($pdo);
 $annualService = new AnnualService($recordRepository, $shopRepository, $goalRepository);
 
 $annualResult = $annualService->buildYearlySummary($userId, $shopId, $selectedYear);
+$heatmapResult = $annualService->buildMonthlyHeatmap($userId, $shopId, $selectedYear);
 
 $zeroMonths = [];
 for ($month = 1; $month <= 12; $month++) {
@@ -143,6 +144,43 @@ if ($worstMonth !== null) {
     $worstMonthProfit = (float)($worstMonth['profit'] ?? 0);
     $worstMonthText = $monthLabel($worstMonth) . ' (' . formatMoney($worstMonthProfit) . ')';
 }
+
+// heat map ฤดูกาล 3 ปี — ล้มเหลวก็แค่ไม่แสดง section (ไม่กระทบสรุปประจำปี)
+$heatmapYears = [];
+$heatmapGrid = [];
+$heatmapPeak = 0.0;
+if (($heatmapResult['success'] ?? false) === true) {
+    $heatmapYears = array_values((array)($heatmapResult['data']['years'] ?? []));
+    $heatmapGrid = (array)($heatmapResult['data']['grid'] ?? []);
+
+    // normalize ความเข้มด้วยค่าสูงสุดของ |กำไร| ทั้งกริด — เทียบข้ามปีได้ในสเกลเดียว
+    foreach ($heatmapGrid as $gridRow) {
+        foreach ((array)$gridRow as $cell) {
+            if (($cell['has_data'] ?? false) === true && $cell['profit'] !== null) {
+                $heatmapPeak = max($heatmapPeak, abs((float)$cell['profit']));
+            }
+        }
+    }
+}
+
+// เข้มตามสัดส่วน แต่ไม่จางจนมองไม่เห็น (ขั้นต่ำ 0.12)
+$heatCellStyle = static function (array $cell) use ($heatmapPeak): string {
+    if (($cell['has_data'] ?? false) !== true || $cell['profit'] === null) {
+        return '';
+    }
+
+    $profit = (float)$cell['profit'];
+    if (abs($profit) < 0.00001) {
+        return 'background-color: rgba(148, 163, 184, 0.18);';   // เท่าทุน — เทา ไม่ใช่ว่าง
+    }
+
+    $ratio = $heatmapPeak > 0 ? min(1.0, abs($profit) / $heatmapPeak) : 1.0;
+    // floor คุม alpha สุดท้าย (ไม่ใช่ ratio) — ไม่งั้นเดือนที่กำไรน้อยจะจางจนดูเหมือนไม่มีข้อมูล
+    $alpha = max(0.12, $ratio * 0.55);
+    $rgb = $profit > 0 ? '34, 197, 94' : '239, 68, 68';
+
+    return sprintf('background-color: rgba(%s, %.2f);', $rgb, $alpha);
+};
 
 // เป้ารายเดือน — service ใส่มาเฉพาะเดือนที่ตั้งเป้าไว้ และไม่เกิน cutoff
 $goalProgress = array_values(array_filter(
@@ -487,6 +525,61 @@ require __DIR__ . '/includes/header.php';
         </div>
     </div>
 </section>
+
+<?php if (count($heatmapYears) > 0): ?>
+    <section class="section-card mt-6 p-4 sm:p-5">
+        <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+            <h2 class="text-base sm:text-lg font-semibold text-slate-100">ฤดูกาลกำไร (3 ปี)</h2>
+            <span class="text-xs text-slate-400">เดือนเดียวกันเขียวหลายปีติด = ฤดูกาลขายจริง ไม่ใช่ฟลุ๊ค</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-xs">
+                <thead>
+                    <tr class="border-b border-white/10 text-left text-slate-400">
+                        <th class="px-2 py-2">ปี</th>
+                        <?php for ($heatMonth = 1; $heatMonth <= 12; $heatMonth++): ?>
+                            <th class="px-2 py-2 text-center"><?= e($thaiMonths[$heatMonth] ?? '') ?></th>
+                        <?php endfor; ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($heatmapYears as $heatYear): ?>
+                        <tr class="border-b border-white/[0.06] whitespace-nowrap">
+                            <td class="px-2 py-2 font-medium text-slate-300"><?= e((string)((int)$heatYear + 543)) ?></td>
+                            <?php for ($heatMonth = 1; $heatMonth <= 12; $heatMonth++): ?>
+                                <?php
+                                $heatCell = (array)($heatmapGrid[$heatYear][$heatMonth] ?? []);
+                                $heatHasData = ($heatCell['has_data'] ?? false) === true;
+                                $heatProfit = $heatHasData && $heatCell['profit'] !== null ? (float)$heatCell['profit'] : null;
+                                ?>
+                                <td class="px-2 py-2 text-center font-medium <?= $heatProfit === null ? 'text-slate-600' : 'text-slate-100' ?>"
+                                    style="<?= e($heatCellStyle($heatCell)) ?>"
+                                    title="<?= e($thaiMonths[$heatMonth] . ' ' . ((int)$heatYear + 543) . ': ' . ($heatProfit === null ? 'ไม่มีข้อมูล' : formatMoney($heatProfit))) ?>">
+                                    <?= e($heatProfit === null ? '–' : formatMoney($heatProfit)) ?>
+                                </td>
+                            <?php endfor; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-3 w-5 rounded" style="background-color: rgba(34, 197, 94, 0.55);"></span> กำไร
+            </span>
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-3 w-5 rounded" style="background-color: rgba(239, 68, 68, 0.55);"></span> ขาดทุน
+            </span>
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-3 w-5 rounded" style="background-color: rgba(148, 163, 184, 0.18);"></span> เท่าทุน
+            </span>
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-3 w-5 rounded border border-white/10"></span> ไม่มีข้อมูล
+            </span>
+            <span class="text-slate-500">· ยิ่งเข้มยิ่งกำไร/ขาดทุนมาก (เทียบกับเดือนที่สุดในกริด)</span>
+        </div>
+    </section>
+<?php endif; ?>
 
 <script>
     (function() {
