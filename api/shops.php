@@ -23,13 +23,17 @@ $redirectPath = resolve_safe_redirect_path(
     isset($_SERVER['HTTP_REFERER']) ? (string)$_SERVER['HTTP_REFERER'] : null
 );
 
+// ทุก action ในไฟล์นี้เปลี่ยนสถานะทั้งหมด → ตรวจ method/content-type ก่อนอ่าน $action
+// (เดิมตรวจอยู่ในแต่ละ branch ซึ่งไม่มีวันทำงาน เพราะ $action อ่านจาก $_POST ที่ว่างเปล่า
+//  เมื่อเป็น GET หรือ JSON → ตกไป "Invalid action" 404 แทนที่จะเป็น 405/415)
+ensure_post_request_or_respond($wantsJson, $redirectPath);
+ensure_form_content_type_or_respond($wantsJson, $redirectPath);
+
 $respond = static function (array $payload, int $statusCode, string $redirectUrl) use ($wantsJson): never {
     api_respond($payload, $statusCode, $redirectUrl, $wantsJson);
 };
 
 if ($action === 'create') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopName = (string)($_POST['name'] ?? '');
@@ -77,8 +81,6 @@ if ($action === 'create') {
 }
 
 if ($action === 'rename') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopId = (int)($_POST['shop_id'] ?? 0);
@@ -111,8 +113,6 @@ if ($action === 'rename') {
 }
 
 if ($action === 'switch') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopId = (int)($_POST['shop_id'] ?? 0);
@@ -143,24 +143,17 @@ if ($action === 'switch') {
 }
 
 if ($action === 'delete') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $shopId = (int)($_POST['shop_id'] ?? ($_SESSION['current_shop_id'] ?? 0));
 
-    $confirmShopName = trim((string)($_POST['confirm_shop_name'] ?? ''));
-    $shopForDeleteConfirm = $shopRepository->findByIdAndUserId($shopId, $userId);
-    $fullShopName = trim((string)($shopForDeleteConfirm['name'] ?? ''));
-    $expectedShopName = mb_strlen($fullShopName) > 20 ? mb_substr($fullShopName, 0, 20) : $fullShopName;
-    if ($expectedShopName !== '' && $confirmShopName !== $expectedShopName) {
-        $respond([
-            'success' => false,
-            'error' => 'กรุณาพิมพ์ชื่อร้านให้ตรง เพื่อยืนยันการลบร้าน',
-        ], 422, $redirectPath);
-    }
-
-    $deleteResult = $shopService->deleteShop($userId, $shopId);
+    // การเทียบชื่อยืนยันย้ายไปอยู่ใน ShopService::deleteShop แล้ว
+    // (เทียบกับชื่อจากแถวที่ล็อกไว้ในทรานแซกชันเดียวกัน ไม่ใช่แถวที่อ่านแยกมาก่อนหน้า)
+    $deleteResult = $shopService->deleteShop(
+        $userId,
+        $shopId,
+        (string)($_POST['confirm_shop_name'] ?? '')
+    );
 
     if (($deleteResult['success'] ?? false) !== true) {
         $errorMessage = (string)($deleteResult['error'] ?? 'ไม่สามารถลบร้านค้าได้');

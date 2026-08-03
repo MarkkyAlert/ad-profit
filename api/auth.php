@@ -9,6 +9,12 @@ require_once __DIR__ . '/../includes/auth.php';
 $action = (string)($_POST['action'] ?? '');
 $wantsJson = wants_json_response();
 
+// ทุก action ในไฟล์นี้เปลี่ยนสถานะทั้งหมด → ตรวจ method/content-type ก่อนอ่าน $action
+// (เดิมตรวจอยู่ในแต่ละ branch ซึ่งไม่มีวันทำงาน เพราะ $action อ่านจาก $_POST ที่ว่างเปล่า
+//  เมื่อเป็น GET หรือ JSON → ตกไป "Invalid action" 404 แทนที่จะเป็น 405/415)
+ensure_post_request_or_respond($wantsJson, '/login.php');
+ensure_form_content_type_or_respond($wantsJson, '/login.php');
+
 $userRepository = new UserRepository($pdo);
 $shopRepository = new ShopRepository($pdo);
 $passwordResetRepository = new PasswordResetRepository($pdo);
@@ -20,8 +26,6 @@ $respond = static function (array $payload, int $statusCode, string $redirectUrl
 };
 
 if ($action === 'register') {
-    ensure_post_request_or_respond($wantsJson, '/login.php?tab=register');
-    ensure_form_content_type_or_respond($wantsJson, '/login.php?tab=register');
     ensure_valid_csrf_or_respond($wantsJson, '/login.php?tab=register', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->register(
@@ -49,8 +53,6 @@ if ($action === 'register') {
 }
 
 if ($action === 'login') {
-    ensure_post_request_or_respond($wantsJson, '/login.php?tab=login');
-    ensure_form_content_type_or_respond($wantsJson, '/login.php?tab=login');
     ensure_valid_csrf_or_respond($wantsJson, '/login.php?tab=login', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->login(
@@ -77,8 +79,6 @@ if ($action === 'login') {
 }
 
 if ($action === 'logout') {
-    ensure_post_request_or_respond($wantsJson, '/dashboard.php');
-    ensure_form_content_type_or_respond($wantsJson, '/dashboard.php');
 
     if (!isset($_SESSION['user_id']) || (int)$_SESSION['user_id'] <= 0) {
         $respond([
@@ -98,8 +98,6 @@ if ($action === 'logout') {
 }
 
 if ($action === 'forgot_password') {
-    ensure_post_request_or_respond($wantsJson, '/forgot-password.php');
-    ensure_form_content_type_or_respond($wantsJson, '/forgot-password.php');
     ensure_valid_csrf_or_respond($wantsJson, '/forgot-password.php', (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->requestPasswordReset(
@@ -129,8 +127,6 @@ if ($action === 'forgot_password') {
 }
 
 if ($action === 'reset_password') {
-    ensure_post_request_or_respond($wantsJson, '/reset-password.php');
-    ensure_form_content_type_or_respond($wantsJson, '/reset-password.php');
     ensure_valid_csrf_or_respond($wantsJson, '/reset-password.php', (string)($_POST['csrf_token'] ?? ''));
 
     $resetToken = trim((string)($_POST['token'] ?? ($_SESSION['password_reset_token'] ?? '')));

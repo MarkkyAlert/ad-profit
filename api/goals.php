@@ -28,9 +28,13 @@ $redirectPath = resolve_safe_redirect_path(
     isset($_SERVER['HTTP_REFERER']) ? (string)$_SERVER['HTTP_REFERER'] : null
 );
 
+// ทุก action ในไฟล์นี้เปลี่ยนสถานะทั้งหมด → ตรวจ method/content-type ก่อนอ่าน $action
+// (เดิมตรวจอยู่ในแต่ละ branch ซึ่งไม่มีวันทำงาน เพราะ $action อ่านจาก $_POST ที่ว่างเปล่า
+//  เมื่อเป็น GET หรือ JSON → ตกไป "Invalid action" 404 แทนที่จะเป็น 405/415)
+ensure_post_request_or_respond($wantsJson, $redirectPath);
+ensure_form_content_type_or_respond($wantsJson, $redirectPath);
+
 if ($action === 'upsert') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     // ส่งค่าดิบให้ service ตรวจเอง — normalize_month_input() จะ "ซ่อม" เดือนที่ผิดรูปแบบ
@@ -61,15 +65,15 @@ if ($action === 'upsert') {
         ], 200, $redirectPath);
     }
 
+    $errorMessage = (string)($result['error'] ?? 'ไม่สามารถบันทึกเป้าหมายได้');
+
     $respond([
         'success' => false,
-        'error' => (string)($result['error'] ?? 'ไม่สามารถบันทึกเป้าหมายได้'),
-    ], 422, $redirectPath);
+        'error' => $errorMessage,
+    ], infer_http_status_from_error($errorMessage, 422), $redirectPath);
 }
 
 if ($action === 'delete') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     // ค่าดิบเช่นกัน — ถ้าปล่อยให้ normalize เป็นเดือนปัจจุบัน การลบจะไปโดนเป้าที่ผู้ใช้ไม่ได้สั่ง
@@ -83,10 +87,12 @@ if ($action === 'delete') {
         ], 200, $redirectPath);
     }
 
+    $errorMessage = (string)($result['error'] ?? 'ไม่สามารถลบเป้าหมายได้');
+
     $respond([
         'success' => false,
-        'error' => (string)($result['error'] ?? 'ไม่สามารถลบเป้าหมายได้'),
-    ], 422, $redirectPath);
+        'error' => $errorMessage,
+    ], infer_http_status_from_error($errorMessage, 422), $redirectPath);
 }
 
 $respond([

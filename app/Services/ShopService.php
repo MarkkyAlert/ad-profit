@@ -7,6 +7,9 @@ class ShopService
     /** จำนวนร้านสูงสุดต่อผู้ใช้ 1 คน */
     public const MAX_SHOPS_PER_USER = 20;
 
+    /** ความยาวสูงสุดของข้อความยืนยันตอนลบร้าน (ชื่อยาวกว่านี้ให้พิมพ์แค่ส่วนต้น) */
+    public const CONFIRM_NAME_MAX_LENGTH = 20;
+
     private const SHOP_LIMIT_ERROR = 'ไม่สามารถสร้างร้านค้าเพิ่มได้ (จำกัดสูงสุด '
         . self::MAX_SHOPS_PER_USER . ' ร้านต่อผู้ใช้งาน)';
 
@@ -19,6 +22,29 @@ class ShopService
         $this->shopRepository = $shopRepository;
         $this->userRepository = $userRepository;
         $this->db = $db;
+    }
+
+    /**
+     * ข้อความที่ผู้ใช้ต้องพิมพ์เพื่อยืนยันการลบร้าน (ชื่อร้าน หรือ 20 ตัวแรกถ้ายาวกว่านั้น)
+     *
+     * ต้อง trim หลังตัดด้วย — ถ้าตัวที่ 20 พอดีเป็นช่องว่าง ค่าที่ได้จะลงท้ายด้วยช่องว่าง
+     * ขณะที่เบราว์เซอร์ส่งค่าที่ trim แล้วเสมอ → ไม่มีวันตรงกัน ลบร้านนั้นไม่ได้ตลอดกาล
+     * (เดิมตรรกะนี้อยู่ที่ api/shops.php และตัดโดยไม่ trim)
+     */
+    public static function confirmationNameFor(string $shopName): string
+    {
+        $name = trim($shopName);
+        $length = function_exists('mb_strlen') ? mb_strlen($name) : strlen($name);
+
+        if ($length <= self::CONFIRM_NAME_MAX_LENGTH) {
+            return $name;
+        }
+
+        $truncated = function_exists('mb_substr')
+            ? mb_substr($name, 0, self::CONFIRM_NAME_MAX_LENGTH)
+            : substr($name, 0, self::CONFIRM_NAME_MAX_LENGTH);
+
+        return trim($truncated);
     }
 
     public function getShopContext(int $userId, ?int $currentShopId): array
@@ -290,7 +316,10 @@ class ShopService
         ];
     }
 
-    public function deleteShop(int $userId, int $shopId): array
+    /**
+     * @param string $confirmName ชื่อร้านที่ผู้ใช้พิมพ์ยืนยัน — ต้องตรงกับ confirmationNameFor()
+     */
+    public function deleteShop(int $userId, int $shopId, string $confirmName = ''): array
     {
         if ($shopId <= 0) {
             return [
@@ -338,6 +367,18 @@ class ShopService
                 return [
                     'success' => false,
                     'error' => 'ไม่สามารถลบร้านสุดท้ายได้',
+                ];
+            }
+
+            // ยืนยันด้วยการพิมพ์ชื่อร้าน — เทียบกับชื่อจากแถวที่ล็อกไว้แล้ว
+            if (trim($confirmName) !== self::confirmationNameFor((string)($shop['name'] ?? ''))) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'กรุณาพิมพ์ชื่อร้านให้ตรง เพื่อยืนยันการลบร้าน',
                 ];
             }
 

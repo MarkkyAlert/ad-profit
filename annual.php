@@ -10,20 +10,8 @@ requireAuth();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
-$selectedYearRaw = isset($_GET['year']) ? trim((string)$_GET['year']) : date('Y');
-if (preg_match('/^\d{4}$/', $selectedYearRaw) !== 1) {
-    $selectedYearRaw = date('Y');
-}
-
-$selectedYear = (int)$selectedYearRaw;
-if ($selectedYear >= 2400 && $selectedYear <= 2700) {
-    $selectedYear -= 543;
-}
-
+$selectedYear = resolve_calendar_year($_GET['year'] ?? null);
 $currentYear = (int)date('Y');
-if ($selectedYear < 2000 || $selectedYear > 2100) {
-    $selectedYear = $currentYear;
-}
 
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);

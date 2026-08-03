@@ -145,14 +145,16 @@ require __DIR__ . '/includes/header.php';
                             </form>
 
                             <?php
-                            $shopNameForConfirm = mb_strlen($shopName) > 20 ? mb_substr($shopName, 0, 20) : $shopName;
+                            // ใช้ตัวเดียวกับที่ ShopService ใช้ตรวจ ไม่งั้นสองฝั่งคำนวณคนละแบบ
+                            $shopNameForConfirm = ShopService::confirmationNameFor($shopName);
+                            $shopNameIsTruncated = $shopNameForConfirm !== trim($shopName);
                             ?>
                             <form
                                 action="<?= e(app_url('/api/shops.php')) ?>"
                                 method="post"
                                 data-confirm="ยืนยันการลบร้านนี้ใช่หรือไม่? ข้อมูลทั้งหมดในร้านจะถูกลบถาวร (ระบบจะให้พิมพ์ชื่อร้านยืนยันอีกครั้ง)"
                                 data-confirm-typed-expected="<?= e($shopNameForConfirm) ?>"
-                                data-confirm-typed-prompt="เพื่อยืนยันการลบร้าน กรุณาพิมพ์<?= mb_strlen($shopName) > 20 ? ' 20 ตัวแรกของ' : '' ?>ชื่อร้านให้ตรงตามนี้:"
+                                data-confirm-typed-prompt="เพื่อยืนยันการลบร้าน กรุณาพิมพ์<?= $shopNameIsTruncated ? ' ' . ShopService::CONFIRM_NAME_MAX_LENGTH . ' ตัวแรกของ' : '' ?>ชื่อร้านให้ตรงตามนี้:"
                                 data-confirm-typed-input="confirm_shop_name">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete">

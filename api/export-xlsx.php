@@ -22,11 +22,10 @@ $wantsJson = wants_json_response();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
-// รับปีเป็น ค.ศ. หรือ พ.ศ. ก็ได้ (แปลงแบบเดียวกับ annual.php) — service เป็นคนตัดสินว่าปีถูกช่วงไหม
-$selectedYear = isset($_GET['year']) ? (int)trim((string)$_GET['year']) : (int)date('Y');
-if ($selectedYear >= 2400 && $selectedYear <= 2700) {
-    $selectedYear -= 543;
-}
+// รับปีเป็น ค.ศ. หรือ พ.ศ. ก็ได้ — helper เดียวกับ annual.php/overview.php
+// เดิมที่นี่ไม่ตรวจรูปแบบและไม่ clamp ทำให้ ?year เดียวกันได้ผลต่างกัน: หน้า annual
+// แสดงปีปัจจุบันเงียบ ๆ ส่วนปุ่ม export ตอบ error แล้ว redirect กลับไปปีที่อ่านไม่ออก
+$selectedYear = resolve_calendar_year($_GET['year'] ?? null);
 
 $recordRepository = new RecordRepository($pdo);
 $shopRepository = new ShopRepository($pdo);

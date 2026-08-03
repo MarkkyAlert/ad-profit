@@ -326,6 +326,35 @@ function normalize_month_input(?string $month, ?string $fallback = null): string
     return $month;
 }
 
+/**
+ * แปลงปีที่รับจาก query string ให้เป็น ค.ศ. ที่ใช้งานได้เสมอ
+ *
+ * รับได้ทั้ง ค.ศ. และ พ.ศ. (2400–2700 → −543) ค่าที่ใช้ไม่ได้ตกไปที่ $fallbackYear
+ * แล้วจึงเป็นปีปัจจุบัน ผลลัพธ์อยู่ในช่วง 2000–2100 เสมอ (ช่วงเดียวกับที่ Service ยอมรับ)
+ *
+ * รวมตรรกะที่เคยคัดลอกอยู่ 4 ที่ (annual.php, overview.php, api/annual-data.php,
+ * api/export-xlsx.php) ซึ่ง 3 ที่เหมือนกันแต่ api/export-xlsx.php ไม่มีทั้งการตรวจรูปแบบ
+ * และการ clamp → หน้าเดียวกันตอบต่างกันเมื่อได้ ?year ที่ใช้ไม่ได้
+ */
+function resolve_calendar_year(mixed $rawYear, mixed $fallbackYear = null): int
+{
+    $normalize = static function (mixed $value): ?int {
+        $text = trim((string)$value);
+        if (preg_match('/^\d{4}$/', $text) !== 1) {
+            return null;
+        }
+
+        $year = (int)$text;
+        if ($year >= 2400 && $year <= 2700) {
+            $year -= 543; // พ.ศ. → ค.ศ.
+        }
+
+        return ($year >= 2000 && $year <= 2100) ? $year : null;
+    };
+
+    return $normalize($rawYear) ?? $normalize($fallbackYear) ?? (int)date('Y');
+}
+
 function parse_decimal_input(mixed $raw, bool $allowEmpty = false): array
 {
     $normalized = trim((string)$raw);

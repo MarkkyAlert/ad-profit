@@ -320,7 +320,8 @@ class RecordService
     /**
      * บันทึกรายวันหลายแถวในครั้งเดียว (atomic — สำเร็จทั้งหมด หรือไม่เขียนเลย)
      *
-     * @param array<int,array{record_date?: mixed, revenue?: mixed, ad_cost?: mixed, note?: mixed}> $rows
+     * @param array<int,array{row_number?: mixed, record_date?: mixed, revenue?: mixed, ad_cost?: mixed, note?: mixed}> $rows
+     *        row_number = เลขแถวที่ผู้ใช้เห็น (ไม่ส่งมาก็นับตามลำดับใน $rows)
      * @param int|null $maxRows เพดานจำนวนแถว — null = BULK_MAX_ROWS (ฟอร์มกรอกมือ)
      */
     public function upsertManyRecords(int $userId, int $shopId, array $rows, ?int $maxRows = null): array
@@ -349,7 +350,11 @@ class RecordService
             }
 
             $filledRows[] = [
-                'row_number' => (int)$index + 1,
+                // ผู้เรียกส่งเลขแถวที่ผู้ใช้เห็นมาได้ (ฟอร์ม bulk ตัดแถวที่ไม่ได้กรอกออกก่อนส่ง
+                // ลำดับใน payload จึงไม่ตรงกับบนหน้าจอ) ไม่ส่งมาก็นับตามลำดับเหมือนเดิม
+                'row_number' => (int)($row['row_number'] ?? 0) > 0
+                    ? (int)$row['row_number']
+                    : (int)$index + 1,
                 'record_date' => $recordDate,
                 'revenue' => $row['revenue'] ?? null,
                 'ad_cost' => $row['ad_cost'] ?? null,

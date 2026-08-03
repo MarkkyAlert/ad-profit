@@ -206,7 +206,8 @@ require __DIR__ . '/includes/header.php';
     <tr class="border-b border-white/[0.06]">
         <td class="px-2 py-2 text-slate-500 bulk-row-number"></td>
         <td class="px-2 py-2">
-            <input name="record_date[]" type="date" class="w-full rounded-lg px-2 py-1.5 text-sm">
+            <input type="hidden" name="row_number[]" value="">
+                <input name="record_date[]" type="date" class="w-full rounded-lg px-2 py-1.5 text-sm">
         </td>
         <td class="px-2 py-2">
             <input name="revenue[]" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
@@ -243,6 +244,13 @@ require __DIR__ . '/includes/header.php';
                 const numberCell = row.querySelector('.bulk-row-number');
                 if (numberCell) {
                     numberCell.textContent = String(index + 1);
+                }
+
+                // ส่งเลขแถวที่ผู้ใช้เห็นไปด้วย — แถวที่ไม่ได้กรอกจะไม่ถูกส่ง ทำให้แถวถัดไป
+                // เลื่อนขึ้น ถ้าเซิร์ฟเวอร์นับเองจะรายงาน "แถวที่ 2" ทั้งที่ผู้ใช้เห็นเป็นแถวที่ 3
+                const numberInput = row.querySelector('input[name="row_number[]"]');
+                if (numberInput) {
+                    numberInput.value = String(index + 1);
                 }
             });
 

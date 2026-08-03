@@ -21,21 +21,9 @@ if (preg_match('/^\d{4}-\d{2}$/', $selectedMonth) !== 1) {
     $selectedMonth = date('Y-m');
 }
 
-$selectedYearRaw = isset($_GET['year']) ? trim((string)$_GET['year']) : substr($selectedMonth, 0, 4);
-
-if (preg_match('/^\d{4}$/', $selectedYearRaw) !== 1) {
-    $selectedYearRaw = date('Y');
-}
-
-$selectedYear = (int)$selectedYearRaw;
-if ($selectedYear >= 2400 && $selectedYear <= 2700) {
-    $selectedYear -= 543;
-}
-
+// ไม่ระบุ ?year → ใช้ปีของเดือนที่กำลังดูอยู่
+$selectedYear = resolve_calendar_year($_GET['year'] ?? null, substr($selectedMonth, 0, 4));
 $currentYear = (int)date('Y');
-if ($selectedYear < 2000 || $selectedYear > 2100) {
-    $selectedYear = $currentYear;
-}
 
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);

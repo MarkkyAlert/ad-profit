@@ -22,6 +22,12 @@ $redirectPath = resolve_safe_redirect_path(
     isset($_SERVER['HTTP_REFERER']) ? (string)$_SERVER['HTTP_REFERER'] : null
 );
 
+// ทุก action ในไฟล์นี้เปลี่ยนสถานะทั้งหมด → ตรวจ method/content-type ก่อนอ่าน $action
+// (เดิมตรวจอยู่ในแต่ละ branch ซึ่งไม่มีวันทำงาน เพราะ $action อ่านจาก $_POST ที่ว่างเปล่า
+//  เมื่อเป็น GET หรือ JSON → ตกไป "Invalid action" 404 แทนที่จะเป็น 405/415)
+ensure_post_request_or_respond($wantsJson, $redirectPath);
+ensure_form_content_type_or_respond($wantsJson, $redirectPath);
+
 $respond = static function (array $payload, int $statusCode, string $redirectUrl) use ($wantsJson): never {
     api_respond($payload, $statusCode, $redirectUrl, $wantsJson);
 };
@@ -91,8 +97,6 @@ $clearProfileRateLimit = static function (string $action, int $userId, string $c
 };
 
 if ($action === 'update_profile') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $result = $profileService->updateProfile($userId, (string)($_POST['display_name'] ?? ''));
@@ -116,8 +120,6 @@ if ($action === 'update_profile') {
 }
 
 if ($action === 'change_email') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $rateLimitAction = 'change_email';
@@ -160,8 +162,6 @@ if ($action === 'change_email') {
 }
 
 if ($action === 'change_password') {
-    ensure_post_request_or_respond($wantsJson, $redirectPath);
-    ensure_form_content_type_or_respond($wantsJson, $redirectPath);
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 
     $rateLimitAction = 'change_password';

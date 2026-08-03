@@ -11,6 +11,12 @@ requireAuth();
 $action = (string)($_POST['action'] ?? '');
 $wantsJson = wants_json_response();
 
+// ทุก action ในไฟล์นี้เปลี่ยนสถานะทั้งหมด → ตรวจ method/content-type ก่อนอ่าน $action
+// (เดิมตรวจอยู่ในแต่ละ branch ซึ่งไม่มีวันทำงาน เพราะ $action อ่านจาก $_POST ที่ว่างเปล่า
+//  เมื่อเป็น GET หรือ JSON → ตกไป "Invalid action" 404 แทนที่จะเป็น 405/415)
+ensure_post_request_or_respond($wantsJson, '/add-record.php');
+ensure_form_content_type_or_respond($wantsJson, '/add-record.php');
+
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
@@ -23,8 +29,6 @@ $respond = static function (array $payload, int $statusCode, string $redirectUrl
 };
 
 if ($action === 'upsert') {
-    ensure_post_request_or_respond($wantsJson, '/add-record.php');
-    ensure_form_content_type_or_respond($wantsJson, '/add-record.php');
     ensure_valid_csrf_or_respond($wantsJson, '/add-record.php', (string)($_POST['csrf_token'] ?? ''));
 
     $recordDate = (string)($_POST['record_date'] ?? '');
@@ -61,8 +65,6 @@ if ($action === 'upsert') {
 }
 
 if ($action === 'bulk_upsert') {
-    ensure_post_request_or_respond($wantsJson, '/add-record.php');
-    ensure_form_content_type_or_respond($wantsJson, '/add-record.php');
     ensure_valid_csrf_or_respond($wantsJson, '/add-record.php', (string)($_POST['csrf_token'] ?? ''));
 
     $recordDates = isset($_POST['record_date']) && is_array($_POST['record_date']) ? $_POST['record_date'] : [];
@@ -77,12 +79,17 @@ if ($action === 'bulk_upsert') {
         ], 422, '/add-record.php');
     }
 
+    // เลขแถวที่ผู้ใช้เห็นบนตาราง — แถวที่ไม่ได้กรอกจะไม่ถูกส่งมา ทำให้ลำดับใน $_POST
+    // ไม่ตรงกับที่เห็นบนหน้าจอ ถ้าไม่มีค่านี้มาด้วย service จะนับเองแล้วชี้ผิดแถว
+    $rowNumbers = isset($_POST['row_number']) && is_array($_POST['row_number']) ? $_POST['row_number'] : [];
+
     $rows = [];
     foreach (array_keys($recordDates) as $rowIndex) {
         $revenueParsed = parse_decimal_input($revenues[$rowIndex] ?? '', true);
         $adCostParsed = parse_decimal_input($adCosts[$rowIndex] ?? '', true);
 
         $rows[] = [
+            'row_number' => (int)($rowNumbers[$rowIndex] ?? 0),
             'record_date' => (string)($recordDates[$rowIndex] ?? ''),
             // ส่งค่าที่ parse ไม่ผ่านเป็น string เดิม เพื่อให้ Service รายงานแถวที่ผิดได้
             'revenue' => ($revenueParsed['valid'] ?? false) === true
@@ -117,9 +124,8 @@ if ($action === 'bulk_upsert') {
 }
 
 if ($action === 'import_csv') {
-    // multipart/form-data → ไม่ใช้ ensure_form_content_type_or_respond (มันรับแค่ urlencoded/multipart
-    // แต่ CSRF ยังต้องตรวจตามปกติ เพราะ token มาใน field ของ multipart)
-    ensure_post_request_or_respond($wantsJson, '/add-record.php');
+    // อัปโหลดมาเป็น multipart/form-data ซึ่ง guard ระดับไฟล์รับอยู่แล้ว
+    // CSRF ยังตรวจตามปกติ เพราะ token มาใน field ของ multipart
     ensure_valid_csrf_or_respond($wantsJson, '/add-record.php', (string)($_POST['csrf_token'] ?? ''));
 
     $uploadedFile = $_FILES['csv'] ?? null;
@@ -214,8 +220,6 @@ if ($action === 'import_csv') {
 
 if ($action === 'update') {
     $month = normalize_month_input(isset($_POST['month']) ? (string)$_POST['month'] : null);
-    ensure_post_request_or_respond($wantsJson, '/history.php');
-    ensure_form_content_type_or_respond($wantsJson, '/history.php?month=' . $month);
     ensure_valid_csrf_or_respond($wantsJson, '/history.php?month=' . $month, (string)($_POST['csrf_token'] ?? ''));
 
     $recordId = (int)($_POST['record_id'] ?? 0);
@@ -237,10 +241,14 @@ if ($action === 'update') {
     $result = $recordService->updateRecord($userId, $shopId, $recordId, $recordDate, $revenue, $adCost, $note);
 
     if (($result['success'] ?? false) === true) {
+        // แก้วันที่ข้ามเดือนได้ → ต้องพากลับไปเดือนใหม่ ไม่งั้นผู้ใช้เห็นข้อความ "แก้ไขเรียบร้อย"
+        // พร้อมตารางที่ไม่มีรายการนั้น แล้วเข้าใจว่าโดนลบ
+        $savedMonth = normalize_month_input(substr(trim($recordDate), 0, 7), $month);
+
         $respond([
             'success' => true,
             'message' => (string)($result['message'] ?? 'แก้ไขรายการเรียบร้อยแล้ว'),
-        ], 200, '/history.php?month=' . $month);
+        ], 200, '/history.php?month=' . $savedMonth);
     }
 
     $errorMessage = (string)($result['error'] ?? 'ไม่สามารถแก้ไขรายการได้');
@@ -254,8 +262,6 @@ if ($action === 'update') {
 
 if ($action === 'delete') {
     $month = normalize_month_input(isset($_POST['month']) ? (string)$_POST['month'] : null);
-    ensure_post_request_or_respond($wantsJson, '/history.php');
-    ensure_form_content_type_or_respond($wantsJson, '/history.php?month=' . $month);
     ensure_valid_csrf_or_respond($wantsJson, '/history.php?month=' . $month, (string)($_POST['csrf_token'] ?? ''));
 
     $recordId = (int)($_POST['record_id'] ?? 0);
