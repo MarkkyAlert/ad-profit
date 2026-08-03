@@ -41,6 +41,9 @@ for ($month = 1; $month <= 12; $month++) {
         'profit' => 0.0,
         'roas' => null,
         'profit_margin' => null,
+        'days_count' => 0,
+        'prev_year_profit' => 0.0,
+        'yoy_change_percent' => null,
     ];
 }
 
@@ -55,6 +58,10 @@ $annualData = [
         'roas' => null,
         'best_month' => $zeroMonths[0],
         'worst_month' => $zeroMonths[0],
+        'prev_year' => $selectedYear - 1,
+        'prev_year_profit' => 0.0,
+        'yoy_profit_change' => 0.0,
+        'yoy_profit_change_percent' => null,
     ],
     'chart' => [
         'months' => array_values(array_map(static fn(array $row): string => (string)$row['month_key'], $zeroMonths)),
@@ -120,6 +127,34 @@ if ($worstMonth !== null) {
     $worstMonthText = $monthLabel($worstMonth) . ' (' . formatMoney($worstMonthProfit) . ')';
 }
 
+$totalDaysCount = array_sum(array_map(static fn(array $row): int => (int)($row['days_count'] ?? 0), $months));
+
+// YoY เทียบช่วงเดียวกันของปีก่อน (service ตัดเดือนอนาคตให้แล้ว)
+$prevYear = (int)($summary['prev_year'] ?? ($selectedYear - 1));
+$prevYearProfit = (float)($summary['prev_year_profit'] ?? 0);
+$yoyChange = (float)($summary['yoy_profit_change'] ?? 0);
+$yoyPercent = isset($summary['yoy_profit_change_percent']) && $summary['yoy_profit_change_percent'] !== null
+    ? (float)$summary['yoy_profit_change_percent']
+    : null;
+
+// แสดง % การเปลี่ยนแปลง — null (ไม่มีฐานให้เทียบ) ต้องไม่กลายเป็น 0%
+$formatYoyPercent = static function (?float $percent): string {
+    if ($percent === null) {
+        return '—';
+    }
+
+    $arrow = $percent > 0 ? '↑' : ($percent < 0 ? '↓' : '');
+    return $arrow . number_format(abs($percent), 1) . '%';
+};
+
+$yoyToneClass = static function (?float $percent): string {
+    if ($percent === null || abs($percent) < 0.00001) {
+        return 'text-slate-400';
+    }
+
+    return $percent > 0 ? 'text-green-400' : 'text-red-400';
+};
+
 $chartRaw = (array)($annualData['chart'] ?? []);
 $chartLabels = array_map(
     static function (string $monthKey) use ($thaiMonths): string {
@@ -157,7 +192,7 @@ require __DIR__ . '/includes/header.php';
     <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>
             <h1 class="text-lg sm:text-xl font-semibold text-slate-100">สรุปประจำปี</h1>
-            <p class="mt-1 text-xs sm:text-sm text-slate-500">ภาพรวมรายปีของร้านที่เลือก พร้อมตาราง 12 เดือนและกราฟเปรียบเทียบ</p>
+            <p class="mt-1 text-xs sm:text-sm text-slate-500">ภาพรวมรายปีของร้านที่เลือก พร้อมตารางรายเดือน เทียบปีก่อน และกราฟเปรียบเทียบ</p>
         </div>
 
         <form method="get" action="<?= e(app_url('/annual.php')) ?>" class="flex flex-wrap items-center gap-2">
@@ -217,8 +252,32 @@ require __DIR__ . '/includes/header.php';
     </article>
 </section>
 
+<section class="section-card mt-4 px-4 py-3 sm:px-5">
+    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">
+            เทียบ <?= e((string)($prevYear + 543)) ?>
+            <?php if (count($months) > 0 && count($months) < 12): ?>
+                (ม.ค.–<?= e($thaiMonths[count($months)] ?? '') ?>)
+            <?php endif; ?>
+        </span>
+        <?php if ($yoyPercent === null): ?>
+            <span class="text-base font-bold text-slate-400">ไม่มีข้อมูลปีก่อน</span>
+        <?php else: ?>
+            <span class="text-base font-bold <?= e($yoyToneClass($yoyPercent)) ?>">
+                กำไร <?= e($formatYoyPercent($yoyPercent)) ?>
+            </span>
+            <span class="text-sm <?= e($yoyToneClass($yoyPercent)) ?>">
+                (<?= e(($yoyChange >= 0 ? '+' : '-') . formatMoney(abs($yoyChange))) ?>)
+            </span>
+            <span class="text-xs text-slate-500">
+                ปีก่อน <?= e(formatMoney($prevYearProfit)) ?>
+            </span>
+        <?php endif; ?>
+    </div>
+</section>
+
 <section class="section-card mt-6 p-4 sm:p-5">
-    <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางเทียบรายเดือน (12 เดือน)</h2>
+    <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางเทียบรายเดือน (<?= e((string)count($months)) ?> เดือน)</h2>
     <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
             <thead>
@@ -229,6 +288,8 @@ require __DIR__ . '/includes/header.php';
                     <th class="px-3 py-2">กำไร</th>
                     <th class="px-3 py-2">ROAS</th>
                     <th class="px-3 py-2">อัตรากำไร</th>
+                    <th class="px-3 py-2">วันที่กรอก</th>
+                    <th class="px-3 py-2">เทียบ <?= e((string)($prevYear + 543)) ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -239,6 +300,10 @@ require __DIR__ . '/includes/header.php';
                     $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
                     $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                     $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                    $rowDaysCount = (int)($row['days_count'] ?? 0);
+                    $rowYoyPercent = isset($row['yoy_change_percent']) && $row['yoy_change_percent'] !== null
+                        ? (float)$row['yoy_change_percent']
+                        : null;
                     ?>
                     <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
                         <td class="px-3 py-2 text-slate-300 font-medium"><?= e($monthLabel($row)) ?></td>
@@ -247,6 +312,8 @@ require __DIR__ . '/includes/header.php';
                         <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
                         <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                         <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                        <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : '—') ?></td>
+                        <td class="px-3 py-2 font-medium <?= e($yoyToneClass($rowYoyPercent)) ?>"><?= e($formatYoyPercent($rowYoyPercent)) ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -258,6 +325,8 @@ require __DIR__ . '/includes/header.php';
                     <td class="px-3 py-3 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
                     <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
                     <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
+                    <td class="px-3 py-3 text-slate-300"><?= e($totalDaysCount > 0 ? $totalDaysCount . ' วัน' : '—') ?></td>
+                    <td class="px-3 py-3 <?= e($yoyToneClass($yoyPercent)) ?>"><?= e($formatYoyPercent($yoyPercent)) ?></td>
                 </tr>
             </tfoot>
         </table>
@@ -266,7 +335,7 @@ require __DIR__ . '/includes/header.php';
 
 <section class="section-card mt-6 p-4 sm:p-5">
     <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-        <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (12 เดือน)</h2>
+        <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (<?= e((string)count($months)) ?> เดือน)</h2>
         <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
     </div>
     <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">

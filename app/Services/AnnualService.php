@@ -72,6 +72,32 @@ class AnnualService
             }
         }
 
+        // ปีก่อน — ขอเฉพาะเดือน 1..lastMonth เพื่อให้เทียบ "ช่วงเดียวกัน"
+        // (ปีนี้ถึงแค่ ส.ค. ก็ต้องเทียบ ม.ค.–ส.ค. ของปีก่อน ไม่ใช่ทั้ง 12 เดือน)
+        $previousTotalsByMonthKey = [];
+        if ($lastMonth > 0) {
+            $previousYear = $year - 1;
+
+            try {
+                $previousTotals = $this->recordRepository->getMonthlyTotalsByMonthRange(
+                    $shopId,
+                    sprintf('%04d-01', $previousYear),
+                    sprintf('%04d-%02d', $previousYear, $lastMonth)
+                );
+            } catch (Throwable $exception) {
+                error_log('[annual] buildYearlySummary previous year failed: ' . $exception->getMessage());
+                $previousTotals = [];
+            }
+
+            foreach ($previousTotals as $row) {
+                $monthKey = (string)($row['month_key'] ?? '');
+                if ($monthKey !== '') {
+                    $previousTotalsByMonthKey[$monthKey] = $row;
+                }
+            }
+        }
+
+        $previousYearProfit = 0.0;
         $months = [];
         $totalRevenue = 0.0;
         $totalAdCost = 0.0;
@@ -89,6 +115,13 @@ class AnnualService
             $monthAdCost = (float)($totals['total_ad_cost'] ?? 0);
             $monthProfit = $monthRevenue - $monthAdCost;
 
+            // เดือนเดียวกันของปีก่อน
+            $previousMonthKey = sprintf('%04d-%02d', $year - 1, $month);
+            $previousMonthTotals = $previousTotalsByMonthKey[$previousMonthKey] ?? null;
+            $previousMonthProfit = (float)($previousMonthTotals['total_revenue'] ?? 0)
+                - (float)($previousMonthTotals['total_ad_cost'] ?? 0);
+            $previousYearProfit += $previousMonthProfit;
+
             $monthRow = [
                 'month' => $month,
                 'month_key' => $monthKey,
@@ -97,6 +130,10 @@ class AnnualService
                 'profit' => $monthProfit,
                 'roas' => $monthAdCost > 0 ? round($monthRevenue / $monthAdCost, 2) : null,
                 'profit_margin' => $monthRevenue > 0 ? round(($monthProfit / $monthRevenue) * 100, 1) : null,
+                // query คืน days_count มาอยู่แล้ว — กันเทียบเดือนที่กรอก 3 วันกับเดือนที่กรอก 30 วัน
+                'days_count' => (int)($totals['days_count'] ?? 0),
+                'prev_year_profit' => $previousMonthProfit,
+                'yoy_change_percent' => $this->calculateChangePercent($monthProfit, $previousMonthProfit),
             ];
 
             // จัดอันดับด้วย "กำไร" และเลือกเฉพาะเดือนที่มีข้อมูลจริง
@@ -134,6 +171,11 @@ class AnnualService
                     'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
                     'best_month' => $bestMonth,
                     'worst_month' => $worstMonth,
+                    // YoY เทียบ "ช่วงเดียวกัน" — ปีนี้ถึงเดือน lastMonth เทียบปีก่อนเดือน 1..lastMonth
+                    'prev_year' => $year - 1,
+                    'prev_year_profit' => $previousYearProfit,
+                    'yoy_profit_change' => $profit - $previousYearProfit,
+                    'yoy_profit_change_percent' => $this->calculateChangePercent($profit, $previousYearProfit),
                 ],
                 'chart' => [
                     'months' => array_values(array_map(static fn(array $row): string => (string)$row['month_key'], $months)),
@@ -143,6 +185,20 @@ class AnnualService
                 ],
             ],
         ];
+    }
+
+    /**
+     * เปอร์เซ็นต์การเปลี่ยนแปลงเทียบฐานปีก่อน
+     * ฐาน 0 (ไม่มีข้อมูลปีก่อน/เท่าทุนพอดี) → null เพราะหารไม่ได้
+     * ฐานติดลบ → หารด้วย abs เพื่อให้เครื่องหมายสื่อทิศทางจริง (ขาดทุนน้อยลง = บวก)
+     */
+    private function calculateChangePercent(float $current, float $previous): ?float
+    {
+        if (abs($previous) < 0.00001) {
+            return null;
+        }
+
+        return round((($current - $previous) / abs($previous)) * 100, 1);
     }
 
     private function isValidYear(int $year): bool
