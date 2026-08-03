@@ -197,6 +197,21 @@ if ($view === 'day') {
     $yearTotalAdCost = (float)($yearlySummary['total_ad_cost'] ?? 0);
     $hasYearlyData = abs($yearTotalRevenue) > 0.00001 || abs($yearTotalAdCost) > 0.00001;
 
+    // แถวรวม: สัดส่วนบวกกันได้เพราะฐานเดียวกัน (null ทุกแถวเมื่อกำไรรวม ≤ 0)
+    $yearlyDaysTotal = array_sum(array_map(
+        static fn(array $row): int => (int)($row['days_count'] ?? 0),
+        $yearlyShopRows
+    ));
+    $yearlyShareTotal = null;
+    foreach ($yearlyShopRows as $shopRow) {
+        if (isset($shopRow['profit_share']) && $shopRow['profit_share'] !== null) {
+            $yearlyShareTotal = round((float)($yearlyShareTotal ?? 0) + (float)$shopRow['profit_share'], 1);
+        }
+    }
+
+    $yearlyBestMonth = is_array($yearlySummary['best_month'] ?? null) ? (array)$yearlySummary['best_month'] : null;
+    $yearlyWorstMonth = is_array($yearlySummary['worst_month'] ?? null) ? (array)$yearlySummary['worst_month'] : null;
+
     $chartRaw = (array)($yearlyData['chart'] ?? []);
     $chartLabels = array_map(
         static function (string $monthKey) use ($thaiMonths): string {
@@ -637,6 +652,34 @@ require __DIR__ . '/includes/header.php';
                 </article>
             </section>
 
+            <?php if ($yearlyBestMonth !== null || $yearlyWorstMonth !== null): ?>
+                <?php
+                // แสดง "กำไร" ของเดือนดี/แย่สุด (จัดอันดับด้วยกำไร ไม่ใช่รายได้)
+                $bestMonthProfit = $yearlyBestMonth !== null ? (float)($yearlyBestMonth['profit'] ?? 0) : null;
+                $worstMonthProfit = $yearlyWorstMonth !== null ? (float)($yearlyWorstMonth['profit'] ?? 0) : null;
+                $bestMonthLabel = $yearlyBestMonth !== null
+                    ? ($thaiMonths[(int)($yearlyBestMonth['month'] ?? 0)] ?? '–')
+                    : '–';
+                $worstMonthLabel = $yearlyWorstMonth !== null
+                    ? ($thaiMonths[(int)($yearlyWorstMonth['month'] ?? 0)] ?? '–')
+                    : '–';
+                ?>
+                <section class="section-card mt-4 px-4 py-3 sm:px-5">
+                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-400">
+                        <span class="text-xs font-medium uppercase tracking-wider text-slate-500">รวมทุกร้าน</span>
+                        เดือนกำไรดีสุด
+                        <span class="font-bold <?= $bestMonthProfit !== null && $bestMonthProfit < 0 ? 'text-red-400' : 'text-green-400' ?>">
+                            <?= e($bestMonthLabel) ?><?= $bestMonthProfit !== null ? ' (' . e(formatMoney($bestMonthProfit)) . ')' : '' ?>
+                        </span>
+                        <span class="text-slate-600">·</span>
+                        แย่สุด
+                        <span class="font-bold <?= $worstMonthProfit !== null && $worstMonthProfit >= 0 ? 'text-slate-300' : 'text-red-400' ?>">
+                            <?= e($worstMonthLabel) ?><?= $worstMonthProfit !== null ? ' (' . e(formatMoney($worstMonthProfit)) . ')' : '' ?>
+                        </span>
+                    </div>
+                </section>
+            <?php endif; ?>
+
             <section class="section-card mt-6 p-4 sm:p-5">
                 <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางรวมรายเดือน (<?= e((string)count($yearlyMonths)) ?> เดือน)</h2>
                 <div class="overflow-x-auto">
@@ -712,6 +755,8 @@ require __DIR__ . '/includes/header.php';
                                 <th class="px-3 py-2">กำไร</th>
                                 <th class="px-3 py-2">ROAS</th>
                                 <th class="px-3 py-2">อัตรากำไร</th>
+                                <th class="px-3 py-2">สัดส่วนกำไร</th>
+                                <th class="px-3 py-2">วันที่กรอก</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -722,6 +767,8 @@ require __DIR__ . '/includes/header.php';
                                 $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
                                 $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                                $rowProfitShare = isset($row['profit_share']) && $row['profit_share'] !== null ? (float)$row['profit_share'] : null;
+                                $rowDaysCount = (int)($row['days_count'] ?? 0);
                                 ?>
                                 <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
                                     <td class="px-3 py-2 text-slate-500 font-semibold"><?= e((string)($index + 1)) ?></td>
@@ -731,6 +778,10 @@ require __DIR__ . '/includes/header.php';
                                     <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
                                     <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                                    <td class="px-3 py-2 font-medium <?= $rowProfitShare === null ? 'text-slate-500' : ($rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300') ?>">
+                                        <?= e($rowProfitShare === null ? '—' : formatPercent($rowProfitShare)) ?>
+                                    </td>
+                                    <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : '—') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -742,6 +793,8 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-3 py-3 <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($yearProfit)) ?></td>
                                 <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($yearRoas)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($yearProfitMargin)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyShareTotal === null ? '—' : formatPercent($yearlyShareTotal)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyDaysTotal > 0 ? $yearlyDaysTotal . ' วัน' : '—') ?></td>
                             </tr>
                         </tfoot>
                     </table>

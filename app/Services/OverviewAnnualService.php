@@ -103,8 +103,12 @@ class OverviewAnnualService
                 'shop_name' => $shopNameById[$shopId] ?? 'ร้านค้า',
                 'total_revenue' => 0.0,
                 'total_ad_cost' => 0.0,
+                'days_count' => 0,
             ];
         }
+
+        // เดือนที่มี record จริง — ใช้กันไม่ให้ best/worst ไปเลือกเดือนที่ยังไม่ได้กรอก
+        $monthsWithRecord = [];
 
         foreach ($monthlyTotals as $row) {
             $shopId = (int)($row['shop_id'] ?? 0);
@@ -120,17 +124,23 @@ class OverviewAnnualService
 
             $revenue = (float)($row['total_revenue'] ?? 0);
             $adCost = (float)($row['total_ad_cost'] ?? 0);
+            $daysCount = (int)($row['days_count'] ?? 0);
 
             $monthTotalsByKey[$monthKey]['total_revenue'] += $revenue;
             $monthTotalsByKey[$monthKey]['total_ad_cost'] += $adCost;
 
             $shopTotalsById[$shopId]['total_revenue'] += $revenue;
             $shopTotalsById[$shopId]['total_ad_cost'] += $adCost;
+            $shopTotalsById[$shopId]['days_count'] += $daysCount;
+
+            $monthsWithRecord[$monthKey] = true;
         }
 
         $months = [];
         $totalRevenue = 0.0;
         $totalAdCost = 0.0;
+        $bestMonth = null;
+        $worstMonth = null;
 
         for ($month = 1; $month <= $lastMonth; $month++) {
             $monthKey = sprintf('%04d-%02d', $year, $month);
@@ -140,7 +150,7 @@ class OverviewAnnualService
             $monthAdCost = (float)($monthTotals['total_ad_cost'] ?? 0);
             $monthProfit = $monthRevenue - $monthAdCost;
 
-            $months[] = [
+            $monthRow = [
                 'month' => $month,
                 'month_key' => $monthKey,
                 'total_revenue' => $monthRevenue,
@@ -150,6 +160,19 @@ class OverviewAnnualService
                 'profit_margin' => $monthRevenue > 0 ? round(($monthProfit / $monthRevenue) * 100, 1) : null,
             ];
 
+            // จัดอันดับด้วยกำไร และเลือกเฉพาะเดือนที่มีข้อมูลจริง
+            // (เดือนที่ยังไม่ได้กรอกมีกำไร 0 — ไม่ควรถูกยกเป็นเดือนแย่สุด)
+            if (isset($monthsWithRecord[$monthKey])) {
+                if ($bestMonth === null || $monthProfit > (float)$bestMonth['profit']) {
+                    $bestMonth = $monthRow;
+                }
+
+                if ($worstMonth === null || $monthProfit < (float)$worstMonth['profit']) {
+                    $worstMonth = $monthRow;
+                }
+            }
+
+            $months[] = $monthRow;
             $totalRevenue += $monthRevenue;
             $totalAdCost += $monthAdCost;
         }
@@ -170,6 +193,10 @@ class OverviewAnnualService
                 'profit' => $shopProfit,
                 'roas' => $shopAdCost > 0 ? round($shopRevenue / $shopAdCost, 2) : null,
                 'profit_margin' => $shopRevenue > 0 ? round(($shopProfit / $shopRevenue) * 100, 1) : null,
+                // กันเทียบร้านที่กรอก 3 วันกับร้านที่กรอกทั้งปีตรง ๆ
+                'days_count' => (int)($shopTotal['days_count'] ?? 0),
+                // กำไรรวมติดลบ/เท่าทุน → สัดส่วนไม่มีความหมาย (เทียบกับฐานที่ไม่ใช่ "ของทั้งหมด")
+                'profit_share' => $profit > 0 ? round(($shopProfit / $profit) * 100, 1) : null,
             ];
         }
 
@@ -200,6 +227,8 @@ class OverviewAnnualService
                     'profit' => $profit,
                     'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
                     'profit_margin' => $totalRevenue > 0 ? round(($profit / $totalRevenue) * 100, 1) : null,
+                    'best_month' => $bestMonth,
+                    'worst_month' => $worstMonth,
                 ],
                 'chart' => [
                     'months' => array_values(array_map(static fn(array $row): string => (string)($row['month_key'] ?? ''), $months)),
