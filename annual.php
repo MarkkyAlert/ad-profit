@@ -278,6 +278,11 @@ require __DIR__ . '/includes/header.php';
             </select>
             <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
         </form>
+
+        <a href="<?= e(app_url('/api/export-xlsx.php?year=' . rawurlencode((string)$selectedYear))) ?>"
+            data-loading-link="true" class="btn-teal px-4 py-2 text-sm">
+            📊 ดาวน์โหลดรายงานประจำปี (Excel)
+        </a>
     </div>
 
     <?php if ($annualError !== null): ?>

@@ -587,6 +587,44 @@ class RecordService
         return $this->recordRepository->getRecentByShopId($shopId, $limit);
     }
 
+    /**
+     * ดึง record ดิบตามช่วงวันที่ (ใช้กับ export ทั้งปี — ยิงครั้งเดียว ไม่ใช่รายเดือน 12 รอบ)
+     * ไม่คำนวณ compare/roas ให้ ปล่อยให้ชั้นบนจัดรูปเอง
+     *
+     * @return array{success:bool,data?:array<int,array<string,mixed>>,error?:string}
+     */
+    public function getRecordsByDateRange(int $userId, int $shopId, string $startDate, string $endDate): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        foreach ([$startDate, $endDate] as $date) {
+            $dateObject = DateTime::createFromFormat('Y-m-d', $date);
+            if (!$dateObject || $dateObject->format('Y-m-d') !== $date) {
+                return [
+                    'success' => false,
+                    'error' => 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD',
+                ];
+            }
+        }
+
+        if ($startDate > $endDate) {
+            return [
+                'success' => false,
+                'error' => 'ช่วงวันที่ไม่ถูกต้อง',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'data' => $this->recordRepository->getByDateRange($shopId, $startDate, $endDate),
+        ];
+    }
+
     public function getMonthlyRecords(int $userId, int $shopId, string $month): array
     {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {

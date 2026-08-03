@@ -114,21 +114,122 @@ class ExportService
         ];
     }
 
+    /**
+     * ข้อมูลดิบสำหรับ sheet "รายวัน" ของ xlsx ทั้งปี
+     *
+     * แยกจากการเขียนไฟล์โดยตั้งใจ — ชั้นนี้เทสต์ได้ตรง ๆ ส่วนการเขียน binary
+     * อยู่ที่ controller (api/export-xlsx.php) ซึ่ง unit test ไม่ได้
+     */
+    public function buildYearlyDailyPayload(int $userId, int $shopId, int $year): array
+    {
+        if ($year < 2000 || $year > 2100) {
+            return [
+                'success' => false,
+                'error' => 'ปีที่เลือกไม่ถูกต้อง',
+            ];
+        }
+
+        try {
+            $shop = $this->shopRepository->findByIdAndUserId($shopId, $userId);
+        } catch (Throwable $exception) {
+            error_log('[export] buildYearlyDailyPayload shop lookup failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลร้านค้าได้',
+            ];
+        }
+
+        if ($shop === null) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        try {
+            $rangeResult = $this->recordService->getRecordsByDateRange(
+                $userId,
+                $shopId,
+                sprintf('%04d-01-01', $year),
+                sprintf('%04d-12-31', $year)
+            );
+        } catch (Throwable $exception) {
+            error_log('[export] buildYearlyDailyPayload fetch failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลที่ต้องการ export ได้',
+            ];
+        }
+
+        if (($rangeResult['success'] ?? false) !== true) {
+            return [
+                'success' => false,
+                'error' => (string)($rangeResult['error'] ?? 'ไม่สามารถโหลดข้อมูลที่ต้องการ export ได้'),
+            ];
+        }
+
+        $rows = [];
+        $totalRevenue = 0.0;
+        $totalAdCost = 0.0;
+
+        foreach ((array)($rangeResult['data'] ?? []) as $record) {
+            $revenue = (float)($record['revenue'] ?? 0);
+            $adCost = (float)($record['ad_cost'] ?? 0);
+
+            $rows[] = [
+                // ISO YYYY-MM-DD — controller แปลงเป็น Excel date serial ให้เรียง/กรองได้จริง
+                'record_date' => (string)($record['record_date'] ?? ''),
+                'revenue' => $revenue,
+                'ad_cost' => $adCost,
+                'profit' => $revenue - $adCost,
+                'roas' => $adCost > 0 ? round($revenue / $adCost, 2) : null,
+                'note' => (string)($record['note'] ?? ''),
+            ];
+
+            $totalRevenue += $revenue;
+            $totalAdCost += $adCost;
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'year' => $year,
+                'shop_name' => (string)($shop['name'] ?? 'ร้านค้า'),
+                'rows' => $rows,
+                'totals' => [
+                    'revenue' => $totalRevenue,
+                    'ad_cost' => $totalAdCost,
+                    'profit' => $totalRevenue - $totalAdCost,
+                    'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
+                ],
+                // ตำแหน่งคอลัมน์โน้ต (1-based) — controller กัน formula injection เฉพาะช่องนี้
+                // (ช่องอื่นระบบสร้างเอง ปล่อยดิบเพื่อให้ Excel อ่านเป็นวันที่/ตัวเลข)
+                'note_column_index' => 6,
+            ],
+        ];
+    }
+
+    public function buildYearlyXlsxFilename(string $shopName, int $year): string
+    {
+        return $this->sanitizeFilenameBase($shopName) . '_' . $year . '.xlsx';
+    }
+
     public function buildMonthlyCsvFilename(string $shopName, string $month): string
+    {
+        return $this->sanitizeFilenameBase($shopName) . '_' . $month . '.csv';
+    }
+
+    private function sanitizeFilenameBase(string $shopName): string
     {
         $baseName = trim($shopName);
         if ($baseName === '') {
-            $baseName = 'shop';
+            return 'shop';
         }
 
         $baseName = preg_replace('/[\\\\\/\:\*\?"<>\|]+/u', '_', $baseName) ?? $baseName;
         $baseName = preg_replace('/\s+/u', ' ', $baseName) ?? $baseName;
         $baseName = trim($baseName);
 
-        if ($baseName === '') {
-            $baseName = 'shop';
-        }
-
-        return $baseName . '_' . $month . '.csv';
+        return $baseName === '' ? 'shop' : $baseName;
     }
 }
