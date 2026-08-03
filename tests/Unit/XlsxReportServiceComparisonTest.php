@@ -245,7 +245,8 @@ final class XlsxReportServiceComparisonTest extends TestCase
         // เฟส 2 ไม่ถูกกระทบ — กราฟรายเดือนยังอยู่
         $monthly = $spreadsheet->getSheetByName('รายเดือน');
         $this->assertNotNull($monthly);
-        $this->assertSame(1, $monthly->getChartCount());
+        // แท่งกำไร + เส้นสะสม (เฟส 5C)
+        $this->assertSame(2, $monthly->getChartCount());
 
         $spreadsheet->disconnectWorksheets();
     }

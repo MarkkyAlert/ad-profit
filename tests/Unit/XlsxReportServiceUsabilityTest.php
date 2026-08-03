@@ -133,7 +133,7 @@ final class XlsxReportServiceUsabilityTest extends TestCase
 
         $monthly = $spreadsheet->getSheetByName('รายเดือน');
         $this->assertNotNull($monthly);
-        $this->assertSame('A1:H4', $monthly->getAutoFilter()->getRange());
+        $this->assertSame('A1:K4', $monthly->getAutoFilter()->getRange());
     }
 
     public function testComparisonSheetHasAutoFilter(): void
@@ -220,16 +220,16 @@ final class XlsxReportServiceUsabilityTest extends TestCase
         $spreadsheet->disconnectWorksheets();
     }
 
-    public function testChartMovedClearOfTheNewColumns(): void
+    public function testChartsSitClearOfTheDataColumns(): void
     {
         $spreadsheet = $this->buildWorkbook();
         $sheet = $spreadsheet->getSheetByName('รายเดือน');
         $this->assertNotNull($sheet);
 
-        $chart = $sheet->getChartByIndex(0);
-        $this->assertNotNull($chart);
-        // ต้องเริ่มหลังคอลัมน์ H ไม่งั้นทับคอลัมน์ "เทียบปีก่อน"
-        $this->assertSame('J2', $chart->getTopLeftPosition()['cell']);
+        // ตารางกินถึงคอลัมน์ K → กราฟต้องเริ่มที่ M ไม่งั้นทับข้อมูล
+        $this->assertSame(2, $sheet->getChartCount());
+        $this->assertSame('M2', $sheet->getChartByIndex(0)->getTopLeftPosition()['cell']);
+        $this->assertSame('M22', $sheet->getChartByIndex(1)->getTopLeftPosition()['cell']);
 
         $spreadsheet->disconnectWorksheets();
     }

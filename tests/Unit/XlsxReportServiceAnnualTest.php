@@ -194,7 +194,8 @@ final class XlsxReportServiceAnnualTest extends TestCase
         // เฟส 2 ไม่ถูกกระทบ — กราฟรายเดือนยังอยู่
         $monthly = $spreadsheet->getSheetByName('รายเดือน');
         $this->assertNotNull($monthly);
-        $this->assertSame(1, $monthly->getChartCount());
+        // เฟส 5C เพิ่มกราฟสะสม → ชีตรายเดือนมี 2 กราฟ
+        $this->assertSame(2, $monthly->getChartCount());
 
         $spreadsheet->disconnectWorksheets();
     }

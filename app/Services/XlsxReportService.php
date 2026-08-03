@@ -145,17 +145,24 @@ class XlsxReportService
     public function buildMonthlySheet(Spreadsheet $spreadsheet, array $payload): void
     {
         $months = array_values((array)($payload['months'] ?? []));
+        $chart = (array)($payload['chart'] ?? []);
+        $cumulative = array_values((array)($chart['cumulative_profit'] ?? []));
+        $prevCumulative = array_values((array)($chart['prev_cumulative_profit'] ?? []));
 
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('รายเดือน');
 
         $sheet->fromArray(
-            ['เดือน', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS', 'วันที่กรอก', 'กำไร/วัน', 'เทียบปีก่อน'],
+            [
+                'เดือน', 'รายได้', 'ค่าแอด', 'กำไร', 'ROAS',
+                'วันที่กรอก', 'กำไร/วัน', 'เทียบปีก่อน',
+                'กำไรปีก่อน', 'กำไรสะสม', 'สะสมปีก่อน',
+            ],
             null,
             'A1'
         );
 
-        $headerRange = 'A1:H1';
+        $headerRange = 'A1:K1';
         $sheet->getStyle($headerRange)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
         $sheet->getStyle($headerRange)->getFill()
             ->setFillType(Fill::FILL_SOLID)
@@ -187,9 +194,24 @@ class XlsxReportService
                 $sheet->setCellValue('H' . $rowNumber, (float)$month['yoy_change_percent']);
             }
 
+            // กำไรปีก่อนเดือนเดียวกัน + เส้นสะสม — คอลัมน์พวกนี้เป็นแหล่งข้อมูลของกราฟด้วย
+            $prevProfit = (float)($month['prev_year_profit'] ?? 0);
+            $sheet->setCellValue('I' . $rowNumber, $prevProfit);
+
+            $index = $rowNumber - 2;
+            if (array_key_exists($index, $cumulative)) {
+                $sheet->setCellValue('J' . $rowNumber, (float)$cumulative[$index]);
+                $this->paintNegative($sheet, 'J' . $rowNumber, (float)$cumulative[$index]);
+            }
+            if (array_key_exists($index, $prevCumulative)) {
+                $sheet->setCellValue('K' . $rowNumber, (float)$prevCumulative[$index]);
+                $this->paintNegative($sheet, 'K' . $rowNumber, (float)$prevCumulative[$index]);
+            }
+
             $this->paintNegative($sheet, 'D' . $rowNumber, $profit);
             $this->paintNegative($sheet, 'G' . $rowNumber, (float)($month['profit_per_day'] ?? 0));
             $this->paintNegative($sheet, 'H' . $rowNumber, (float)($month['yoy_change_percent'] ?? 0));
+            $this->paintNegative($sheet, 'I' . $rowNumber, $prevProfit);
 
             $rowNumber++;
         }
@@ -201,15 +223,17 @@ class XlsxReportService
             $sheet->getStyle('E2:E' . $lastRow)->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
             $sheet->getStyle('G2:G' . $lastRow)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
             $sheet->getStyle('H2:H' . $lastRow)->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
-            $sheet->setAutoFilter('A1:H' . $lastRow);
+            $sheet->getStyle('I2:K' . $lastRow)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
+            $sheet->setAutoFilter('A1:K' . $lastRow);
         }
 
-        foreach (range('A', 'H') as $column) {
+        foreach (range('A', 'K') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
         if ($lastRow >= 2) {
             $sheet->addChart($this->buildProfitChart($sheet->getTitle(), $lastRow));
+            $sheet->addChart($this->buildCumulativeChart($sheet->getTitle(), $lastRow));
         }
 
         // สรุปมาก่อนรายละเอียด
@@ -839,51 +863,119 @@ class XlsxReportService
     }
 
     /**
-     * กราฟแท่งกำไรรายเดือน — อ้าง range เซลล์ในชีต "รายเดือน" โดยตรง
-     * (แก้ตัวเลขในตาราง กราฟขยับตาม เพราะ Excel ผูกกับ range ไม่ใช่ค่าที่ copy มา)
+     * กราฟแท่งกำไรรายเดือน + เส้นประกำไรปีก่อน (เทียบรูปทรงฤดูกาล)
+     * อ้าง range เซลล์ในชีต "รายเดือน" โดยตรง — แก้ตัวเลขในตาราง กราฟขยับตาม
      */
     private function buildProfitChart(string $sheetTitle, int $lastRow): Chart
     {
-        $quotedTitle = '\'' . $sheetTitle . '\'';
+        $quotedTitle = "'" . $sheetTitle . "'";
+        $pointCount = $lastRow - 1;
 
         $categories = [
             new DataSeriesValues(
                 DataSeriesValues::DATASERIES_TYPE_STRING,
                 $quotedTitle . '!$A$2:$A$' . $lastRow,
                 null,
-                $lastRow - 1
+                $pointCount
             ),
         ];
 
-        $values = [
-            new DataSeriesValues(
+        $bars = new DataSeries(
+            DataSeries::TYPE_BARCHART,
+            DataSeries::GROUPING_CLUSTERED,
+            [0],
+            [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, $quotedTitle . '!$D$1', null, 1)],
+            $categories,
+            [new DataSeriesValues(
                 DataSeriesValues::DATASERIES_TYPE_NUMBER,
                 $quotedTitle . '!$D$2:$D$' . $lastRow,
                 null,
-                $lastRow - 1
-            ),
-        ];
-
-        $legendLabels = [
-            new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, $quotedTitle . '!$D$1', null, 1),
-        ];
-
-        $series = new DataSeries(
-            DataSeries::TYPE_BARCHART,
-            DataSeries::GROUPING_CLUSTERED,
-            range(0, count($values) - 1),
-            $legendLabels,
-            $categories,
-            $values
+                $pointCount
+            )]
         );
         // แท่งตั้ง — กำไรติดลบจะยื่นลงล่างเองตามค่าจริง
-        $series->setPlotDirection(DataSeries::DIRECTION_COL);
+        $bars->setPlotDirection(DataSeries::DIRECTION_COL);
 
-        $chart = new Chart('profit-by-month', new Title('กำไรรายเดือน'), null, new PlotArea(null, [$series]));
-        // วางขวาตาราง — ต้องพ้นคอลัมน์ H (เทียบปีก่อน) ไม่งั้นทับข้อมูล
-        $chart->setTopLeftPosition('J2');
-        $chart->setBottomRightPosition('R20');
+        // เส้นกำไรปีก่อน (คอลัมน์ I) ทับบนแท่ง — เห็นทันทีว่าเดือนไหนเป็นฤดูกาลซ้ำ
+        $prevLine = new DataSeries(
+            DataSeries::TYPE_LINECHART,
+            DataSeries::GROUPING_STANDARD,
+            [0],
+            [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, $quotedTitle . '!$I$1', null, 1)],
+            $categories,
+            [new DataSeriesValues(
+                DataSeriesValues::DATASERIES_TYPE_NUMBER,
+                $quotedTitle . '!$I$2:$I$' . $lastRow,
+                null,
+                $pointCount
+            )]
+        );
+
+        $chart = new Chart(
+            'profit-by-month',
+            new Title('กำไรรายเดือน (แท่ง = ปีนี้ · เส้น = ปีก่อน)'),
+            null,
+            new PlotArea(null, [$bars, $prevLine])
+        );
+        // ต้องพ้นคอลัมน์ K (สะสมปีก่อน) ไม่งั้นทับข้อมูล
+        $chart->setTopLeftPosition('M2');
+        $chart->setBottomRightPosition('U20');
 
         return $chart;
     }
+
+    /**
+     * กราฟเส้นกำไรสะสม ปีนี้ vs ปีก่อน — เส้นห่างกันมาก = ทิ้งห่าง/ตามหลัง
+     */
+    private function buildCumulativeChart(string $sheetTitle, int $lastRow): Chart
+    {
+        $quotedTitle = "'" . $sheetTitle . "'";
+        $pointCount = $lastRow - 1;
+
+        $categories = [
+            new DataSeriesValues(
+                DataSeriesValues::DATASERIES_TYPE_STRING,
+                $quotedTitle . '!$A$2:$A$' . $lastRow,
+                null,
+                $pointCount
+            ),
+        ];
+
+        $series = new DataSeries(
+            DataSeries::TYPE_LINECHART,
+            DataSeries::GROUPING_STANDARD,
+            [0, 1],
+            [
+                new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, $quotedTitle . '!$J$1', null, 1),
+                new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, $quotedTitle . '!$K$1', null, 1),
+            ],
+            $categories,
+            [
+                new DataSeriesValues(
+                    DataSeriesValues::DATASERIES_TYPE_NUMBER,
+                    $quotedTitle . '!$J$2:$J$' . $lastRow,
+                    null,
+                    $pointCount
+                ),
+                new DataSeriesValues(
+                    DataSeriesValues::DATASERIES_TYPE_NUMBER,
+                    $quotedTitle . '!$K$2:$K$' . $lastRow,
+                    null,
+                    $pointCount
+                ),
+            ]
+        );
+
+        $chart = new Chart(
+            'cumulative-profit',
+            new Title('กำไรสะสม ปีนี้ vs ปีก่อน (ช่วงเดียวกัน)'),
+            null,
+            new PlotArea(null, [$series])
+        );
+        $chart->setTopLeftPosition('M22');
+        $chart->setBottomRightPosition('U40');
+
+        return $chart;
+    }
+
 }
