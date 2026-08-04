@@ -7,6 +7,12 @@ class ShopService
     /** จำนวนร้านสูงสุดต่อผู้ใช้ 1 คน */
     public const MAX_SHOPS_PER_USER = 20;
 
+    /**
+     * ความยาวชื่อร้านสูงสุด — ต้องเท่ากับ `shops.name` ใน schema เป๊ะ ๆ
+     * (`SchemaContractTest` ล็อกคู่นี้ไว้ · เดิมเป็นเลข 100 ลอย ๆ ใน 2 ที่)
+     */
+    public const MAX_SHOP_NAME_LENGTH = 100;
+
     /** ความยาวสูงสุดของข้อความยืนยันตอนลบร้าน (ชื่อยาวกว่านี้ให้พิมพ์แค่ส่วนต้น) */
     public const CONFIRM_NAME_MAX_LENGTH = 20;
 
@@ -83,10 +89,10 @@ class ShopService
         }
 
         $nameLength = function_exists('mb_strlen') ? mb_strlen($shopName) : strlen($shopName);
-        if ($nameLength > 100) {
+        if ($nameLength > self::MAX_SHOP_NAME_LENGTH) {
             return [
                 'success' => false,
-                'error' => 'ชื่อร้านค้ายาวเกิน 100 ตัวอักษร',
+                'error' => 'ชื่อร้านค้ายาวเกิน ' . self::MAX_SHOP_NAME_LENGTH . ' ตัวอักษร',
             ];
         }
 
@@ -182,10 +188,10 @@ class ShopService
         }
 
         $nameLength = function_exists('mb_strlen') ? mb_strlen($shopName) : strlen($shopName);
-        if ($nameLength > 100) {
+        if ($nameLength > self::MAX_SHOP_NAME_LENGTH) {
             return [
                 'success' => false,
-                'error' => 'ชื่อร้านค้ายาวเกิน 100 ตัวอักษร',
+                'error' => 'ชื่อร้านค้ายาวเกิน ' . self::MAX_SHOP_NAME_LENGTH . ' ตัวอักษร',
             ];
         }
 

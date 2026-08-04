@@ -1008,3 +1008,121 @@ function write_failure_message(Throwable $exception, string $fallback): string
 
     return $fallback;
 }
+
+/**
+ * ชนิดคอลัมน์ที่ต้องตรงกับกฎในโค้ด — ไม่ตรงเมื่อไหร่ข้อมูลจะถูกตัดทิ้งเงียบ ๆ
+ *
+ * ⚠️ ทุกแถวจับคู่กับค่าคงที่ในโค้ดโดยตรง เปลี่ยนอันไหนต้องเปลี่ยนคู่ของมันด้วย:
+ *  · `note` 255 ↔ `RecordService::NOTE_MAX_LENGTH`
+ *  · `revenue`/`ad_cost`/`target_*` decimal(12,2) ↔ `RecordService::MAX_AMOUNT` + `AMOUNT_DECIMALS`
+ *  · `shops.name` 100 ↔ `ShopService` · `users.display_name` 120 ↔ `ProfileService`
+ *
+ * ที่ต้องมีตัวนี้: ตัวกันฝั่ง PHP ทำงานถูกเพราะ "บังเอิญ" ตรงกับคอลัมน์ ถ้าใครย่อคอลัมน์
+ * ลง เทสต์ทุกตัวยังเขียว แต่ production ตัดข้อมูลทิ้งเงียบ ๆ บนโฮสต์ที่ไม่ได้เปิด strict mode
+ *
+ * @return list<array{0:string,1:string,2:string}> [ตาราง, คอลัมน์, ชนิดที่ต้องเป็น]
+ */
+function schema_required_column_types(): array
+{
+    return [
+        ['daily_records', 'note', 'varchar(255)'],
+        ['daily_records', 'revenue', 'decimal(12,2)'],
+        ['daily_records', 'ad_cost', 'decimal(12,2)'],
+        ['monthly_goals', 'target_revenue', 'decimal(12,2)'],
+        ['monthly_goals', 'target_profit', 'decimal(12,2)'],
+        ['shops', 'name', 'varchar(100)'],
+        ['users', 'display_name', 'varchar(120)'],
+        ['users', 'email', 'varchar(255)'],
+        ['users', 'password_hash', 'varchar(255)'],
+    ];
+}
+
+/**
+ * @return array{ok:bool,actual?:string}
+ */
+function schema_column_type_matches(PDO $pdo, string $tableName, string $columnName, string $expected): array
+{
+    $sql = 'SELECT COLUMN_TYPE
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND COLUMN_NAME = :column_name
+            LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':table_name' => $tableName,
+        ':column_name' => $columnName,
+    ]);
+
+    $actual = $stmt->fetchColumn();
+    if ($actual === false) {
+        return ['ok' => false, 'actual' => '(ไม่มีคอลัมน์นี้)'];
+    }
+
+    $actual = strtolower((string)$actual);
+
+    return $actual === $expected ? ['ok' => true] : ['ok' => false, 'actual' => $actual];
+}
+
+/**
+ * ตารางที่ต้องเป็น InnoDB — MyISAM ทำให้ `rollBack()` ไม่ทำอะไรเลย (เงียบ ๆ)
+ *
+ * ⚠️ ทั้งตัวกัน "ช่องว่างทับของเดิม" และลำดับล็อกกันสองแท็บชนกัน พึ่ง transaction ทั้งคู่
+ * บน MyISAM ทั้งสองอย่างหายไปโดยที่ไม่มีอะไรผิดพลาดให้เห็น
+ *
+ * @return list<string>
+ */
+function schema_transactional_tables(): array
+{
+    return ['users', 'shops', 'daily_records', 'monthly_goals', 'password_reset_tokens'];
+}
+
+function schema_table_is_innodb(PDO $pdo, string $tableName): bool
+{
+    $sql = 'SELECT ENGINE
+            FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name
+            LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':table_name' => $tableName]);
+
+    return strtolower((string)$stmt->fetchColumn()) === 'innodb';
+}
+
+/**
+ * foreign key ที่ต้องลบข้อมูลลูกตามเมื่อลบแม่
+ *
+ * ⚠️ `ShopService::deleteShop()` ลบเฉพาะแถวใน `shops` แล้วพึ่ง cascade ล้วน ๆ
+ * ถ้า FK หาย การลบร้านจะ "สำเร็จ" แต่ข้อมูลรายวันและเป้าหมายค้างอยู่ทั้งหมด
+ *
+ * @return list<array{0:string,1:string}> [ตาราง, ชื่อ constraint]
+ */
+function schema_required_cascades(): array
+{
+    return [
+        ['daily_records', 'fk_daily_records_shop'],
+        ['monthly_goals', 'fk_monthly_goals_shop'],
+        ['shops', 'fk_shops_user'],
+        ['password_reset_tokens', 'fk_password_reset_user'],
+    ];
+}
+
+function schema_cascade_exists(PDO $pdo, string $tableName, string $constraintName): bool
+{
+    $sql = 'SELECT DELETE_RULE
+            FROM information_schema.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND CONSTRAINT_NAME = :constraint_name
+            LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':table_name' => $tableName,
+        ':constraint_name' => $constraintName,
+    ]);
+
+    return strtoupper((string)$stmt->fetchColumn()) === 'CASCADE';
+}

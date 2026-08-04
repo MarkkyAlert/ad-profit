@@ -134,6 +134,53 @@ final class ShopEndpointTest extends ControllerTestCase
         $this->assertSame($current, $this->sessionShopId($session), 'ถูกย้ายออกจากร้านที่กำลังดูอยู่');
     }
 
+    /**
+     * ⭐ ชื่อร้านที่เป็นอิโมจิคนละตัว ต้องเป็นคนละร้าน
+     *
+     * ⚠️ collation เดิม (`utf8mb4_unicode_ci`) ไม่ให้น้ำหนักกับอักขระนอกระนาบพื้นฐาน
+     * อิโมจิทุกตัวจึงเทียบเท่ากันหมด · ผู้ใช้ที่มีร้าน 🚀 แล้วสร้างร้าน 🎉 จะถูกพาไป
+     * ที่ร้าน 🚀 พร้อมข้อความว่าสำเร็จ แล้วข้อมูลที่บันทึกต่อจากนั้นลงผิดร้านทั้งหมด
+     * (เกิดขึ้นได้จริง พิสูจน์แล้ว)
+     */
+    public function testTwoDifferentEmojiNamesAreTwoDifferentShops(): void
+    {
+        $userId = $this->createUser();
+        $firstShop = $this->createShop($userId, '🚀');
+        $session = $this->startSession($userId, $firstShop);
+
+        $response = $this->submit($session, ['action' => 'create', 'name' => '🎉']);
+
+        $this->assertSame(200, $response['status'], (string)$response['body']);
+        $this->assertSame(2, $this->countRows('shops'), 'อิโมจิคนละตัวถูกมองเป็นชื่อเดียวกัน');
+
+        $newShopId = (int)$this->pdo
+            ->query("SELECT id FROM shops WHERE user_id = {$userId} AND name = '🎉'")->fetchColumn();
+        $this->assertGreaterThan(0, $newShopId, 'ไม่ได้สร้างร้านชื่อ 🎉');
+        $this->assertSame($newShopId, $this->sessionShopId($session), 'ถูกพาไปร้านอื่นแทน');
+    }
+
+    /**
+     * ⭐ ถูกสลับไปร้านที่มีอยู่แล้ว → ข้อความต้องบอกชื่อร้านนั้นด้วย
+     *
+     * ระบบถือว่า "ร้าน A" กับ "ร้าน a" เป็นชื่อเดียวกัน (ตั้งใจ) แต่ถ้าไม่บอกว่าสลับไป
+     * ร้านชื่ออะไร ผู้ใช้จะไม่รู้ตัวว่ากำลังบันทึกลงร้านที่ตั้งชื่อไว้ต่างจากที่พิมพ์
+     */
+    public function testTheSwitchMessageNamesTheShopYouLandedIn(): void
+    {
+        $userId = $this->createUser();
+        $existing = $this->createShop($userId, 'ร้านต้นฉบับ');
+        $this->createShop($userId, 'ร้านอื่น');
+        $session = $this->startSession($userId, $existing);
+
+        $this->submit($session, ['action' => 'create', 'name' => 'ร้านต้นฉบับ']);
+
+        $this->assertStringContainsString(
+            'ร้านต้นฉบับ',
+            $this->flashMessages($session),
+            'ไม่ได้บอกว่าถูกสลับไปร้านชื่ออะไร'
+        );
+    }
+
     /** ⭐ สลับไปร้านของคนอื่นไม่ได้ และ session ต้องไม่ขยับ */
     public function testSwitchingToAnotherUsersShopIsRejected(): void
     {

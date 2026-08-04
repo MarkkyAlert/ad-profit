@@ -8,6 +8,7 @@ CREATE DATABASE IF NOT EXISTS ad_profit
 USE ad_profit;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS idempotency_requests;
 DROP TABLE IF EXISTS password_reset_tokens;
 DROP TABLE IF EXISTS auth_rate_limits;
 DROP TABLE IF EXISTS monthly_goals;
@@ -33,7 +34,13 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS shops (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id BIGINT UNSIGNED NOT NULL,
-    name VARCHAR(100) NOT NULL,
+    -- ⚠️ collation ของคอลัมน์นี้ = กติกา "ชื่อร้านซ้ำกันไหม" (uq_shops_user_name ใช้มัน
+    -- และ ShopRepository::findByNameAndUserId ก็เทียบด้วย `name = :name` เฉย ๆ)
+    -- utf8mb4_unicode_ci (UCA 4.0.0) **ไม่ให้น้ำหนักกับอักขระนอกระนาบพื้นฐาน** อิโมจิ
+    -- ทุกตัวจึงเท่ากันหมด → ตั้งชื่อร้าน 🎉 แล้วระบบพาไปร้าน 🚀 พร้อมบอกว่าสำเร็จ
+    -- utf8mb4_unicode_520_ci (UCA 5.2.0) แยกอิโมจิได้ และยังถือว่า "ร้าน A" = "ร้าน a"
+    -- เหมือนเดิม (พิมพ์ชื่อเดิม = สลับไปร้านนั้น ซึ่งเป็นพฤติกรรมที่ตั้งใจ)
+    name VARCHAR(100) COLLATE utf8mb4_unicode_520_ci NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -112,7 +119,6 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     PRIMARY KEY (id),
     UNIQUE KEY uq_password_reset_user (user_id),
     UNIQUE KEY uq_password_reset_token_hash (token_hash),
-    KEY idx_password_reset_token (token_hash),
     KEY idx_password_reset_expires (expires_at),
     CONSTRAINT fk_password_reset_user
         FOREIGN KEY (user_id)

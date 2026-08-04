@@ -16,6 +16,15 @@ class RecordService
     /** จำนวนทศนิยมที่คอลัมน์เก็บได้ — daily_records/monthly_goals เป็น DECIMAL(12,2) */
     public const AMOUNT_DECIMALS = 2;
 
+    /**
+     * ความยาวโน้ตสูงสุด — ต้องเท่ากับ `daily_records.note` ใน schema เป๊ะ ๆ
+     *
+     * ⚠️ ตัวเลขนี้กับความยาวคอลัมน์ต้องขยับพร้อมกัน · ถ้าคอลัมน์เล็กกว่า MySQL จะ
+     * ตัดข้อความทิ้งเงียบ ๆ บนโฮสต์ที่ไม่ได้เปิด strict mode แล้วรายงานว่าสำเร็จ
+     * (`SchemaContractTest` ล็อกคู่นี้ไว้)
+     */
+    public const NOTE_MAX_LENGTH = 255;
+
     /** ข้อความบอกวิธีเขียนตัวเลขให้ถูก — ใช้ร่วมกันทุกที่ที่ปฏิเสธรูปแบบตัวเลข */
     public const AMOUNT_FORMAT_HINT = 'อ่านไม่ได้หรือกำกวม — ใช้จุดเป็นทศนิยมไม่เกิน 2 ตำแหน่ง '
         . 'เช่น 1234.56 (ถ้าหมายถึงหนึ่งพันสองร้อยสามสิบสี่ ให้พิมพ์ 1234 หรือ 1,234.00)';
@@ -1854,10 +1863,10 @@ class RecordService
         $normalizedNote = $note === null ? null : trim($note);
         if ($normalizedNote !== null && $normalizedNote !== '') {
             $length = function_exists('mb_strlen') ? mb_strlen($normalizedNote) : strlen($normalizedNote);
-            if ($length > 255) {
+            if ($length > self::NOTE_MAX_LENGTH) {
                 return [
                     'success' => false,
-                    'error' => 'โน้ตยาวเกิน 255 ตัวอักษร',
+                    'error' => 'โน้ตยาวเกิน ' . self::NOTE_MAX_LENGTH . ' ตัวอักษร',
                 ];
             }
         } else {

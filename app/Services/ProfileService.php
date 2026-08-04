@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 class ProfileService
 {
+    /**
+     * ความยาวชื่อที่แสดงสูงสุด — ต้องเท่ากับ `users.display_name` ใน schema เป๊ะ ๆ
+     * (`SchemaContractTest` ล็อกคู่นี้ไว้)
+     */
+    public const MAX_DISPLAY_NAME_LENGTH = 120;
+
     private UserRepository $userRepository;
     private ?PDO $db;
     private ?PasswordResetRepository $passwordResetRepository;
@@ -86,10 +92,10 @@ class ProfileService
         }
 
         $nameLength = function_exists('mb_strlen') ? mb_strlen($normalizedDisplayName) : strlen($normalizedDisplayName);
-        if ($nameLength > 120) {
+        if ($nameLength > self::MAX_DISPLAY_NAME_LENGTH) {
             return [
                 'success' => false,
-                'error' => 'ชื่อที่แสดงยาวเกิน 120 ตัวอักษร',
+                'error' => 'ชื่อที่แสดงยาวเกิน ' . self::MAX_DISPLAY_NAME_LENGTH . ' ตัวอักษร',
             ];
         }
 

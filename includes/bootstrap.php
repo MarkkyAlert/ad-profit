@@ -168,6 +168,49 @@ function check_schema_compatibility(PDO $pdo): array
                 return $cachedResult;
             }
         }
+
+        // ⚠️ ชื่อตาราง/คอลัมน์/index ครบ ไม่ได้แปลว่าโครงสร้างใช้ได้
+        //
+        // เดิมการ์ดดูแค่ "มีชื่อนี้ไหม" — ย่อ `note` เหลือ VARCHAR(50) หรือเปลี่ยน
+        // `revenue` เป็น DECIMAL(8,2) แล้วการ์ดยังผ่าน ทั้งที่ข้อมูลจะถูกตัดทิ้งเงียบ ๆ
+        // บนโฮสต์ที่ไม่ได้เปิด strict mode · ลบ foreign key แล้วการลบร้านจะ "สำเร็จ"
+        // โดยข้อมูลข้างในค้างอยู่ · เปลี่ยนเป็น MyISAM แล้ว rollBack() ไม่ทำอะไรเลย
+        foreach (schema_required_column_types() as [$tableName, $columnName, $expectedType]) {
+            $check = schema_column_type_matches($pdo, $tableName, $columnName, $expectedType);
+            if (($check['ok'] ?? false) !== true) {
+                $cachedResult = [
+                    'ok' => false,
+                    'message' => sprintf(
+                        'Column %s.%s must be %s (found %s)',
+                        $tableName,
+                        $columnName,
+                        $expectedType,
+                        (string)($check['actual'] ?? '?')
+                    ),
+                ];
+                return $cachedResult;
+            }
+        }
+
+        foreach (schema_transactional_tables() as $tableName) {
+            if (!schema_table_is_innodb($pdo, $tableName)) {
+                $cachedResult = [
+                    'ok' => false,
+                    'message' => 'Table ' . $tableName . ' must use InnoDB (transactions are required)',
+                ];
+                return $cachedResult;
+            }
+        }
+
+        foreach (schema_required_cascades() as [$tableName, $constraintName]) {
+            if (!schema_cascade_exists($pdo, $tableName, $constraintName)) {
+                $cachedResult = [
+                    'ok' => false,
+                    'message' => 'Missing ON DELETE CASCADE ' . $tableName . '.' . $constraintName,
+                ];
+                return $cachedResult;
+            }
+        }
     } catch (Throwable $exception) {
         $cachedResult = [
             'ok' => false,
