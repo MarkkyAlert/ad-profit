@@ -45,8 +45,13 @@ class AuthService
     {
         $normalizedEmail = normalize_email($email);
 
-        if ($this->isRateLimited('register', $clientIp, $normalizedEmail)
-            || $this->isRateLimited(self::REGISTER_IP_ACTION, $clientIp)) {
+        // จองก่อนเหมือน login — หน้าต่างระหว่างอ่านกับเขียนมี `password_hash()` อยู่
+        // (ดูคำอธิบายเต็มที่ `login()`) · สมัครสำเร็จจะคืนโควตาของ bucket ต่อ IP ให้
+        $registerAttempts = $this->reserveAttempt('register', $clientIp, $normalizedEmail);
+        $registerIpAttempts = $this->reserveAttempt(self::REGISTER_IP_ACTION, $clientIp);
+
+        if ($registerAttempts > $this->getMaxAttemptsForAction('register')
+            || $registerIpAttempts > $this->getMaxAttemptsForAction(self::REGISTER_IP_ACTION)) {
             return [
                 'success' => false,
                 'error' => 'ลองสมัครบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
@@ -54,7 +59,7 @@ class AuthService
         }
 
         if ($normalizedEmail === '' || !is_valid_email($normalizedEmail)) {
-            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
+            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
@@ -62,7 +67,7 @@ class AuthService
         }
 
         if (strlen($normalizedEmail) > 255) {
-            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
+            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
             return [
                 'success' => false,
                 'error' => 'อีเมลยาวเกินไป',
@@ -71,7 +76,7 @@ class AuthService
 
         $passwordError = validate_password_length($password);
         if ($passwordError !== null) {
-            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
+            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
             return [
                 'success' => false,
                 'error' => $passwordError,
@@ -79,7 +84,7 @@ class AuthService
         }
 
         if ($password !== $passwordConfirm) {
-            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
+            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
             return [
                 'success' => false,
                 'error' => 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน',
@@ -87,7 +92,7 @@ class AuthService
         }
 
         if ($this->userRepository->findByEmail($normalizedEmail) !== null) {
-            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
+            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่อีกครั้ง',
@@ -119,7 +124,7 @@ class AuthService
                 $this->db->rollBack();
             }
 
-            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
+            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
             error_log('[auth][register] ' . $exception->getMessage());
 
             $isDuplicateUser = $exception instanceof PDOException && $exception->getCode() === '23000';
@@ -137,6 +142,7 @@ class AuthService
         }
 
         $this->establishSession($userId, $normalizedEmail, $shopId, self::DEFAULT_SHOP_NAME, $sessionVersion);
+        $this->releaseAttempt(self::REGISTER_IP_ACTION, $clientIp);
         $this->clearRateLimit('register', $clientIp, $normalizedEmail);
         // ไม่ล้าง bucket ของ IP โดยตั้งใจ — เหตุผลเดียวกับฝั่งล็อกอิน:
         // สมัครสำเร็จ 1 ครั้งไม่ควรล้างประวัติการไล่ทดสอบอีเมลอื่นทิ้ง
@@ -248,6 +254,14 @@ class AuthService
             error_log('[auth][login] updateLastLoginAt failed: ' . $exception->getMessage());
         }
         $this->establishSession($userId, $userEmail, $shopId, $shopName, $sessionVersion);
+        // ⚠️⚠️ ต้องคืนโควตาที่จองไว้ของ bucket ต่อ IP ด้วย
+        //
+        // เราจองก่อนตรวจรหัสผ่าน (เพื่อกันการยิงพร้อมกัน) แปลว่าการล็อกอิน **ที่สำเร็จ**
+        // ก็กินโควตาไปด้วย · bucket ต่อ IP ตั้งใจไม่ล้างตอนสำเร็จ (ไม่งั้นคนที่ไล่เดา
+        // บัญชีอื่นจะล้างประวัติตัวเองทิ้งได้) ผลคือออฟฟิศที่ใช้เน็ตร่วมกัน พอมีคน
+        // ล็อกอินสำเร็จครบ 5 คน คนที่ 6 ที่พิมพ์รหัส **ถูก** จะถูกปฏิเสธ (วัดจริงแล้ว)
+        // → คืนเฉพาะครั้งที่สำเร็จ ความพยายามที่ล้มเหลวยังนับอยู่ครบเหมือนเดิม
+        $this->releaseAttempt(self::LOGIN_IP_ACTION, $clientIp);
         $this->clearRateLimit('login', $clientIp, $normalizedEmail);
         // ไม่ล้าง bucket ของ IP — ไม่งั้นล็อกอินสำเร็จ 1 บัญชีจะล้างประวัติการเดาบัญชีอื่นทิ้ง
 
@@ -282,7 +296,10 @@ class AuthService
 
         $normalizedEmail = normalize_email($email);
 
-        if ($this->isRateLimited('password_reset', $clientIp, $normalizedEmail)) {
+        // เพดานแค่ 1 ครั้งต่อหน้าต่าง — ถ้าถามก่อนนับ คำขอที่มาพร้อมกันจะส่งอีเมล
+        // ซ้ำหลายฉบับให้เจ้าของบัญชีเดียวกัน
+        if ($this->reserveAttempt('password_reset', $clientIp, $normalizedEmail)
+            > $this->getMaxAttemptsForAction('password_reset')) {
             return [
                 'success' => false,
                 'error' => 'ลองขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่',
@@ -371,7 +388,9 @@ class AuthService
         }
 
         $rateLimitSubject = '';
-        if ($this->isRateLimited('reset_password', $clientIp, $rateLimitSubject)) {
+        // มี `password_hash()` อยู่ในหน้าต่างเช่นกัน — จองก่อน
+        if ($this->reserveAttempt('reset_password', $clientIp, $rateLimitSubject)
+            > $this->getMaxAttemptsForAction('reset_password')) {
             return [
                 'success' => false,
                 'error' => 'ลองรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่',
@@ -556,12 +575,27 @@ class AuthService
     private function reserveAttempt(string $action, string $clientIp, string $subject = ''): int
     {
         if ($this->canUseDatabaseRateLimit()) {
-            try {
-                $this->markFailedAttemptInDatabase($action, $clientIp, $subject);
+            // ⚠️ คำขอที่ยิงพร้อมกันจำนวนมากทำให้ MySQL ตัดบางตัวทิ้งด้วย deadlock (1213)
+            // ซึ่งเป็นสถานการณ์เดียวกับที่ตัวจำกัดนี้มีไว้กัน · ลองใหม่สั้น ๆ ก่อน
+            for ($attempt = 1; $attempt <= 3; $attempt++) {
+                try {
+                    $this->markFailedAttemptInDatabase($action, $clientIp, $subject);
 
-                return $this->currentAttemptsInDatabase($action, $clientIp, $subject);
-            } catch (Throwable $exception) {
-                $this->demoteToSessionLimiter('DB reserve failed', $exception);
+                    return $this->currentAttemptsInDatabase($action, $clientIp, $subject);
+                } catch (Throwable $exception) {
+                    if ($attempt < 3 && $this->isRetryableLockError($exception)) {
+                        usleep(random_int(2000, 12000));
+                        continue;
+                    }
+
+                    // ⚠️⚠️ **ห้ามตกไปใช้ตัวนับใน session** — process ที่เพิ่งเกิดมี
+                    // ตัวนับเป็น 0 เสมอ การยิงพร้อมกันจึงผ่านฉลุยทุกตัว = ตัวจำกัด
+                    // เปิดช่องให้พอดีกับตอนที่ต้องการมันที่สุด (วัดจริงแล้ว 16 จาก 40)
+                    // จองไม่ได้ = ปฏิเสธไว้ก่อน ปลอดภัยกว่าปล่อยผ่าน
+                    error_log('[auth] reserveAttempt failed, denying by default: ' . $exception->getMessage());
+
+                    return PHP_INT_MAX;
+                }
             }
         }
 
@@ -571,6 +605,43 @@ class AuthService
         $_SESSION['auth_rate_limits'][$this->rateLimitKey($action, $clientIp, $subject)] = $bucket;
 
         return $attempts;
+    }
+
+    /**
+     * คืนโควตา 1 ครั้งที่จองไว้ — ใช้เมื่อผลลัพธ์ออกมาว่า "ไม่ใช่ความพยายามที่ล้มเหลว"
+     *
+     * ⚠️ ต่างจาก `clearRateLimit()` ที่ล้างทั้ง bucket — ตัวนี้ลบแค่ครั้งที่เราจองไป
+     * ประวัติความพยายามของคนอื่นที่ใช้ IP เดียวกันยังอยู่ครบ
+     */
+    private function releaseAttempt(string $action, string $clientIp, string $subject = ''): void
+    {
+        if (!$this->canUseDatabaseRateLimit()) {
+            $bucket = $this->getRateLimitBucket($action, $clientIp, $subject);
+            $bucket['attempts'] = max(0, (int)$bucket['attempts'] - 1);
+            $_SESSION['auth_rate_limits'][$this->rateLimitKey($action, $clientIp, $subject)] = $bucket;
+
+            return;
+        }
+
+        try {
+            $stmt = $this->db->prepare(
+                'UPDATE auth_rate_limits
+                 SET attempts = GREATEST(0, attempts - 1), updated_at = NOW()
+                 WHERE bucket_key = :bucket_key'
+            );
+            $stmt->execute([':bucket_key' => $this->rateLimitKey($action, $clientIp, $subject)]);
+        } catch (Throwable $exception) {
+            // คืนไม่ได้ = นับเกินไป 1 ครั้ง ซึ่งเข้มกว่าที่ควรแต่ไม่เปิดช่อง — ไม่ต้องล้ม
+            error_log('[auth] releaseAttempt failed: ' . $exception->getMessage());
+        }
+    }
+
+    /** deadlock (1213) / รอล็อกนานเกินไป (1205) — ลองใหม่ได้ ไม่ใช่ระบบพัง */
+    private function isRetryableLockError(Throwable $exception): bool
+    {
+        $code = $exception instanceof PDOException ? (string)($exception->errorInfo[1] ?? '') : '';
+
+        return $code === '1213' || $code === '1205';
     }
 
     /** จำนวนครั้งในหน้าต่างปัจจุบัน (0 เมื่อหน้าต่างหมดอายุแล้ว) */

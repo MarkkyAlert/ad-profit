@@ -151,4 +151,51 @@ final class ConfigEnvironmentTest extends TestCase
 
         $this->assertSame([], $missing, 'โค้ดอ่านค่าที่ไม่ได้เขียนไว้ใน .env.example: ' . implode(', ', $missing));
     }
+
+    /**
+     * ⭐ ไฟล์ log ที่เขียนไม่ได้ ต้องถูกตรวจเจอ ไม่ใช่เขียนลงไปแล้วหายเงียบ
+     *
+     * ⚠️ เงื่อนไขเดิมถามแค่ว่า **โฟลเดอร์** เขียนได้ไหม · บนโฮสต์จริงไฟล์ log
+     * มักถูกสร้างโดยผู้ใช้คนอื่น (root ตอน deploy, ตัวหมุน log ของ cPanel) แล้วเหลือ
+     * สิทธิ์อ่านอย่างเดียว โฟลเดอร์ยังเขียนได้อยู่ เงื่อนไขเดิมจึงผ่าน แล้วชี้
+     * `error_log` ไปที่ไฟล์นั้น — ข้อความของทั้งระบบหายเงียบตั้งแต่นั้น
+     */
+    public function testAnUnwritableLogFileFallsBackInsteadOfSwallowingEveryMessage(): void
+    {
+        $logDir = sys_get_temp_dir() . '/adprofit-logprobe-' . bin2hex(random_bytes(4)) . '/logs';
+        $this->assertTrue(mkdir($logDir, 0775, true), 'สร้างโฟลเดอร์ทดสอบไม่ได้');
+        $logFile = $logDir . '/php-error.log';
+        touch($logFile);
+        chmod($logFile, 0444);
+
+        try {
+            if (is_writable($logFile)) {
+                // รันด้วยสิทธิ์ root — chmod ไม่มีผล วัดอะไรไม่ได้
+                $this->markTestSkipped('ผู้ใช้ปัจจุบันเขียนไฟล์ 0444 ได้ (น่าจะเป็น root)');
+            }
+
+            $script = 'require ' . var_export(realpath(__DIR__ . '/../../includes/bootstrap.php'), true)
+                . '; echo "RESULT:", ini_get("error_log");';
+            $command = sprintf(
+                'LOG_FILE=%s APP_ENV=production SCHEMA_GUARD_ENABLED=0 php -r %s 2>/dev/null',
+                escapeshellarg($logFile),
+                escapeshellarg($script)
+            );
+            $output = (string)shell_exec($command);
+
+            $this->assertStringContainsString('RESULT:', $output, 'bootstrap ไม่ถึงบรรทัดที่วัด');
+            $resolved = substr($output, strpos($output, 'RESULT:') + 7);
+
+            $this->assertNotSame(
+                $logFile,
+                $resolved,
+                'ยังชี้ error_log ไปที่ไฟล์ที่เขียนไม่ได้ — ข้อความของทั้งระบบจะหายเงียบ'
+            );
+        } finally {
+            chmod($logFile, 0644);
+            @unlink($logFile);
+            @rmdir($logDir);
+            @rmdir(dirname($logDir));
+        }
+    }
 }

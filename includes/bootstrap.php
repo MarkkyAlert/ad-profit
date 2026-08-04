@@ -31,6 +31,12 @@ if (session_status() === PHP_SESSION_NONE) {
         (int)SESSION_ABSOLUTE_TIMEOUT_SECONDS
     ) + 3600;
 
+    // ⚠️ ตรึง cache_limiter เอง — ไม่งั้นหน้าที่ต้องล็อกอิน (ยอดขาย กำไร โปรไฟล์)
+    // จะไม่มี `Cache-Control: no-store` บนโฮสต์ที่ตั้ง `session.cache_limiter=` ว่างไว้
+    // แล้วเบราว์เซอร์/พร็อกซีเก็บหน้าไว้ให้คนถัดไปที่ใช้เครื่องเดียวกันกดย้อนกลับมาดูได้
+    // (แอปตั้ง no-store เองแค่ 2 ที่คือหน้าดาวน์โหลดไฟล์)
+    ini_set('session.cache_limiter', 'nocache');
+
     session_start([
         'cookie_httponly' => true,
         'cookie_secure' => $cookieSecure,
@@ -63,7 +69,18 @@ if (!is_dir($logDir)) {
 }
 
 ini_set('log_errors', '1');
-if (is_dir($logDir) && is_writable($logDir)) {
+
+// ⚠️ ต้องถามถึง **ตัวไฟล์** ด้วย ไม่ใช่แค่โฟลเดอร์
+//
+// โฟลเดอร์เขียนได้ ไม่ได้แปลว่าไฟล์เขียนได้ · บนโฮสต์จริง ไฟล์ log มักถูกสร้างโดย
+// ผู้ใช้คนอื่น (root ตอน deploy, ตัวหมุน log ของ cPanel) แล้วเหลือสิทธิ์อ่านอย่างเดียว
+// เงื่อนไขเดิมมองแค่โฟลเดอร์ จึงชี้ `error_log` ไปที่ไฟล์ที่เขียนไม่ได้ — ข้อความ
+// ทุกบรรทัดของทั้งระบบหายเงียบ ทั้งที่โค้ดตรงนี้เขียนขึ้นมาเพื่อกันกรณีนี้พอดี
+$logFileWritable = file_exists(LOG_FILE)
+    ? is_writable(LOG_FILE)
+    : (is_dir($logDir) && is_writable($logDir));
+
+if ($logFileWritable) {
     ini_set('error_log', LOG_FILE);
 } else {
     // ปล่อยให้ error_log ไปตามค่าปริยายของ host แทนที่จะชี้ไปที่เขียนไม่ได้
