@@ -599,8 +599,11 @@ class DashboardService
         $progressRevenue = $this->calculateGoalPercent($actualRevenue, $targetRevenue);
         $progressProfit = $this->calculateGoalPercent($actualProfit, $targetProfit);
 
-        $revenueReached = $progressRevenue !== null && $progressRevenue >= 100;
-        $profitReached = $progressProfit !== null && $progressProfit >= 100;
+        // เทียบค่าจริง ไม่ใช่ progress ที่ปัดทศนิยมแล้ว — ไม่งั้น 9,999.60 จาก 10,000
+        // จะกลายเป็น 100.0% แล้วบอกว่า "ถึงเป้า" ขณะที่ AnnualService.php:221-222
+        // เทียบค่าจริงจึงบอกว่ายังไม่ถึง (ข้อมูลชุดเดียวกัน สองหน้าตอบต่างกัน)
+        $revenueReached = $targetRevenue !== null && $targetRevenue > 0 && $actualRevenue >= $targetRevenue;
+        $profitReached = $targetProfit !== null && $targetProfit > 0 && $actualProfit >= $targetProfit;
 
         $configuredReached = [];
         if ($targetRevenue !== null) {
@@ -655,13 +658,22 @@ class DashboardService
         return round(($actual / $target) * 100, 1);
     }
 
+    /**
+     * เปอร์เซ็นต์การเปลี่ยนแปลงเทียบฐานเดือนก่อน
+     * ฐาน 0 (ไม่มีข้อมูลเดือนก่อน/เท่าทุนพอดี) → null เพราะหารไม่ได้
+     * ฐานติดลบ → หารด้วย abs เพื่อให้เครื่องหมายสื่อทิศทางจริง (ขาดทุนน้อยลง = บวก)
+     *
+     * เดิมหารด้วย $previous ที่มีเครื่องหมาย ทำให้เดือนที่ขาดทุนน้อยลงขึ้นลูกศรลงสีแดง
+     * และเดือนที่ขาดทุนหนักขึ้นขึ้นลูกศรขึ้นสีเขียว — ตรงข้ามกับ AnnualService
+     * และ OverviewAnnualService ที่ใช้ abs อยู่แล้ว
+     */
     private function calculateChangePercent(?float $current, ?float $previous): ?float
     {
         if ($current === null || $previous === null || abs($previous) < 0.00001) {
             return null;
         }
 
-        return round((($current - $previous) / $previous) * 100, 1);
+        return round((($current - $previous) / abs($previous)) * 100, 1);
     }
 
     private function isValidDate(string $date): bool
