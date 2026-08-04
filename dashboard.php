@@ -275,11 +275,20 @@ $sixMonthPayload = [
 $comparisonChanges = (array)($comparison['change'] ?? []);
 $comparisonEnabled = (bool)($comparison['enabled'] ?? false);
 
-$comparisonMeta = static function (?float $value): array {
+// เดือนปัจจุบันเทียบกับ "เดือนก่อนถึงวันเดียวกัน" ไม่ใช่ทั้งเดือน — ป้ายต้องบอกให้ชัด
+// ไม่งั้นผู้ใช้อ่านว่ากำลังเทียบกับยอดเต็มเดือนก่อน แล้วสรุปว่าเดือนนี้แย่ลงทั้งที่เพิ่งต้นเดือน
+$comparisonCutoffDay = isset($comparison['compared_up_to_day']) && $comparison['compared_up_to_day'] !== null
+    ? (int)$comparison['compared_up_to_day']
+    : null;
+$comparisonLabel = $comparisonCutoffDay !== null
+    ? 'เทียบเดือนก่อน (ถึงวันที่ ' . $comparisonCutoffDay . '): '
+    : 'เทียบเดือนก่อน: ';
+
+$comparisonMeta = static function (?float $value) use ($comparisonLabel): array {
     $badge = format_change_badge($value);
 
     return [
-        'text' => 'เทียบเดือนก่อน: ' . $badge['text'],
+        'text' => $comparisonLabel . $badge['text'],
         'class' => $badge['class'],
     ];
 };

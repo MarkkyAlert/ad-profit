@@ -408,6 +408,9 @@ require __DIR__ . '/includes/header.php';
                 : null;
             $dayBest = is_array($dailySummary['best_day'] ?? null) ? (array)$dailySummary['best_day'] : null;
             $dayWorst = is_array($dailySummary['worst_day'] ?? null) ? (array)$dailySummary['worst_day'] : null;
+            // ค่าเฉลี่ย/ดีสุด/แย่สุด คิดจาก "วันที่ทุกร้านกรอกครบ" เท่านั้น (ตัดสินไปแล้ว)
+            // ป้ายต้องบอกจำนวนวันที่ใช้จริง ไม่งั้นผู้ใช้เข้าใจว่านับทุกวันในเดือน
+            $dayCompleteDays = (int)($dailySummary['complete_days_count'] ?? 0);
             $dayTotalShops = (int)($dailySummary['total_shops'] ?? 0);
             $dayIncompleteDays = (int)($dailySummary['incomplete_days'] ?? 0);
             ?>
@@ -452,6 +455,9 @@ require __DIR__ . '/includes/header.php';
                             <?php if ($dayAvgRevenue !== null): ?>
                                 <span class="text-xs text-slate-500">(รายได้ <?= e(formatMoney($dayAvgRevenue)) ?>)</span>
                             <?php endif; ?>
+                            <?php if ($dayCompleteDays > 0): ?>
+                                <span class="text-xs text-slate-500">จาก <?= e((string)$dayCompleteDays) ?> วันที่กรอกครบทุกร้าน</span>
+                            <?php endif; ?>
                         <?php endif; ?>
 
                         <?php if ($dayBest !== null): ?>
@@ -460,7 +466,7 @@ require __DIR__ . '/includes/header.php';
                             $worstDayProfit = $dayWorst !== null ? (float)($dayWorst['profit'] ?? 0) : null;
                             ?>
                             <span class="text-slate-600">·</span>
-                            วันกำไรดีสุด
+                            วันกำไรดีสุด<span class="text-xs text-slate-500">(เฉพาะวันที่กรอกครบ)</span>
                             <span class="font-bold <?= $bestDayProfit < 0 ? 'text-red-400' : 'text-green-400' ?>">
                                 <?= e(formatThaiDate((string)($dayBest['record_date'] ?? ''))) ?>
                                 (<?= e(formatMoney($bestDayProfit)) ?>)

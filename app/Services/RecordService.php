@@ -209,10 +209,13 @@ class RecordService
         }
 
         $rows = [];
-        $lineNumber = 1; // นับรวมบรรทัดหัวตารางแล้ว
+        // นับ "แถว" ไม่ใช่ "บรรทัด" — fgetcsv คืน 1 record ต่อครั้ง แต่โน้ตที่มีขึ้นบรรทัดใหม่
+        // อยู่ในเครื่องหมายคำพูดกินหลายบรรทัดในไฟล์ ตัวเลขนี้จึงตรงกับเลขแถวใน Excel
+        // (ซึ่งเป็นสิ่งที่ผู้ใช้เปิดดูจริง) ไม่ตรงกับเลขบรรทัดของไฟล์ดิบ
+        $rowNumber = 1; // นับรวมแถวหัวตารางแล้ว
 
         while (($cells = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $lineNumber++;
+            $rowNumber++;
 
             if (!is_array($cells)) {
                 continue;
@@ -242,7 +245,7 @@ class RecordService
             if ($this->isAmbiguousSlashDate($rawDate)) {
                 fclose($handle);
                 return $fail(
-                    'บรรทัดที่ ' . $lineNumber . ': วันที่ "' . $rawDate . '" กำกวม '
+                    'แถวที่ ' . $rowNumber . ': วันที่ "' . $rawDate . '" กำกวม '
                     . '(อ่านได้ทั้งวัน/เดือน และเดือน/วัน) — กรุณาใช้รูปแบบ ปี-เดือน-วัน เช่น 2026-08-03'
                 );
             }
@@ -250,7 +253,7 @@ class RecordService
             $recordDate = $this->parseImportDate($rawDate);
             if ($recordDate === null) {
                 fclose($handle);
-                return $fail('บรรทัดที่ ' . $lineNumber . ': อ่านวันที่ "' . $rawDate . '" ไม่ได้');
+                return $fail('แถวที่ ' . $rowNumber . ': อ่านวันที่ "' . $rawDate . '" ไม่ได้');
             }
 
             $rawRevenue = $cellAt($columnMap['revenue']);
@@ -270,12 +273,12 @@ class RecordService
             // รายงานค่าที่ผู้ใช้เห็นในไฟล์ ไม่ใช่ค่าที่ clean แล้ว
             if (!is_numeric($revenue)) {
                 fclose($handle);
-                return $fail('บรรทัดที่ ' . $lineNumber . ': รายได้ "' . $rawRevenue . '" ไม่ใช่ตัวเลข');
+                return $fail('แถวที่ ' . $rowNumber . ': รายได้ "' . $rawRevenue . '" ไม่ใช่ตัวเลข');
             }
 
             if (!is_numeric($adCost)) {
                 fclose($handle);
-                return $fail('บรรทัดที่ ' . $lineNumber . ': ค่าแอด "' . $rawAdCost . '" ไม่ใช่ตัวเลข');
+                return $fail('แถวที่ ' . $rowNumber . ': ค่าแอด "' . $rawAdCost . '" ไม่ใช่ตัวเลข');
             }
 
             $note = isset($columnMap['note']) ? $cellAt($columnMap['note']) : '';
@@ -284,7 +287,7 @@ class RecordService
             $rows[] = [
                 // เลขบรรทัดจริงในไฟล์ — ชั้นบันทึกจะได้ชี้แถวที่ผู้ใช้เปิดเจอ ไม่ใช่ลำดับ
                 // ใน array ที่ตัดหัวตาราง/แถวว่าง/แถวรวม/แถวไม่มีวันที่ ออกไปแล้ว
-                'row_number' => $lineNumber,
+                'row_number' => $rowNumber,
                 'record_date' => $recordDate,
                 'revenue' => $revenue,
                 'ad_cost' => $adCost,
@@ -1483,10 +1486,10 @@ class RecordService
 
                 // ไม่มีอยู่ในร้านไหนของผู้ใช้เลย = ผลลัพธ์ตรงกับที่ขอไปแล้ว → idempotent
                 // (รายการของผู้ใช้อื่นก็มาทางนี้ ตอบเหมือนกันทุกไบต์ จึงไม่บอกใบ้ว่ามีอยู่จริงไหม)
+                // ⚠️ ห้ามเพิ่ม flag/ข้อความแยกให้เคสนี้ — ต้องเหมือนการลบที่สำเร็จจริงทุกไบต์
                 return [
                     'success' => true,
                     'message' => 'ลบรายการเรียบร้อยแล้ว',
-                    'already_deleted' => true,
                 ];
             }
 

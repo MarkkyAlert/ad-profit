@@ -472,11 +472,25 @@ class AnnualService
             $grid[$gridYear] = $row;
         }
 
+        // "ฤดูกาล" คือการเทียบเดือนเดียวกันข้ามปี — มีข้อมูลปีเดียวก็ไม่มีอะไรให้เทียบ
+        // ชั้นบนใช้ค่านี้ตัดสินว่าจะสร้างชีต/การ์ดหรือไม่ แทนที่จะแสดงกริดว่างให้ตีความเอง
+        $yearsWithData = 0;
+        foreach ($grid as $row) {
+            foreach ($row as $cell) {
+                if (($cell['has_data'] ?? false) === true) {
+                    $yearsWithData++;
+                    break;
+                }
+            }
+        }
+
         return [
             'success' => true,
             'data' => [
                 'years' => $years,
                 'grid' => $grid,
+                'years_with_data' => $yearsWithData,
+                'comparable' => $yearsWithData >= 2,
             ],
         ];
     }

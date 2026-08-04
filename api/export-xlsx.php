@@ -75,10 +75,14 @@ if ($goalProgress !== []) {
 }
 
 // ฤดูกาล 3 ปี — +1 query · ล้มเหลวก็แค่ไม่มีชีตนี้ ไม่ทำทั้งไฟล์พัง
+// โผล่เฉพาะเมื่อมีข้อมูล >= 2 ปี (กฎเดียวกับชีตเป้าหมายที่ข้ามเมื่อไม่มีเป้า)
+// ร้านเปิดปีนี้ปีเดียวจะได้กริดที่มีแถวเดียวมีเลข อีก 2 แถวว่าง = ไม่ใช่ "ฤดูกาล"
 $heatmapResult = (new AnnualService($recordRepository, $shopRepository, new GoalRepository($pdo)))
     ->buildMonthlyHeatmap($userId, $shopId, $selectedYear, $today);
 
-if (($heatmapResult['success'] ?? false) === true) {
+if (($heatmapResult['success'] ?? false) === true
+    && ($heatmapResult['data']['comparable'] ?? false) === true
+) {
     $reportService->buildSeasonSheet($spreadsheet, (array)($heatmapResult['data'] ?? []));
 }
 

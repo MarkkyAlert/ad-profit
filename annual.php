@@ -143,6 +143,9 @@ $projectionReason = (string)($projection['reason'] ?? '');
 $heatmapYears = [];
 $heatmapGrid = [];
 $heatmapPeak = 0.0;
+// "ฤดูกาล" ต้องมีอย่างน้อย 2 ปีถึงจะเทียบได้ — ปีเดียวคือกริดที่ว่าง 2 ใน 3 แถว
+// เกณฑ์เดียวกับที่ api/export-xlsx.php ใช้ตัดสินว่าจะสร้างชีต "ฤดูกาล" หรือไม่
+$heatmapComparable = ($heatmapResult['data']['comparable'] ?? false) === true;
 if (($heatmapResult['success'] ?? false) === true) {
     $heatmapYears = array_values((array)($heatmapResult['data']['years'] ?? []));
     $heatmapGrid = (array)($heatmapResult['data']['grid'] ?? []);
@@ -511,7 +514,7 @@ require __DIR__ . '/includes/header.php';
     </div>
 </section>
 
-<?php if (count($heatmapYears) > 0): ?>
+<?php if ($heatmapComparable): ?>
     <section class="section-card mt-6 p-4 sm:p-5">
         <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
             <h2 class="text-base sm:text-lg font-semibold text-slate-100">ฤดูกาลกำไร (3 ปี)</h2>

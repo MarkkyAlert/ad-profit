@@ -193,13 +193,13 @@ final class RecordServiceImportCsvTest extends TestCase
         $csv = $this->toCsv([
             ['วันที่', 'รายได้', 'ค่าแอด'],
             ['2026-08-02', '1000', '200'],
-            ['เมื่อวานนี้', '1000', '200'],   // บรรทัดที่ 3
+            ['เมื่อวานนี้', '1000', '200'],   // แถวที่ 3
         ]);
 
         $result = $this->makeService()->parseImportCsv($csv);
 
         $this->assertFalse($result['success']);
-        $this->assertStringContainsString('บรรทัดที่ 3', $result['error']);
+        $this->assertStringContainsString('แถวที่ 3', $result['error']);
     }
 
     public function testImpossibleDateIsRejected(): void
@@ -212,7 +212,7 @@ final class RecordServiceImportCsvTest extends TestCase
         $result = $this->makeService()->parseImportCsv($csv);
 
         $this->assertFalse($result['success']);
-        $this->assertStringContainsString('บรรทัดที่ 2', $result['error']);
+        $this->assertStringContainsString('แถวที่ 2', $result['error']);
     }
 
     public function testNonNumericRevenueReportsLineNumber(): void
@@ -225,7 +225,7 @@ final class RecordServiceImportCsvTest extends TestCase
         $result = $this->makeService()->parseImportCsv($csv);
 
         $this->assertFalse($result['success']);
-        $this->assertStringContainsString('บรรทัดที่ 2', $result['error']);
+        $this->assertStringContainsString('แถวที่ 2', $result['error']);
     }
 
     public function testEmptyFileFails(): void

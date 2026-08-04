@@ -19,6 +19,28 @@ class DashboardService
         $this->goalRepository = $goalRepository;
     }
 
+    /**
+     * memo ของ getByDateRange ต่อการเรียก buildDashboard 1 ครั้ง
+     *
+     * โหลดแดชบอร์ดแบบ "เดือนนี้" ยิง query ช่วงเดียวกัน 3 รอบ: สรุปช่วงที่เลือก ·
+     * ฐานเทียบเดือนก่อน (ฝั่งเดือนปัจจุบัน) · ความคืบหน้าเป้า — ข้อมูลชุดเดียวกันเป๊ะ
+     * เก็บไว้ในอ็อบเจ็กต์ที่สร้างใหม่ทุก request จึงไม่มีปัญหาข้อมูลค้างข้ามคำขอ
+     *
+     * @var array<string,array<int,array<string,mixed>>>
+     */
+    private array $recordsCache = [];
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    private function fetchRecords(int $shopId, string $startDate, string $endDate): array
+    {
+        $key = $shopId . '|' . $startDate . '|' . $endDate;
+
+        return $this->recordsCache[$key]
+            ??= $this->recordRepository->getByDateRange($shopId, $startDate, $endDate);
+    }
+
     public function buildDashboard(
         int $userId,
         int $shopId,
@@ -46,7 +68,7 @@ class DashboardService
         $rangeData = (array)$range['data'];
 
         try {
-            $records = $this->recordRepository->getByDateRange(
+            $records = $this->fetchRecords(
                 $shopId,
                 (string)$rangeData['start_date'],
                 (string)$rangeData['end_date']
@@ -110,9 +132,7 @@ class DashboardService
             ];
         }
 
-        $records = $this->recordRepository->getByDateRange($shopId, $startDate, $endDate);
-
-        $summary = $this->buildSummaryFromRecords($records);
+        $summary = $this->buildSummaryFromRecords($this->fetchRecords($shopId, $startDate, $endDate));
 
         return [
             'success' => true,
@@ -600,7 +620,7 @@ class DashboardService
         }
 
         $monthEnd = $monthEndObject->format('Y-m-t');
-        $monthRecords = $this->recordRepository->getByDateRange($shopId, $monthStart, $monthEnd);
+        $monthRecords = $this->fetchRecords($shopId, $monthStart, $monthEnd);
         $monthSummary = $this->buildSummaryFromRecords($monthRecords);
 
         $targetRevenue = isset($goal['target_revenue']) && $goal['target_revenue'] !== null
@@ -714,7 +734,7 @@ class DashboardService
         $lastDayOfMonth = (int)$monthStart->format('t');
         $endDay = $cutoffDay === null ? $lastDayOfMonth : min($cutoffDay, $lastDayOfMonth);
 
-        $records = $this->recordRepository->getByDateRange(
+        $records = $this->fetchRecords(
             $shopId,
             $monthStart->format('Y-m-d'),
             $monthStart->setDate((int)$monthStart->format('Y'), (int)$monthStart->format('n'), $endDay)->format('Y-m-d')
