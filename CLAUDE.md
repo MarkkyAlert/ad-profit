@@ -163,8 +163,8 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 | Auth (login/logout/reset password/session guard) | ครอบแล้ว (integration) |
 | ShopService / GoalService / ProfileService / RecordService เขียน-ลบ | ครอบแล้ว |
 | ชั้น controller (`api/*.php`) — ด่านตรวจ (auth/405/415/CSRF/409) | ครอบแล้ว (`EndpointGuardChainTest`, `RecordEndpointGuardTest`) |
+| ชั้น controller — ตรรกะเฉพาะของแต่ละ action | ครอบแล้ว: `records.php` (`RecordEndpointGuardTest`) · `shops.php` (`ShopEndpointTest`) · `goals.php`/`profile.php` (`GoalAndProfileEndpointTest`) |
 | ชั้นเพจ — เปิดขึ้นจริง, กันคนไม่ล็อกอิน, ไม่โกหก ฿0, หดช่วงอนาคต | ครอบแล้ว (`PageRenderTest`) |
-| **ชั้น controller — ตรรกะเฉพาะของแต่ละ action** | **บางส่วน** — ครอบเฉพาะ `records.php` ที่เหลือครอบแค่ด่านตรวจ |
 | JS ที่ต้องตรงกับ PHP (อ่านจำนวนเงิน / วันที่กำกวม / แยกหัวตาราง) | ครอบแล้ว (`BrowserScriptParityTest` — ดึงฟังก์ชันจาก `add-record.php` ไปรันด้วย node แล้วเทียบกับ PHP) |
 | **JS ส่วนที่เหลือ** (เติมค่าเมื่อเปลี่ยนวัน, month-grid, typed-confirm, วางจาก Excel ทั้งกระบวนการ) | **0** — ไม่มี JS test runner |
 | **EmailService การส่งจริง** | ตรวจได้แค่คอนฟิก — การส่งถึงจริง **ต้อง verify มือ** |
@@ -195,7 +195,7 @@ guard) จึง `require` เข้ามาเรียกใน process ข�
 - ⚠️ ชื่อ field คือ **`shop_context_id`** (จาก `shop_context_field()`) ไม่ใช่ `shop_context`
 - ⚠️ **เพิ่ม endpoint ใหม่ใน `api/` ต้องเพิ่มชื่อใน `EndpointGuardChainTest`** — มี `testEveryApiFileIsAccountedFor()` กวาด `glob('api/*.php')` เทียบกับรายชื่อในเทสต์ ลืมแล้วชุดเทสต์แดงทันที
 - ⚠️ **payload ในรายชื่อต้องเป็นคำสั่งที่ไฟล์นั้นรู้จักจริง** — `api/shops.php`/`api/profile.php` วางด่าน CSRF ไว้ *ข้างใน* แต่ละ `if ($action === …)` ส่งคำสั่งมั่ว ๆ จะตกไป 404 ตั้งแต่ยังไม่ถึงด่าน
-- ⚠️ **เทสต์ทั้งชั้นนี้แชร์ test DB เดียวกัน** — รัน `phpunit` สองโปรเซสพร้อมกัน (เช่นเปิดอีกหน้าต่างหนึ่ง) จะพังใส่กันด้วย `Duplicate entry` / `Table … doesn't exist` ไม่ใช่บั๊กของโค้ด
+- **เทสต์ทั้งชั้นนี้แชร์ test DB เดียวกัน** — `IntegrationTestCase` จับ `flock` บนไฟล์ล็อกตอน `setUpBeforeClass` แล้วถือไว้ทั้งโปรเซส สองโปรเซสที่รันพร้อมกันจึง **เข้าคิว** แทนที่จะล้างข้อมูลของกันและกันกลางคัน ⚠️ เดิมเจอ `Duplicate entry` / `Table … doesn't exist` ที่ไม่เกี่ยวกับโค้ดเลย และเสียเวลาไล่หาสาเหตุผิดที่
 
 ### Framework
 - **PHPUnit** เป็น dev dependency, รันด้วย `composer test`

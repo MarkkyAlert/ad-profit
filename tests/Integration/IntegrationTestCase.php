@@ -27,6 +27,8 @@ abstract class IntegrationTestCase extends TestCase
     private static ?PDO $connection = null;
     private static ?string $skipReason = null;
     private static bool $initialised = false;
+    /** @var resource|null ล็อกกันสองโปรเซสรันพร้อมกันบน test DB เดียวกัน */
+    private static $lockHandle = null;
     /** @var array{dsn:string,user:string,pass:string}|null */
     private static ?array $credentials = null;
     /** @var list<PDO> */
@@ -57,6 +59,15 @@ abstract class IntegrationTestCase extends TestCase
         $pass = $passEnv === false ? '' : (string)$passEnv;
 
         $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $host, $port, $name);
+
+        // ⚠️ ทุกคลาสใช้ test DB ตัวเดียวกันและล้างด้วย TRUNCATE ต่อเทสต์ — ถ้ามี phpunit
+        // อีกโปรเซสรันพร้อมกัน (เปิดอีกหน้าต่าง, เอเจนต์ตรวจงาน) สองฝ่ายจะล้างข้อมูล
+        // ของกันและกันกลางคัน แล้วได้ error หลอก ๆ อย่าง "Duplicate entry" ที่ไม่เกี่ยว
+        // กับโค้ดเลย · ล็อกไฟล์นี้บังคับให้เข้าคิว แทนที่จะพังใส่กัน
+        self::$lockHandle = fopen(sys_get_temp_dir() . '/ad-profit-' . $name . '.lock', 'c');
+        if (is_resource(self::$lockHandle)) {
+            flock(self::$lockHandle, LOCK_EX);
+        }
 
         try {
             $pdo = new PDO($dsn, $user, $pass, [

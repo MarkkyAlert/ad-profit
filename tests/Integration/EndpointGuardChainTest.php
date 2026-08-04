@@ -48,7 +48,7 @@ final class EndpointGuardChainTest extends ControllerTestCase
             ]],
             'จัดการร้าน' => ['/api/shops.php', [
                 'action' => 'create',
-                'shop_name' => 'ร้านใหม่จากเทสต์',
+                'name' => 'ร้านใหม่จากเทสต์',
             ]],
             'โปรไฟล์' => ['/api/profile.php', [
                 'action' => 'update_profile',
