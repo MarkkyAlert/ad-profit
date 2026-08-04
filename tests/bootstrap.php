@@ -24,6 +24,9 @@ if (!defined('APP_TIMEZONE')) {
 if (!defined('PASSWORD_MIN_LENGTH')) {
     define('PASSWORD_MIN_LENGTH', 8);
 }
+if (!defined('PASSWORD_MAX_BYTES')) {
+    define('PASSWORD_MAX_BYTES', 72);
+}
 if (!defined('RATE_LIMIT_MAX_ATTEMPTS')) {
     define('RATE_LIMIT_MAX_ATTEMPTS', 5);
 }

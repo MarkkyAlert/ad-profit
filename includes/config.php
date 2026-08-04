@@ -116,6 +116,11 @@ if (!defined('PASSWORD_MIN_LENGTH')) {
     define('PASSWORD_MIN_LENGTH', max(4, (int)(getenv('PASSWORD_MIN_LENGTH') ?: 8)));
 }
 
+// bcrypt (PASSWORD_DEFAULT) ตัดรหัสผ่านที่ 72 byte — ยาวกว่านี้ส่วนเกินไม่มีผลต่อการตรวจ
+if (!defined('PASSWORD_MAX_BYTES')) {
+    define('PASSWORD_MAX_BYTES', 72);
+}
+
 if (!defined('SESSION_IDLE_TIMEOUT_SECONDS')) {
     define('SESSION_IDLE_TIMEOUT_SECONDS', (int)(getenv('SESSION_IDLE_TIMEOUT_SECONDS') ?: 14400));
 }

@@ -56,4 +56,52 @@ final class RecordServiceTest extends TestCase
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('255', $result['error']);
     }
+
+    /**
+     * ค่าเกิน DECIMAL(12,2) ต้องถูกปฏิเสธพร้อมบอกสาเหตุ
+     *
+     * เดิมปล่อยผ่านไปถึง DB: strict mode → exception แล้ว rollback ทั้งชุดพร้อม error
+     * ลอย ๆ "ไม่สามารถบันทึกข้อมูลได้" ที่ไม่บอกว่าแถวไหน · non-strict → ตัดค่าเงียบ
+     * แล้วรายงานว่าสำเร็จ (โค้ดไม่ได้ตั้ง sql_mode เอง จึงขึ้นกับ host)
+     */
+    public function testRevenueBeyondColumnLimitIsRejected(): void
+    {
+        $result = $this->makeService()->upsertRecord(1, 1, '2026-08-01', RecordService::MAX_AMOUNT + 1, 0.0, null);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('ไม่เกิน', $result['error']);
+    }
+
+    public function testAmountExactlyAtColumnLimitIsAccepted(): void
+    {
+        $result = $this->makeService()->upsertRecord(1, 1, '2026-08-01', RecordService::MAX_AMOUNT, 0.0, null);
+
+        $this->assertTrue($result['success']);
+    }
+
+    /**
+     * ปีนอกช่วงที่รายงานรองรับต้องถูกปฏิเสธ
+     *
+     * เดิมบันทึกสำเร็จแล้วหายจากทุกหน้ารายงาน เพราะ resolve_calendar_year() และ
+     * isValidYear ของ service รายปีจำกัดที่ 2000-2100 (เจอจริงกับ CSV วันที่ 01/01/2450)
+     */
+    public function testYearOutsideReportableRangeIsRejected(): void
+    {
+        $service = $this->makeService();
+
+        foreach (['1907-01-01', '2450-01-01', '1999-12-31', '2101-01-01'] as $date) {
+            $result = $service->upsertRecord(1, 1, $date, 100.0, 10.0, null);
+
+            $this->assertFalse($result['success'], "ยอมรับวันที่ {$date} ที่อยู่นอกช่วงรายงาน");
+            $this->assertStringContainsString('ปี', $result['error']);
+        }
+    }
+
+    public function testYearsAtTheEdgeOfTheRangeAreAccepted(): void
+    {
+        $service = $this->makeService();
+
+        $this->assertTrue($service->upsertRecord(1, 1, '2000-01-01', 100.0, 10.0, null)['success']);
+        $this->assertTrue($service->upsertRecord(1, 1, '2100-12-31', 100.0, 10.0, null)['success']);
+    }
 }

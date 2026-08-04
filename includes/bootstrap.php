@@ -148,20 +148,14 @@ function check_schema_compatibility(PDO $pdo): array
             return $cachedResult;
         }
 
-        if (!schema_unique_index_exists($pdo, 'shops', 'uq_shops_user_name')) {
-            $cachedResult = [
-                'ok' => false,
-                'message' => 'Missing required unique index shops.uq_shops_user_name',
-            ];
-            return $cachedResult;
-        }
-
-        if (!schema_unique_index_exists($pdo, 'password_reset_tokens', 'uq_password_reset_token_hash')) {
-            $cachedResult = [
-                'ok' => false,
-                'message' => 'Missing required unique index password_reset_tokens.uq_password_reset_token_hash',
-            ];
-            return $cachedResult;
+        foreach (schema_required_unique_indexes() as [$tableName, $indexName]) {
+            if (!schema_unique_index_exists($pdo, $tableName, $indexName)) {
+                $cachedResult = [
+                    'ok' => false,
+                    'message' => 'Missing required unique index ' . $tableName . '.' . $indexName,
+                ];
+                return $cachedResult;
+            }
         }
     } catch (Throwable $exception) {
         $cachedResult = [
@@ -173,55 +167,4 @@ function check_schema_compatibility(PDO $pdo): array
 
     $cachedResult = ['ok' => true];
     return $cachedResult;
-}
-
-function schema_table_exists(PDO $pdo, string $tableName): bool
-{
-    $sql = 'SELECT 1
-            FROM information_schema.TABLES
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = :table_name
-            LIMIT 1';
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([':table_name' => $tableName]);
-
-    return $stmt->fetchColumn() !== false;
-}
-
-function schema_column_exists(PDO $pdo, string $tableName, string $columnName): bool
-{
-    $sql = 'SELECT 1
-            FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = :table_name
-              AND COLUMN_NAME = :column_name
-            LIMIT 1';
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([
-        ':table_name' => $tableName,
-        ':column_name' => $columnName,
-    ]);
-
-    return $stmt->fetchColumn() !== false;
-}
-
-function schema_unique_index_exists(PDO $pdo, string $tableName, string $indexName): bool
-{
-    $sql = 'SELECT 1
-            FROM information_schema.STATISTICS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = :table_name
-              AND INDEX_NAME = :index_name
-              AND NON_UNIQUE = 0
-            LIMIT 1';
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([
-        ':table_name' => $tableName,
-        ':index_name' => $indexName,
-    ]);
-
-    return $stmt->fetchColumn() !== false;
 }

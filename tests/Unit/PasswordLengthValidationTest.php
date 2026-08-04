@@ -47,6 +47,25 @@ final class PasswordLengthValidationTest extends TestCase
         $this->assertNull(validate_password_length(str_repeat('ก', PASSWORD_MIN_LENGTH)));
     }
 
+    /**
+     * bcrypt ตัดที่ 72 byte — รหัสยาวกว่านั้นส่วนเกินไม่ถูกใช้ตรวจเลย
+     *
+     * พิสูจน์แล้วว่า password_verify() ผ่านทั้ง "72 ตัว" และ "72 ตัว + ต่อท้ายอะไรก็ได้"
+     * กับ hash เดียวกัน → ต้องปฏิเสธตั้งแต่ตอนตั้งรหัส ไม่ให้ผู้ใช้เข้าใจผิดว่าปลอดภัยกว่า
+     */
+    public function testRejectsPasswordBeyondBcryptLimit(): void
+    {
+        $this->assertNull(validate_password_length(str_repeat('a', PASSWORD_MAX_BYTES)));
+        $this->assertIsString(validate_password_length(str_repeat('a', PASSWORD_MAX_BYTES + 1)));
+    }
+
+    /** อักษรไทย 1 ตัว = 3 byte → 24 ตัวคือเพดานจริง */
+    public function testThaiPasswordIsMeasuredInBytesAgainstTheCeiling(): void
+    {
+        $this->assertNull(validate_password_length(str_repeat('ก', 24)));      // 72 byte
+        $this->assertIsString(validate_password_length(str_repeat('ก', 25)));  // 75 byte
+    }
+
     public function testFieldLabelAppearsInTheMessage(): void
     {
         $error = validate_password_length('sh', 'รหัสผ่านใหม่');

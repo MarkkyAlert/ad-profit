@@ -10,6 +10,13 @@ class RecordService
     /** จำนวนแถวสูงสุดต่อการนำเข้าไฟล์ CSV 1 ครั้ง */
     public const IMPORT_MAX_ROWS = 1000;
 
+    /** เพดานของ revenue/ad_cost — ตรงกับ DECIMAL(12,2) ใน database/schema.sql */
+    public const MAX_AMOUNT = 9999999999.99;
+
+    /** ช่วงปีที่รายงานรองรับ — ตรงกับ resolve_calendar_year() และ isValidYear ของ service รายปี */
+    public const MIN_RECORD_YEAR = 2000;
+    public const MAX_RECORD_YEAR = 2100;
+
     /** ชื่อเดือนย่อภาษาไทย → เลขเดือน (ใช้ parse วันที่จากไฟล์ export) */
     private const THAI_MONTH_ABBREVIATIONS = [
         'ม.ค.' => 1,
@@ -1439,10 +1446,30 @@ class RecordService
             ];
         }
 
+        // ปีนอกช่วงที่รายงานรองรับ (resolve_calendar_year, AnnualService::isValidYear ใช้ 2000-2100)
+        // บันทึกได้แต่จะหายจากทุกหน้ารายงาน — เคยเกิดจริงกับ CSV ที่มีวันที่แบบ 01/01/2450
+        $year = (int)$dateObject->format('Y');
+        if ($year < self::MIN_RECORD_YEAR || $year > self::MAX_RECORD_YEAR) {
+            return [
+                'success' => false,
+                'error' => sprintf('ปีต้องอยู่ระหว่าง %d–%d', self::MIN_RECORD_YEAR, self::MAX_RECORD_YEAR),
+            ];
+        }
+
         if ($revenue < 0 || $adCost < 0) {
             return [
                 'success' => false,
                 'error' => 'รายได้และค่าแอดต้องไม่ติดลบ',
+            ];
+        }
+
+        // คอลัมน์เป็น DECIMAL(12,2) — เกินแล้ว MySQL strict mode จะ throw ทำให้ทั้งชุดถูก
+        // rollback พร้อม error ลอย ๆ "ไม่สามารถบันทึกข้อมูลได้" ที่ไม่บอกว่าแถวไหน ส่วน
+        // non-strict จะตัดค่าเงียบแล้วรายงานว่าสำเร็จ — ปฏิเสธตั้งแต่ตรงนี้ให้บอกได้ว่าผิดที่ไหน
+        if ($revenue > self::MAX_AMOUNT || $adCost > self::MAX_AMOUNT) {
+            return [
+                'success' => false,
+                'error' => 'รายได้และค่าแอดต้องไม่เกิน ' . number_format(self::MAX_AMOUNT, 2),
             ];
         }
 

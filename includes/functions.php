@@ -496,5 +496,86 @@ function validate_password_length(string $password, string $fieldLabel = 'รห
     if ($length < PASSWORD_MIN_LENGTH) {
         return $fieldLabel . 'ต้องมีอย่างน้อย ' . PASSWORD_MIN_LENGTH . ' ตัวอักษร';
     }
+
+    // bcrypt (PASSWORD_DEFAULT) ตัดที่ 72 byte เงียบ ๆ — ยาวกว่านั้นส่วนเกินไม่ถูกใช้ตรวจเลย
+    // นับเป็น byte เพราะเป็นขีดจำกัดของ bcrypt จริง ๆ (อักษรไทย 1 ตัว = 3 byte)
+    if (strlen($password) > PASSWORD_MAX_BYTES) {
+        return $fieldLabel . 'ยาวเกินไป (สูงสุด ' . PASSWORD_MAX_BYTES . ' ไบต์ — อักษรไทย 1 ตัวนับเป็น 3)';
+    }
+
     return null;
+}
+
+/**
+ * unique index ที่ระบบพึ่งพาโดยตรง — ขาดไปแล้วพังเงียบ ไม่ใช่พังดัง
+ *
+ * กันข้อมูลซ้ำทั้งระบบพึ่ง key พวกนี้อย่างเดียว (ไม่มีชั้น idempotency แล้ว):
+ *  - daily_records/monthly_goals: ถ้า key หาย ON DUPLICATE KEY UPDATE จะกลายเป็น
+ *    INSERT ธรรมดา → กรอกวันเดิมซ้ำได้หลายแถว ยอดรวมทุกหน้ารายงานบวมโดยไม่มีสัญญาณ
+ *  - auth_rate_limits: ถ้า key หาย ตัวนับจะสร้างแถวใหม่ทุกครั้งแทนการ +1 → rate limit ตาย
+ *  - users.email/shops: กันบัญชีซ้ำและชื่อร้านซ้ำต่อผู้ใช้
+ *
+ * @return array<int,array{0:string,1:string}> [ชื่อตาราง, ชื่อ index]
+ */
+function schema_required_unique_indexes(): array
+{
+    return [
+        ['users', 'uq_users_email'],
+        ['shops', 'uq_shops_user_name'],
+        ['daily_records', 'uq_daily_records_shop_date'],
+        ['monthly_goals', 'uq_monthly_goals_shop_month'],
+        ['auth_rate_limits', 'uq_auth_rate_limits_bucket'],
+        ['password_reset_tokens', 'uq_password_reset_token_hash'],
+    ];
+}
+
+function schema_table_exists(PDO $pdo, string $tableName): bool
+{
+    $sql = 'SELECT 1
+            FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+            LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':table_name' => $tableName]);
+
+    return $stmt->fetchColumn() !== false;
+}
+
+function schema_column_exists(PDO $pdo, string $tableName, string $columnName): bool
+{
+    $sql = 'SELECT 1
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND COLUMN_NAME = :column_name
+            LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':table_name' => $tableName,
+        ':column_name' => $columnName,
+    ]);
+
+    return $stmt->fetchColumn() !== false;
+}
+
+function schema_unique_index_exists(PDO $pdo, string $tableName, string $indexName): bool
+{
+    $sql = 'SELECT 1
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND INDEX_NAME = :index_name
+              AND NON_UNIQUE = 0
+            LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':table_name' => $tableName,
+        ':index_name' => $indexName,
+    ]);
+
+    return $stmt->fetchColumn() !== false;
 }
