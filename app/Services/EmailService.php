@@ -26,9 +26,18 @@ class EmailService
         $this->fromName = MAIL_FROM_NAME;
     }
 
+    /**
+     * "ตั้งค่าครบพอจะส่งได้จริง" ไม่ใช่แค่ MAIL_ENABLED=true
+     *
+     * fromAddress ต้องรวมด้วย — default เป็นค่าว่าง ถ้าลืมตั้งจะผ่านด่านนี้แล้วไปล้มที่
+     * setFrom('') ทีหลัง กลายเป็น "ขอลิงก์รีเซ็ตแล้วเงียบ" แบบเดียวกับตอนไม่ได้ตั้ง SMTP
+     */
     public function isEnabled(): bool
     {
-        return $this->enabled && $this->username !== '' && $this->password !== '';
+        return $this->enabled
+            && $this->username !== ''
+            && $this->password !== ''
+            && $this->fromAddress !== '';
     }
 
     public function sendPasswordResetEmail(string $toEmail, string $resetLink): bool

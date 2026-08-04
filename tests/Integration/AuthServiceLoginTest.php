@@ -128,7 +128,12 @@ final class AuthServiceLoginTest extends IntegrationTestCase
         $this->assertStringContainsString('บ่อยเกินไป', $blocked['error']);
     }
 
-    /** ล็อกอินสำเร็จต้องล้างตัวนับ ไม่งั้นความพยายามที่ล้มเหลวก่อนหน้าค้างไปกันครั้งถัดไป */
+    /**
+     * ล็อกอินสำเร็จต้องล้างตัวนับ "ของบัญชีนั้น" ไม่งั้นความพยายามที่ล้มเหลวก่อนหน้า
+     * ค้างไปกันครั้งถัดไป
+     *
+     * bucket ต่อ IP ไม่ถูกล้างโดยตั้งใจ (ดู testSuccessfulLoginDoesNotClearTheIpBucket)
+     */
     public function testSuccessfulLoginClearsTheFailureCounter(): void
     {
         $this->createUser('owner@example.com', 'password123');
@@ -138,7 +143,11 @@ final class AuthServiceLoginTest extends IntegrationTestCase
         $service->login('owner@example.com', 'wrong-password', self::IP);
         $this->assertTrue($service->login('owner@example.com', 'password123', self::IP)['success']);
 
-        $this->assertSame(0, $this->countRows('auth_rate_limits'));
+        $accountBuckets = (int)$this->pdo
+            ->query("SELECT COUNT(*) FROM auth_rate_limits WHERE action_type = 'login'")
+            ->fetchColumn();
+
+        $this->assertSame(0, $accountBuckets);
     }
 
     public function testRateLimitIsScopedPerClientIp(): void
@@ -183,7 +192,10 @@ final class AuthServiceLoginTest extends IntegrationTestCase
         $service->login('owner@example.com', 'wrong-password', self::IP);
         $service->login('owner@example.com', 'wrong-password', self::IP);
 
-        $row = $this->pdo->query('SELECT action_type, client_ip, attempts FROM auth_rate_limits')->fetch();
+        // ระบุ action_type ให้ชัด — มี bucket ต่อ IP (login_ip) อยู่อีกแถวหนึ่งด้วย
+        $row = $this->pdo
+            ->query("SELECT action_type, client_ip, attempts FROM auth_rate_limits WHERE action_type = 'login'")
+            ->fetch();
 
         $this->assertIsArray($row, 'ไม่มีแถวใน auth_rate_limits — ตัวนับไม่ได้ถูกบันทึก');
         $this->assertSame('login', $row['action_type']);
@@ -277,5 +289,66 @@ final class AuthServiceLoginTest extends IntegrationTestCase
         $service->logout();
 
         $this->assertSame([], $_SESSION);
+    }
+
+    /**
+     * password spraying: รหัสเดียวยิงหลายบัญชีจาก IP เดียว ต้องถูกจำกัด
+     *
+     * bucket เดิมผูกกับ (action, ip, email) → เปลี่ยนอีเมลทุกครั้งก็ไม่มีวันชนเพดาน
+     */
+    public function testSprayingAcrossManyAccountsFromOneIpIsThrottled(): void
+    {
+        $service = $this->makeService();
+        for ($i = 0; $i < RATE_LIMIT_MAX_ATTEMPTS + 1; $i++) {
+            $this->createUser("victim{$i}@example.com", 'password123');
+        }
+
+        // เดารหัสเดียวกันกับบัญชีคนละอันทุกครั้ง
+        for ($i = 0; $i < RATE_LIMIT_MAX_ATTEMPTS; $i++) {
+            $service->login("victim{$i}@example.com", 'guessed-password', self::IP);
+        }
+
+        $blocked = $service->login('victim5@example.com', 'password123', self::IP);
+
+        $this->assertFalse($blocked['success']);
+        $this->assertStringContainsString('บ่อยเกินไป', $blocked['error']);
+    }
+
+    /** IP อื่นต้องไม่ติดล็อกไปด้วย */
+    public function testSprayingLimitIsScopedPerIp(): void
+    {
+        $service = $this->makeService();
+        for ($i = 0; $i < RATE_LIMIT_MAX_ATTEMPTS; $i++) {
+            $this->createUser("victim{$i}@example.com", 'password123');
+            $service->login("victim{$i}@example.com", 'guessed-password', self::IP);
+        }
+
+        $this->assertTrue($service->login('victim0@example.com', 'password123', '198.51.100.77')['success']);
+    }
+
+    /**
+     * ล็อกอินสำเร็จของบัญชีหนึ่ง ต้องไม่ล้างประวัติการเดาบัญชีอื่นจาก IP เดียวกัน
+     * ไม่งั้นผู้โจมตีที่มีบัญชีของตัวเองจะรีเซ็ตตัวนับได้ตลอด
+     */
+    public function testSuccessfulLoginDoesNotClearTheIpBucket(): void
+    {
+        $service = $this->makeService();
+        $this->createUser('attacker@example.com', 'password123');
+        for ($i = 0; $i < RATE_LIMIT_MAX_ATTEMPTS; $i++) {
+            $this->createUser("victim{$i}@example.com", 'password123');
+            $service->login("victim{$i}@example.com", 'guessed-password', self::IP);
+        }
+
+        $this->assertFalse($service->login('attacker@example.com', 'password123', self::IP)['success']);
+    }
+
+    /** hash ที่ใช้เผาเวลาต้องเป็น bcrypt จริง ไม่งั้น password_verify คืน false ทันทีโดยไม่ทำงาน */
+    public function testDummyHashUsedForTimingIsARealBcryptHash(): void
+    {
+        $reflection = new \ReflectionClass(AuthService::class);
+        $dummy = (string)$reflection->getConstant('DUMMY_PASSWORD_HASH');
+
+        $this->assertSame('bcrypt', password_get_info($dummy)['algoName']);
+        $this->assertFalse(password_verify('any-password', $dummy));
     }
 }

@@ -6,6 +6,19 @@ class AuthService
 {
     private const DEFAULT_SHOP_NAME = 'ร้านค้าของฉัน';
 
+    /** bucket ที่ผูกกับ IP ล้วน — กัน password spraying ที่ bucket ต่ออีเมลจับไม่ได้ */
+    private const LOGIN_IP_ACTION = 'login_ip';
+
+    /**
+     * hash ทิ้ง สำหรับเผาเวลาให้เท่ากับการ verify จริงเมื่อไม่พบอีเมล
+     *
+     * ⚠️ ต้องเป็น bcrypt hash ที่ถูกต้องจริง — password_verify() กับสตริงที่ไม่ใช่ hash
+     * จะคืน false ทันทีโดยไม่ทำงานอะไรเลย (วัดแล้ว 0.16 ms เทียบกับของจริง 268 ms)
+     * ซึ่งเท่ากับไม่ได้ปิดช่องเวลาเลย · สร้างจาก password_hash(random, PASSWORD_DEFAULT)
+     * และทิ้ง plaintext ไป จึงไม่มีรหัสผ่านใดตรงกับ hash นี้
+     */
+    private const DUMMY_PASSWORD_HASH = '$2y$12$EPlFLkxCgyuo7pqUid4y.eg4A7VynhfmBQtNIJzqPxb9E1mErtKg2';
+
     private PDO $db;
     private UserRepository $userRepository;
     private ShopRepository $shopRepository;
@@ -135,7 +148,10 @@ class AuthService
     {
         $normalizedEmail = normalize_email($email);
 
-        if ($this->isRateLimited('login', $clientIp, $normalizedEmail)) {
+        // ตรวจ 2 ชั้น: ต่อ (IP + อีเมล) กันเดารหัสของบัญชีเดียว และต่อ IP ล้วนกัน password
+        // spraying (รหัสเดียวยิงหลายบัญชีจาก IP เดียว) ซึ่ง bucket ที่ผูกกับอีเมลจับไม่ได้เลย
+        if ($this->isRateLimited('login', $clientIp, $normalizedEmail)
+            || $this->isRateLimited(self::LOGIN_IP_ACTION, $clientIp)) {
             return [
                 'success' => false,
                 'error' => 'ลองเข้าสู่ระบบบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
@@ -143,7 +159,7 @@ class AuthService
         }
 
         if ($normalizedEmail === '' || $password === '') {
-            $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
+            $this->markFailedLoginAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลและรหัสผ่าน',
@@ -152,7 +168,9 @@ class AuthService
 
         $user = $this->userRepository->findByEmail($normalizedEmail);
         if ($user === null) {
-            $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
+            // เผาเวลาเท่ากับการ verify จริง ไม่งั้นเวลาตอบบอกได้ว่าอีเมลไหนมีในระบบ
+            password_verify($password, self::DUMMY_PASSWORD_HASH);
+            $this->markFailedLoginAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -161,7 +179,7 @@ class AuthService
 
         $passwordHash = (string)($user['password_hash'] ?? '');
         if (!password_verify($password, $passwordHash)) {
-            $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
+            $this->markFailedLoginAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -217,6 +235,7 @@ class AuthService
         }
         $this->establishSession($userId, $userEmail, $shopId, $shopName, $sessionVersion);
         $this->clearRateLimit('login', $clientIp, $normalizedEmail);
+        // ไม่ล้าง bucket ของ IP — ไม่งั้นล็อกอินสำเร็จ 1 บัญชีจะล้างประวัติการเดาบัญชีอื่นทิ้ง
 
         return [
             'success' => true,
@@ -461,6 +480,13 @@ class AuthService
         $_SESSION['last_activity_at'] = time();
         $_SESSION['current_shop_id'] = $shopId;
         $_SESSION['current_shop_name'] = $shopName;
+    }
+
+    /** นับความพยายามที่ล้มเหลวทั้ง bucket ต่อบัญชี และ bucket ต่อ IP */
+    private function markFailedLoginAttempt(string $clientIp, string $normalizedEmail): void
+    {
+        $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
+        $this->markFailedAttempt(self::LOGIN_IP_ACTION, $clientIp);
     }
 
     private function isRateLimited(string $action, string $clientIp, string $subject = ''): bool

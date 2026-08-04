@@ -16,10 +16,8 @@ $view = match ($viewRaw) {
     default => 'month',
 };
 
-$selectedMonth = (string)($_GET['month'] ?? date('Y-m'));
-if (preg_match('/^\d{4}-\d{2}$/', $selectedMonth) !== 1) {
-    $selectedMonth = date('Y-m');
-}
+// ไม่รับเดือนอนาคต — helper ดึงกลับมาเป็นเดือนปัจจุบันให้
+$selectedMonth = resolve_calendar_month($_GET['month'] ?? null);
 
 // ไม่ระบุ ?year → ใช้ปีของเดือนที่กำลังดูอยู่
 $selectedYear = resolve_calendar_year($_GET['year'] ?? null, substr($selectedMonth, 0, 4));
@@ -382,6 +380,7 @@ require __DIR__ . '/includes/header.php';
                         id="overview-month"
                         name="month"
                         type="month"
+                        max="<?= e(date('Y-m')) ?>"
                         value="<?= e($selectedMonth) ?>"
                         class="rounded-xl px-3 py-2 text-sm transition-all">
                     <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>

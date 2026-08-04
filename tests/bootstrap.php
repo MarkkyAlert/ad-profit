@@ -39,6 +39,12 @@ if (!defined('SESSION_IDLE_TIMEOUT_SECONDS')) {
 if (!defined('SESSION_ABSOLUTE_TIMEOUT_SECONDS')) {
     define('SESSION_ABSOLUTE_TIMEOUT_SECONDS', 86400);
 }
+if (!defined('PASSWORD_RESET_TOKEN_TTL_HOURS')) {
+    define('PASSWORD_RESET_TOKEN_TTL_HOURS', 1);
+}
+if (!defined('EXPOSE_DEV_RESET_LINK')) {
+    define('EXPOSE_DEV_RESET_LINK', false);
+}
 
 date_default_timezone_set(APP_TIMEZONE);
 

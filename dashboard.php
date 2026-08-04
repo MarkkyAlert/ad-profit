@@ -26,6 +26,11 @@ if ($selectedMonthInput === '') {
     $selectedMonthInput = null;
 }
 
+// ตัวเลือก "เลือกเดือน (ย้อนหลัง)" ต้องย้อนหลังจริง — เดือนอนาคตถูกดึงกลับเป็นเดือนปัจจุบัน
+if ($selectedMonthInput !== null) {
+    $selectedMonthInput = resolve_calendar_month($selectedMonthInput);
+}
+
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
 $goalRepository = new GoalRepository($pdo);
@@ -458,7 +463,7 @@ require __DIR__ . '/includes/header.php';
             <div id="month-pick-field" class="flex flex-wrap items-end gap-3 <?= $selectedRange === 'month_pick' ? '' : 'hidden' ?>">
                 <div>
                     <label for="month-pick-input" class="mb-1 block text-xs text-slate-400">เดือน</label>
-                    <input id="month-pick-input" name="month" type="month" value="<?= e($monthPickerValue) ?>" class="rounded-xl px-3 py-2 text-sm transition-all">
+                    <input id="month-pick-input" name="month" type="month" max="<?= e(date('Y-m')) ?>" value="<?= e($monthPickerValue) ?>" class="rounded-xl px-3 py-2 text-sm transition-all">
                 </div>
             </div>
 

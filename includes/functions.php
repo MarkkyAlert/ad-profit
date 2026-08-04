@@ -355,6 +355,37 @@ function resolve_calendar_year(mixed $rawYear, mixed $fallbackYear = null): int
     return $normalize($rawYear) ?? $normalize($fallbackYear) ?? (int)date('Y');
 }
 
+/**
+ * แปลงเดือนที่รับจาก query string ให้ใช้งานได้เสมอ และไม่เกินเดือนปัจจุบัน
+ *
+ * ค่าที่ใช้ไม่ได้ตกไปที่ $fallbackMonth แล้วจึงเป็นเดือนปัจจุบัน · เดือนอนาคตถูกดึงกลับ
+ * มาเป็นเดือนปัจจุบัน — เลือกเดือนหน้าแล้วเห็นหน้าเต็มที่เป็น ฿0 พร้อม "เทียบเดือนก่อน
+ * −100%" ไม่ได้สื่ออะไร (ฝั่งรายปีมี cutoff แบบนี้อยู่แล้วใน AnnualService/OverviewAnnualService)
+ *
+ * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
+ */
+function resolve_calendar_month(mixed $rawMonth, mixed $fallbackMonth = null, ?string $today = null): string
+{
+    $normalize = static function (mixed $value): ?string {
+        $text = trim((string)$value);
+
+        return preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $text) === 1 ? $text : null;
+    };
+
+    $todayInput = is_string($today) ? trim($today) : '';
+    $todayObject = $todayInput !== ''
+        ? DateTimeImmutable::createFromFormat('!Y-m-d', $todayInput)
+        : false;
+    if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+        $todayObject = new DateTimeImmutable('today');
+    }
+
+    $currentMonth = $todayObject->format('Y-m');
+    $resolved = $normalize($rawMonth) ?? $normalize($fallbackMonth) ?? $currentMonth;
+
+    return $resolved > $currentMonth ? $currentMonth : $resolved;
+}
+
 function parse_decimal_input(mixed $raw, bool $allowEmpty = false): array
 {
     $normalized = trim((string)$raw);
