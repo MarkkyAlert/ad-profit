@@ -80,7 +80,7 @@ final class XlsxReportServiceAnnualTest extends TestCase
         $this->assertSame('อัตรากำไร', $sheet->getCell('G4')->getValue());
         $this->assertSame(26.4, $sheet->getCell('G5')->getValue());
 
-        $this->assertSame('"฿"#,##0', $sheet->getStyle('A5')->getNumberFormat()->getFormatCode());
+        $this->assertSame('"฿"#,##0.00', $sheet->getStyle('A5')->getNumberFormat()->getFormatCode());
         $this->assertSame('0.0"%"', $sheet->getStyle('G5')->getNumberFormat()->getFormatCode());
         // ตัวเลขการ์ดต้องเด่นกว่าเนื้อความทั่วไป
         $this->assertSame(16.0, $sheet->getStyle('A5')->getFont()->getSize());

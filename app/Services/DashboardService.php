@@ -249,7 +249,14 @@ class DashboardService
         if ($normalizedRangeType === 'month_pick') {
             $pickedMonth = is_string($selectedMonth) ? trim($selectedMonth) : '';
             if (!$this->isValidMonth($pickedMonth)) {
-                $pickedMonth = date('Y-m');
+                $pickedMonth = $today->format('Y-m');
+            }
+
+            // ⚠️ เดือนอนาคตต้องหดมาเป็นเดือนปัจจุบัน ไม่ใช่ปล่อยให้ clamp ทำช่วงกลับหัว
+            // (เคยได้ start_date=2027-01-01 end_date=2026-08-04 → ทุกการ์ดเป็น ฿0
+            //  ขณะที่ตัวเลือกเดือนยังโชว์ 2027-01) · `max` ของ picker เป็นแค่ฝั่งเบราว์เซอร์
+            if ($pickedMonth > $today->format('Y-m')) {
+                $pickedMonth = $today->format('Y-m');
             }
 
             $monthStart = DateTimeImmutable::createFromFormat('Y-m-d', $pickedMonth . '-01');
@@ -623,7 +630,12 @@ class DashboardService
             return $default;
         }
 
-        $monthEnd = $monthEndObject->format('Y-m-t');
+        // ⚠️ ต้องตัดที่วันนี้เหมือนการ์ดสรุป — ไม่งั้นการ์ดสรุปขึ้น ฿4,000 ขณะที่การ์ดเป้า
+        // ใต้มันบอก "ทำได้ ฿10,000 = 100% ถึงเป้าแล้ว" เพราะนับรายการที่ลงล่วงหน้าไว้ด้วย
+        $monthEnd = comparison_range_end(
+            $monthEndObject->format('Y-m'),
+            resolve_comparison_cutoff_day($monthEndObject->format('Y-m'), $today)
+        );
         $monthRecords = $this->fetchRecords($shopId, $monthStart, $monthEnd);
         $monthSummary = $this->buildSummaryFromRecords($monthRecords);
 

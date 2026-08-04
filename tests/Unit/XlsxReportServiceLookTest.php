@@ -320,7 +320,7 @@ final class XlsxReportServiceLookTest extends TestCase
             $sheet = $spreadsheet->getSheetByName($title);
             $this->assertNotNull($sheet);
             $this->assertSame(
-                '"฿"#,##0',
+                '"฿"#,##0.00',
                 $sheet->getStyle($cell)->getNumberFormat()->getFormatCode(),
                 'ชีต ' . $title
             );

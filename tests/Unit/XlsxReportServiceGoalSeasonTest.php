@@ -194,7 +194,7 @@ final class XlsxReportServiceGoalSeasonTest extends TestCase
         $this->assertTrue($sheet->getStyle('A' . self::GOAL_GROUP_ROW)->getFont()->getBold());
 
         $this->assertSame('A4:I5', $sheet->getAutoFilter()->getRange());
-        $this->assertSame('"฿"#,##0', $sheet->getStyle('B5')->getNumberFormat()->getFormatCode());
+        $this->assertSame('"฿"#,##0.00', $sheet->getStyle('B5')->getNumberFormat()->getFormatCode());
         $this->assertSame('0.0"%"', $sheet->getStyle('D5')->getNumberFormat()->getFormatCode());
     }
 

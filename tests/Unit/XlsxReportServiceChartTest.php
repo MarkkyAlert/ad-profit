@@ -155,7 +155,7 @@ final class XlsxReportServiceChartTest extends TestCase
         $this->assertSame('ก.พ.', $sheet->getCell('A3')->getValue());
         $this->assertSame(-1500.0, $sheet->getCell('D3')->getValue());
         $this->assertSame(0.4, $sheet->getCell('E3')->getValue());
-        $this->assertSame('"฿"#,##0', $sheet->getStyle('D2')->getNumberFormat()->getFormatCode());
+        $this->assertSame('"฿"#,##0.00', $sheet->getStyle('D2')->getNumberFormat()->getFormatCode());
 
         $spreadsheet->disconnectWorksheets();
     }

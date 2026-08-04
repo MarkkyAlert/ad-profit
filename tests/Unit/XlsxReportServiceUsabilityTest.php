@@ -83,7 +83,7 @@ final class XlsxReportServiceUsabilityTest extends TestCase
         $this->assertSame(2000.0, $sheet->getCell('G2')->getValue());
         $this->assertSame(50.0, $sheet->getCell('H2')->getValue());
 
-        $this->assertSame('"฿"#,##0', $sheet->getStyle('G2')->getNumberFormat()->getFormatCode());
+        $this->assertSame('"฿"#,##0.00', $sheet->getStyle('G2')->getNumberFormat()->getFormatCode());
         $this->assertSame('0.0"%"', $sheet->getStyle('H2')->getNumberFormat()->getFormatCode());
     }
 

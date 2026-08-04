@@ -45,7 +45,14 @@ class OverviewService
         }
 
         $startDate = $monthDate->format('Y-m-01');
-        $endDate = $monthDate->format('Y-m-t');
+
+        // ⚠️ ตัดที่วันนี้เหมือนแดชบอร์ด — เดิมคอลัมน์กำไรนับทั้งเดือน (รวมรายการที่ลง
+        // ล่วงหน้า) ขณะที่ป้าย "เทียบเดือนก่อน" ในแถวเดียวกันตัดที่วันนี้
+        // ตัวเลขในแถวเดียวกันจึงบวกกันไม่ลง (กำไร ฿9,000 แต่ป้ายคิดจาก ฿4,000)
+        $endDate = comparison_range_end(
+            $monthDate->format('Y-m'),
+            resolve_comparison_cutoff_day($monthDate->format('Y-m'), $today)
+        );
 
         try {
             $comparisonRows = $this->buildShopComparison($shops, $startDate, $endDate);
@@ -205,22 +212,11 @@ class OverviewService
 
         $previousProfitByShopId = $this->sumProfitByShopId($shopIds, $previousStart, $previousEnd);
 
-        // กำไรของเดือนที่เลือก "ถึงวันตัด" — ตารางหลักยังโชว์ทั้งเดือนเหมือนเดิม
-        // แต่ตัวเลขที่เอามาเทียบต้องเป็นช่วงเดียวกับฝั่งเดือนก่อน
-        $selectedProfitByShopId = $cutoffDay === null
-            ? null
-            : $this->sumProfitByShopId(
-                $shopIds,
-                $monthDate->format('Y-m-01'),
-                comparison_range_end($selectedMonth, $cutoffDay)
-            );
-
+        // ตารางถูกสร้างจากช่วงที่ตัดวันแล้ว จึงใช้กำไรของแถวได้ตรง ๆ
         foreach ($rows as $index => $row) {
             $shopId = (int)($row['shop_id'] ?? 0);
             $previousProfit = $previousProfitByShopId[$shopId] ?? 0.0;
-            $profit = $selectedProfitByShopId === null
-                ? (float)($row['profit'] ?? 0)
-                : ($selectedProfitByShopId[$shopId] ?? 0.0);
+            $profit = (float)($row['profit'] ?? 0);
             $change = $profit - $previousProfit;
 
             $rows[$index]['prev_profit'] = $previousProfit;

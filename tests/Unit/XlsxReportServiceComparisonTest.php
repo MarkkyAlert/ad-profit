@@ -144,7 +144,7 @@ final class XlsxReportServiceComparisonTest extends TestCase
     {
         $sheet = $this->buildSheet($this->payload([$this->shop(['ร้าน A', 9000.0, 3000.0, 100.0, 6])]));
 
-        $this->assertSame('"฿"#,##0', $sheet->getStyle('D4')->getNumberFormat()->getFormatCode());
+        $this->assertSame('"฿"#,##0.00', $sheet->getStyle('D4')->getNumberFormat()->getFormatCode());
         $this->assertSame('0.00', $sheet->getStyle('E4')->getNumberFormat()->getFormatCode());
         $this->assertSame('0.0"%"', $sheet->getStyle('G4')->getNumberFormat()->getFormatCode());
     }
