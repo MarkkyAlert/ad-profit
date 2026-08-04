@@ -120,10 +120,34 @@ class GoalService
         }
 
         $startedTransaction = false;
+        $canLockRows = false;
         try {
-            if ($this->db instanceof PDO && !$this->db->inTransaction()) {
-                $this->db->beginTransaction();
-                $startedTransaction = true;
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
+
+                $canLockRows = $this->db->inTransaction();
+            }
+
+            // ⚠️ ช่องที่ไม่ได้กรอกมา = "ไม่แก้" ไม่ใช่ "ล้างทิ้ง"
+            //
+            // ฟอร์มเป้าหมายที่เปิดค้างไว้ตอนยังตั้งแค่ช่องเดียว แล้วอีกแท็บไปตั้งอีกช่อง
+            // พอกดบันทึกที่แท็บเดิม ค่าที่อีกแท็บเพิ่งตั้งจะหายพร้อมข้อความ "สำเร็จ"
+            // (`daily_records` กันเคสนี้อยู่แล้ว — `monthly_goals` เพิ่งมาตามทีหลัง)
+            // ถ้าจะล้างทั้งเดือนให้ใช้ปุ่ม "ลบเป้าหมาย"
+            $existingGoal = $canLockRows
+                ? $this->goalRepository->findByShopAndMonthForUpdate($shopId, $goalMonth)
+                : $this->goalRepository->findByShopAndMonth($shopId, $goalMonth);
+
+            if ($existingGoal !== null) {
+                if ($targetRevenue === null && ($existingGoal['target_revenue'] ?? null) !== null) {
+                    $targetRevenue = (float)$existingGoal['target_revenue'];
+                }
+                if ($targetProfit === null && ($existingGoal['target_profit'] ?? null) !== null) {
+                    $targetProfit = (float)$existingGoal['target_profit'];
+                }
             }
 
             $this->goalRepository->upsert($shopId, $goalMonth, $targetRevenue, $targetProfit);

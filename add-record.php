@@ -257,6 +257,33 @@ require __DIR__ . '/includes/header.php';
         app_url('/api/month-grid.php'),
         JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
     ) ?>;
+
+    // cache ข้อมูลรายเดือน ใช้ร่วมกันระหว่างฟอร์มเดี่ยวกับตารางกรอกหลายวัน
+    // (ทั้งสองต้องเติมค่าเดิมของวันที่ผู้ใช้พิมพ์ ไม่งั้นการบันทึกทับจะลบโน้ตเดิมทิ้ง)
+    const monthDataCache = new Map();   // 'YYYY-MM' → Map(วันที่ → ข้อมูล)
+
+    const loadMonthData = async (month) => {
+        if (monthDataCache.has(month)) {
+            return monthDataCache.get(month);
+        }
+
+        const response = await fetch(
+            MONTH_GRID_URL + '?month=' + encodeURIComponent(month),
+            { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }
+        );
+        const payload = await response.json();
+
+        if (!payload || payload.success !== true) {
+            throw new Error('load failed');
+        }
+
+        const byDate = new Map();
+        const days = (payload.data && payload.data.days) ? payload.data.days : [];
+        days.forEach((day) => { byDate.set(day.date, day); });
+        monthDataCache.set(month, byDate);
+
+        return byDate;
+    };
 </script>
 
 <script>
@@ -439,33 +466,48 @@ require __DIR__ . '/includes/header.php';
         };
 
         // ตัวคั่นทศนิยมอาจเป็นจุดหรือจุลภาค แล้วแต่ภาษาของ Excel ที่สร้างไฟล์
-        // ⚠️ ต้องใช้กติกาเดียวกับ RecordService::cleanImportNumber() ฝั่ง PHP
-        // ลบจุลภาคทิ้งเสมอทำให้ 1234,56 กลายเป็น 123456 (100 เท่า) แล้วบันทึกสำเร็จ
-        // เซลล์นี้อ่านเป็นตัวเลขได้ไหม — ใช้แยก "หัวตาราง" ออกจาก "ยอด" ตอนวางที่คอลัมน์ตัวเลข
-        const isNumericCell = (raw) => {
-            const cleaned = cleanAmountCell(raw);
-
-            return cleaned !== '' && !Number.isNaN(Number(cleaned));
-        };
-
+        // ⚠️ ต้องใช้กติกาเดียวกับ normalize_money_string() ฝั่ง PHP เป๊ะ ๆ
+        // อ่านได้หลายแบบ (เช่น 1.234 เป็นได้ทั้ง 1234 และ 1.234) = คืนค่าดิบ ให้ server ปฏิเสธ
         const cleanAmountCell = (raw) => {
-            const value = String(raw).replace(/[฿\s\u00a0]/g, '').trim();
-            const lastDot = value.lastIndexOf('.');
-            const lastComma = value.lastIndexOf(',');
+            let value = String(raw).trim();
+            if (value.startsWith("'")) {
+                value = value.slice(1);
+            }
+            value = value.replace(/[฿\s\u00a0]/g, '').trim();
 
-            if (lastDot === -1 && lastComma === -1) {
-                return value;
+            if (value === '') {
+                return '';
             }
 
-            const decimalPosition = Math.max(lastDot, lastComma);
-            const fractionDigits = value.slice(decimalPosition + 1);
-
-            // ตามหลังด้วยตัวเลข 1–2 หลักเท่านั้น จึงเป็นทศนิยมของค่าเงิน
-            if (!/^\d{1,2}$/.test(fractionDigits)) {
-                return value.replace(/[.,]/g, '');
+            let sign = '';
+            if (value[0] === '-' || value[0] === '+') {
+                sign = value[0] === '-' ? '-' : '';
+                value = value.slice(1);
             }
 
-            return value.slice(0, decimalPosition).replace(/[.,]/g, '') + '.' + fractionDigits;
+            if (/^\d+$/.test(value)) {
+                return sign + value;
+            }
+
+            const decimal = value.match(/^(\d+)[.,](\d{1,2})$/);
+            if (decimal) {
+                return sign + decimal[1] + '.' + decimal[2];
+            }
+
+            // กำกวม: ตัวคั่นเดียวตามด้วย 3 หลักพอดี — คืนค่าดิบให้ server ปฏิเสธ
+            if (/^\d+[.,]\d{3}$/.test(value)) {
+                return String(raw).trim();
+            }
+
+            if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(value)) {
+                return sign + value.replace(/,/g, '');
+            }
+
+            if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(value)) {
+                return sign + value.replace(/\./g, '').replace(',', '.');
+            }
+
+            return String(raw).trim();
         };
 
         const normalizeCell = (columnIndex, raw) => {
@@ -480,6 +522,74 @@ require __DIR__ . '/includes/header.php';
 
             return String(raw).trim();
         };
+
+        // พิมพ์วันที่ลงแถวในตารางเอง → เติมค่าเดิมของวันนั้นมาให้เห็น
+        // ⚠️ จำเป็น เพราะการบันทึกเป็นการเขียนทับทุกช่อง ถ้าไม่เติมโน้ตเดิมกลับมา
+        // การกรอกแค่ยอดจะลบโน้ตของวันนั้นทิ้ง (เหมือนที่ฟอร์มเดี่ยวทำอยู่แล้ว)
+        const bulkRowRequestIds = new WeakMap();
+
+        tbody.addEventListener('change', async (event) => {
+            const input = event.target;
+            if (!input || input.getAttribute('name') !== 'record_date[]') {
+                return;
+            }
+
+            const value = input.value;
+            const row = input.closest('tr');
+            if (!row || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+                return;
+            }
+
+            const revenueInput = row.querySelector('input[name="revenue[]"]');
+            const adCostInput = row.querySelector('input[name="ad_cost[]"]');
+            const noteInput = row.querySelector('input[name="note[]"]');
+
+            // มีค่ากรอกไว้แล้ว = ผู้ใช้กำลังพิมพ์เอง อย่าไปทับ
+            if ((revenueInput && revenueInput.value !== '')
+                || (adCostInput && adCostInput.value !== '')
+                || (noteInput && noteInput.value !== '')) {
+                return;
+            }
+
+            const requestId = (bulkRowRequestIds.get(row) || 0) + 1;
+            bulkRowRequestIds.set(row, requestId);
+
+            try {
+                const byDate = await loadMonthData(value.slice(0, 7));
+
+                // เปลี่ยนวันของแถวนี้อีกครั้งระหว่างรอ → ทิ้งผลลัพธ์เก่า
+                if (bulkRowRequestIds.get(row) !== requestId || input.value !== value) {
+                    return;
+                }
+
+                const day = byDate.get(value);
+                if (!day) {
+                    // ตารางเดือนไม่ครอบวันอนาคต — บอกตรง ๆ ว่าตรวจให้ไม่ได้
+                    // ดีกว่าปล่อยช่องว่างไว้เฉย ๆ แล้วผู้ใช้กดบันทึกทับของเดิม
+                    if (value > new Date().toISOString().slice(0, 10)) {
+                        showBulkNotice('วันที่ ' + value + ' อยู่ในอนาคต — ระบบตรวจข้อมูลเดิมให้ไม่ได้ '
+                            + 'ถ้าวันนั้นเคยบันทึกไว้แล้ว การกดบันทึกจะเขียนทับ');
+                    }
+
+                    return;
+                }
+
+                // ตารางเดือนคืนทุกวันจนถึงวันนี้ รวมวันที่ยังไม่ได้กรอก — ต้องแยกให้ออก
+                const dayHasData = day.revenue !== null || day.ad_cost !== null || (day.note || '') !== '';
+                if (!dayHasData) {
+                    return;
+                }
+
+                if (revenueInput) { revenueInput.value = day.revenue === null ? '' : String(day.revenue); }
+                if (adCostInput) { adCostInput.value = day.ad_cost === null ? '' : String(day.ad_cost); }
+                if (noteInput) { noteInput.value = day.note || ''; }
+
+                refresh();
+                showBulkNotice('วันที่ ' + value + ' มีข้อมูลอยู่แล้ว — ระบบเติมค่าเดิมไว้ให้ กดบันทึกจะเป็นการแก้ไขทับ');
+            } catch (error) {
+                showBulkNotice('โหลดข้อมูลเดิมของวันที่ ' + value + ' ไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก');
+            }
+        });
 
         tbody.addEventListener('paste', (event) => {
             const target = event.target;
@@ -877,33 +987,9 @@ require __DIR__ . '/includes/header.php';
             return;
         }
 
-        const monthCache = new Map();          // 'YYYY-MM' → Map(วันที่ → ข้อมูล)
         let lastAppliedDate = dateInput.value; // ค่าที่เซิร์ฟเวอร์เติมมาให้ตอนโหลดหน้า
         const HINT_DEFAULT_TEXT = hint.textContent;
         let pendingRequestId = 0;              // กันผลลัพธ์เก่ามาทับผลลัพธ์ใหม่
-
-        const loadMonth = async (month) => {
-            if (monthCache.has(month)) {
-                return monthCache.get(month);
-            }
-
-            const response = await fetch(
-                MONTH_GRID_URL + '?month=' + encodeURIComponent(month),
-                { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }
-            );
-            const payload = await response.json();
-
-            if (!payload || payload.success !== true) {
-                throw new Error('load failed');
-            }
-
-            const byDate = new Map();
-            const days = (payload.data && payload.data.days) ? payload.data.days : [];
-            days.forEach((day) => { byDate.set(day.date, day); });
-            monthCache.set(month, byDate);
-
-            return byDate;
-        };
 
         const applyDay = (day) => {
             if (day && (day.revenue !== null || day.ad_cost !== null || day.note)) {
@@ -932,7 +1018,7 @@ require __DIR__ . '/includes/header.php';
             const requestId = ++pendingRequestId;
 
             try {
-                const byDate = await loadMonth(value.slice(0, 7));
+                const byDate = await loadMonthData(value.slice(0, 7));
 
                 // เปลี่ยนวันอีกครั้งระหว่างรอ → ทิ้งผลลัพธ์เก่า ไม่งั้นตัวเลขของวันก่อนหน้า
                 // จะถูกเติมลงในวันใหม่

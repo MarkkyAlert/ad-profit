@@ -19,6 +19,32 @@ class GoalRepository
      * ⚠️ ถ้าจะเพิ่มผู้เรียกที่ส่งมาไม่ครบ ต้องเปลี่ยน contract ตรงนี้ก่อน ไม่งั้นฟิลด์ที่
      * ไม่ได้ส่งจะถูกล้างเงียบ ๆ
      */
+    /**
+     * อ่านเป้าของเดือนนั้นพร้อมล็อกแถวไว้ — ใช้ก่อนเขียนทับ เพื่อให้ "ช่องที่ไม่ได้ส่งมา"
+     * คงค่าเดิมได้โดยไม่มีช่องว่างให้อีกคำขอแทรกกลาง
+     *
+     * @return array<string,mixed>|null
+     */
+    public function findByShopAndMonthForUpdate(int $shopId, string $goalMonth): ?array
+    {
+        $sql = 'SELECT id, shop_id, goal_month, target_revenue, target_profit
+                FROM monthly_goals
+                WHERE shop_id = :shop_id
+                  AND goal_month = :goal_month
+                LIMIT 1
+                FOR UPDATE';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':shop_id' => $shopId,
+            ':goal_month' => $goalMonth,
+        ]);
+
+        $row = $stmt->fetch();
+
+        return is_array($row) ? $row : null;
+    }
+
     public function upsert(int $shopId, string $goalMonth, ?float $targetRevenue, ?float $targetProfit): bool
     {
         $sql = 'INSERT INTO monthly_goals (shop_id, goal_month, target_revenue, target_profit)

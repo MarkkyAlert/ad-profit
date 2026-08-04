@@ -620,6 +620,77 @@ function resolve_calendar_month(mixed $rawMonth, mixed $fallbackMonth = null, ?s
     return $resolved > $currentMonth ? $currentMonth : $resolved;
 }
 
+/**
+ * แปลงข้อความจำนวนเงินให้เป็นสตริงตัวเลขล้วน — คืน null เมื่ออ่านไม่ได้หรือ "กำกวม"
+ *
+ * ⚠️ ตัวนี้คือจุดเดียวของกฎการอ่านตัวเลขเงินทั้งระบบ — ฟอร์มเดี่ยว · ตารางหลายวัน ·
+ * เป้าหมาย · ไฟล์ CSV ต้องเรียกผ่านตัวนี้ทั้งหมด (คู่แฝดฝั่ง JS อยู่ที่ `add-record.php`)
+ *
+ * ประวัติ: เดิมลบจุลภาคทิ้งเสมอ → ไฟล์ยุโรป `1234,56` กลายเป็น 123,456 (100 เท่า)
+ * แล้วรอบต่อมาเปลี่ยนเป็น "เดาตัวคั่นเอง" → `1.234` กลายเป็น 1,234 (1000 เท่า)
+ * และ `1.2.3` ถูกยอมรับเป็น 12.30 · ตอนนี้ใช้หลักเดียวกับ "วันที่กำกวม": อ่านได้
+ * หลายแบบ = ปฏิเสธ อย่าเดา
+ *
+ * รับ: `1234` `1234.56` `1234,56` `1,234.56` `1.234,56` `1,234,567.89` `1 234,56` `฿1,234.56`
+ * ปฏิเสธ: `1.234` / `1,234` (กำกวม — เป็นได้ทั้งหลักพันและทศนิยม 3 ตำแหน่ง) ·
+ *         `1.2.3` · `1..2` · `1e3` · ทศนิยมเกิน 2 ตำแหน่ง
+ */
+function normalize_money_string(string $raw): ?string
+{
+    $value = trim($raw);
+
+    // ตัวกันสูตรของ Excel ที่ export ใส่ไว้
+    if ($value !== '' && $value[0] === "'") {
+        $value = substr($value, 1);
+    }
+
+    // สัญลักษณ์เงินและช่องว่างทุกชนิดไม่ใช่ตัวคั่นทศนิยมแน่นอน
+    $value = str_replace(['฿', ' ', "\xC2\xA0"], '', trim($value));
+
+    if ($value === '') {
+        return null;
+    }
+
+    $sign = '';
+    if ($value[0] === '-' || $value[0] === '+') {
+        $sign = $value[0] === '-' ? '-' : '';
+        $value = substr($value, 1);
+    }
+
+    // ไม่มีตัวคั่นเลย
+    if (preg_match('/^\d+$/', $value) === 1) {
+        return $sign . $value;
+    }
+
+    // ตัวคั่นเดียว ตามด้วย 1–2 หลัก = ทศนิยมแน่นอน (3 ตำแหน่งขึ้นไปเก็บไม่ได้อยู่แล้ว)
+    if (preg_match('/^(\d+)[.,](\d{1,2})$/', $value, $matched) === 1) {
+        return $sign . $matched[1] . '.' . $matched[2];
+    }
+
+    // ⚠️ ตัวคั่นเดียว ตามด้วย 3 หลักพอดี = กำกวม (`1.234` เป็นได้ทั้ง 1234 และ 1.234)
+    // ปฏิเสธ ดีกว่าเดาผิดแล้วยอดโตขึ้น 1000 เท่าโดยไม่มีใครรู้
+    if (preg_match('/^\d+[.,]\d{3}$/', $value) === 1) {
+        return null;
+    }
+
+    // คั่นหลักพันแบบอังกฤษ: 1,234 / 1,234,567 (+ ทศนิยมจุด)
+    if (preg_match('/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/', $value) === 1) {
+        return $sign . str_replace(',', '', $value);
+    }
+
+    // คั่นหลักพันแบบยุโรป: 1.234 / 1.234.567 (+ ทศนิยมจุลภาค)
+    if (preg_match('/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/', $value) === 1) {
+        $value = str_replace('.', '', $value);
+
+        return $sign . str_replace(',', '.', $value);
+    }
+
+    return null;
+}
+
+/**
+ * @return array{valid:bool,value:float|null}
+ */
 function parse_decimal_input(mixed $raw, bool $allowEmpty = false): array
 {
     $normalized = trim((string)$raw);
@@ -630,8 +701,8 @@ function parse_decimal_input(mixed $raw, bool $allowEmpty = false): array
         ];
     }
 
-    $normalized = str_replace(',', '', $normalized);
-    if (!is_numeric($normalized)) {
+    $money = normalize_money_string($normalized);
+    if ($money === null) {
         return [
             'valid' => false,
             'value' => null,
@@ -640,7 +711,7 @@ function parse_decimal_input(mixed $raw, bool $allowEmpty = false): array
 
     return [
         'valid' => true,
-        'value' => (float)$normalized,
+        'value' => (float)$money,
     ];
 }
 

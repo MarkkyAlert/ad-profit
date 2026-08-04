@@ -24,8 +24,14 @@ final class RecordServiceOverwriteGuardTest extends IntegrationTestCase
         return new RecordService(new RecordRepository($this->pdo), new ShopRepository($this->pdo), $this->pdo);
     }
 
-    /** ⭐ ตารางกรอกหลายวันต้องไม่ลบโน้ตเดิมทิ้งเงียบ ๆ */
-    public function testBulkRowWithAnEmptyNoteDoesNotWipeTheExistingNote(): void
+    /**
+     * ⭐ ตารางกรอกหลายวัน "ล้างโน้ต" ได้ — ตารางเติมโน้ตเดิมมาให้เห็นก่อนแล้ว
+     *
+     * เดิมตัวกันเช็กจาก "ค่าที่ส่งมาว่างไหม" ทำให้ล้างโน้ตไม่ได้เลยสักทาง
+     * และข้อความ error บอกให้ "แก้โน้ต" ทั้งที่ไม่มีค่าไหนแปลว่า "ว่าง"
+     * (ตัดสินแล้ว: เติมโน้ตเดิมให้เห็นก่อน แล้วลบได้)
+     */
+    public function testBulkRowCanDeliberatelyClearANote(): void
     {
         $userId = $this->createUser();
         $shopId = $this->createShop($userId);
@@ -35,13 +41,44 @@ final class RecordServiceOverwriteGuardTest extends IntegrationTestCase
             ['row_number' => 1, 'record_date' => '2026-08-01', 'revenue' => '7000', 'ad_cost' => '2000', 'note' => ''],
         ]);
 
-        $this->assertFalse($result['success'], 'ยอมให้ทับโน้ตเดิมโดยไม่เตือน');
-        $this->assertStringContainsString('แถวที่ 1', (string)$result['error']);
-        $this->assertStringContainsString('โน้ต', (string)$result['error']);
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
 
         $row = $this->pdo->query("SELECT revenue, note FROM daily_records WHERE shop_id = {$shopId}")->fetch();
-        $this->assertSame(5000.0, (float)$row['revenue'], 'ยอดเดิมถูกเขียนทับไปแล้วทั้งที่ปฏิเสธ');
-        $this->assertSame('โน้ตที่เขียนไว้เมื่อวาน', $row['note']);
+        $this->assertSame(7000.0, (float)$row['revenue']);
+        $this->assertNull($row['note']);
+    }
+
+    /** ⭐ ไฟล์ CSV ที่ "ไม่มีคอลัมน์โน้ตเลย" ต้องไม่ล้างโน้ตของวันที่มีอยู่ */
+    public function testACsvWithoutANoteColumnDoesNotWipeExistingNotes(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $this->createRecord($shopId, '2026-08-01', 5000.0, 1000.0, 'โน้ตเดิม');
+
+        $service = $this->makeService();
+        $parsed = $service->parseImportCsv("date,revenue,ad_cost\n2026-08-01,7000,2000\n");
+        $result = $service->upsertManyRecords($userId, $shopId, $parsed['rows']);
+
+        $this->assertFalse($result['success'], 'ไฟล์ที่ไม่มีคอลัมน์โน้ตล้างโน้ตเดิมทิ้ง');
+        $this->assertStringContainsString('โน้ต', (string)$result['error']);
+        $this->assertSame('โน้ตเดิม', $this->pdo
+            ->query("SELECT note FROM daily_records WHERE shop_id = {$shopId}")->fetchColumn());
+    }
+
+    /** ไฟล์ที่มีคอลัมน์โน้ตแต่เว้นว่าง = ตั้งใจล้าง ทำได้ */
+    public function testACsvWithAnEmptyNoteColumnMayClearTheNote(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $this->createRecord($shopId, '2026-08-01', 5000.0, 1000.0, 'โน้ตเดิม');
+
+        $service = $this->makeService();
+        $parsed = $service->parseImportCsv("date,revenue,ad_cost,note\n2026-08-01,7000,2000,\n");
+        $result = $service->upsertManyRecords($userId, $shopId, $parsed['rows']);
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertNull($this->pdo
+            ->query("SELECT note FROM daily_records WHERE shop_id = {$shopId}")->fetchColumn());
     }
 
     /** กรอกโน้ตมาด้วยก็ทับได้ตามปกติ — ผู้ใช้เห็นและตั้งใจ */

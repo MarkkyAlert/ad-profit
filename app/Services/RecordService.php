@@ -16,6 +16,10 @@ class RecordService
     /** จำนวนทศนิยมที่คอลัมน์เก็บได้ — daily_records/monthly_goals เป็น DECIMAL(12,2) */
     public const AMOUNT_DECIMALS = 2;
 
+    /** ข้อความบอกวิธีเขียนตัวเลขให้ถูก — ใช้ร่วมกันทุกที่ที่ปฏิเสธรูปแบบตัวเลข */
+    public const AMOUNT_FORMAT_HINT = 'อ่านไม่ได้หรือกำกวม — ใช้จุดเป็นทศนิยมไม่เกิน 2 ตำแหน่ง '
+        . 'เช่น 1234.56 (ถ้าหมายถึงหนึ่งพันสองร้อยสามสิบสี่ ให้พิมพ์ 1234 หรือ 1,234.00)';
+
     /**
      * จำนวนวันขั้นต่ำที่ถือว่า "พอจะสรุปแนวโน้มของวันนั้นในสัปดาห์ได้"
      *
@@ -261,32 +265,26 @@ class RecordService
 
             $rawRevenue = $cellAt($columnMap['revenue']);
             $rawAdCost = $cellAt($columnMap['ad_cost']);
-            $revenue = $this->cleanImportNumber($rawRevenue);
-            $adCost = $this->cleanImportNumber($rawAdCost);
 
             // ช่องว่าง = 0 — วันที่ไม่ได้ยิงแอด/ไม่มีรายได้เป็นเรื่องปกติ และ UI ก็ปล่อยว่างได้
-            // (เดิม parser ปล่อยผ่านเป็น '' แล้วชั้นบันทึกปฏิเสธ ทำให้ทั้งไฟล์ไม่ถูกนำเข้า)
             //
             // ⚠️ ต้องจำไว้ด้วยว่า 0 นี้มาจาก "ช่องว่าง" ไม่ใช่ "ผู้ใช้พิมพ์ 0" — ชั้นบันทึก
             // ใช้แยกสองกรณีนี้: ทับวันที่มีข้อมูลอยู่แล้วด้วยช่องว่าง = อุบัติเหตุ ต้องปฏิเสธ
-            $revenueWasBlank = $revenue === '';
-            $adCostWasBlank = $adCost === '';
-            if ($revenueWasBlank) {
-                $revenue = '0';
-            }
-            if ($adCostWasBlank) {
-                $adCost = '0';
+            $revenueWasBlank = trim($rawRevenue) === '';
+            $adCostWasBlank = trim($rawAdCost) === '';
+
+            // ใช้ตัวแปลงกลางตัวเดียวกับฟอร์ม — อ่านไม่ได้/กำกวม = ปฏิเสธพร้อมบอกค่าที่ผู้ใช้เห็นจริง
+            $revenue = $revenueWasBlank ? '0' : normalize_money_string($rawRevenue);
+            $adCost = $adCostWasBlank ? '0' : normalize_money_string($rawAdCost);
+
+            if ($revenue === null) {
+                fclose($handle);
+                return $fail('แถวที่ ' . $rowNumber . ': รายได้ "' . $rawRevenue . '" ' . self::AMOUNT_FORMAT_HINT);
             }
 
-            // รายงานค่าที่ผู้ใช้เห็นในไฟล์ ไม่ใช่ค่าที่ clean แล้ว
-            if (!is_numeric($revenue)) {
+            if ($adCost === null) {
                 fclose($handle);
-                return $fail('แถวที่ ' . $rowNumber . ': รายได้ "' . $rawRevenue . '" ไม่ใช่ตัวเลข');
-            }
-
-            if (!is_numeric($adCost)) {
-                fclose($handle);
-                return $fail('แถวที่ ' . $rowNumber . ': ค่าแอด "' . $rawAdCost . '" ไม่ใช่ตัวเลข');
+                return $fail('แถวที่ ' . $rowNumber . ': ค่าแอด "' . $rawAdCost . '" ' . self::AMOUNT_FORMAT_HINT);
             }
 
             $note = isset($columnMap['note']) ? $cellAt($columnMap['note']) : '';
@@ -302,6 +300,8 @@ class RecordService
                 'note' => $note === '' ? null : $note,
                 'revenue_was_blank' => $revenueWasBlank,
                 'ad_cost_was_blank' => $adCostWasBlank,
+                // ไฟล์ไม่มีคอลัมน์โน้ตเลย = ไม่ได้ตั้งใจล้างโน้ตของวันนั้น
+                'note_was_missing' => !isset($columnMap['note']),
             ];
         }
 
@@ -439,52 +439,6 @@ class RecordService
 
     /** ตัด ฿ / comma / ช่องว่าง / leading ' (จาก guard formula injection ตอน export) */
     /**
-     * แปลงตัวเลขจากไฟล์ให้เป็นรูปแบบที่ PHP อ่านได้ โดยเดา "ตัวคั่นทศนิยม" ให้ถูก
-     *
-     * ⚠️ ห้ามลบจุลภาคทิ้งเสมอ — Excel ของยุโรป (และเครื่องที่ตั้งภาษาเป็นเยอรมัน/ฝรั่งเศส)
-     * ใช้จุลภาคเป็นจุดทศนิยม `1234,56` การลบทิ้งทำให้ 1,234.56 บาท กลายเป็น 123,456 บาท
-     * แล้วนำเข้าสำเร็จโดยไม่มีคำเตือน (พิสูจน์แล้วว่าเกิดจริง)
-     *
-     * กติกา: ตัวคั่นที่อยู่ "ขวาสุด" คือตัวคั่นทศนิยม เว้นแต่หลังมันมีตัวเลขไม่ใช่ 1–2 หลัก
-     * (เช่น `1,234` = คั่นหลักพัน เพราะมี 3 หลักตาม) — เกณฑ์มาตรฐานเดียวกับที่ Excel ใช้
-     */
-    private function cleanImportNumber(string $raw): string
-    {
-        $value = trim($raw);
-        if ($value !== '' && $value[0] === "'") {
-            $value = substr($value, 1);
-        }
-
-        // สัญลักษณ์เงินและช่องว่างทุกชนิดไม่ใช่ตัวคั่นทศนิยมแน่นอน ตัดทิ้งได้เลย
-        $value = str_replace(['฿', ' ', "\xC2\xA0"], '', $value);
-        $value = trim($value);
-
-        $lastDot = strrpos($value, '.');
-        $lastComma = strrpos($value, ',');
-
-        if ($lastDot === false && $lastComma === false) {
-            return $value;
-        }
-
-        // ตัวคั่นที่อยู่ขวาสุดเป็นผู้สมัครเป็น "จุดทศนิยม"
-        $decimalPosition = max($lastDot === false ? -1 : $lastDot, $lastComma === false ? -1 : $lastComma);
-        $fractionDigits = substr($value, $decimalPosition + 1);
-
-        // ตามหลังด้วยตัวเลข 1–2 หลักเท่านั้น จึงจะถือว่าเป็นทศนิยมของค่าเงิน
-        $isDecimalSeparator = $fractionDigits !== ''
-            && preg_match('/^\d{1,2}$/', $fractionDigits) === 1;
-
-        if (!$isDecimalSeparator) {
-            // ทุกตัวเป็นตัวคั่นหลักพัน
-            return str_replace([',', '.'], '', $value);
-        }
-
-        $integerPart = str_replace([',', '.'], '', substr($value, 0, $decimalPosition));
-
-        return $integerPart . '.' . $fractionDigits;
-    }
-
-    /**
      * บันทึกรายวันหลายแถวในครั้งเดียว (atomic — สำเร็จทั้งหมด หรือไม่เขียนเลย)
      *
      * @param array<int,array{row_number?: mixed, record_date?: mixed, revenue?: mixed, ad_cost?: mixed, note?: mixed}> $rows
@@ -529,6 +483,7 @@ class RecordService
                 // มาจาก parser ของ CSV เท่านั้น — ทางตารางกรอกหลายวันไม่เคยตั้งธงนี้
                 'revenue_was_blank' => ($row['revenue_was_blank'] ?? false) === true,
                 'ad_cost_was_blank' => ($row['ad_cost_was_blank'] ?? false) === true,
+                'note_was_missing' => ($row['note_was_missing'] ?? false) === true,
             ];
         }
 
@@ -595,17 +550,22 @@ class RecordService
             //
             // โน้ตนับรวมด้วยและใช้ได้กับ "ทุกทาง" ไม่ใช่เฉพาะ CSV — ตารางกรอกหลายวัน
             // เคยลบโน้ตของวันเดิมทิ้งเงียบ ๆ แล้วตอบว่าบันทึกสำเร็จ
-            $noteWasBlank = ($payload['note'] ?? null) === null || trim((string)$payload['note']) === '';
+            // ⚠️ โน้ตนับเป็น "ช่องว่างที่ไม่ตั้งใจ" เฉพาะเมื่อ **ไม่มีคอลัมน์โน้ตในไฟล์เลย**
+            //
+            // ถ้าช่องมีอยู่แต่ผู้ใช้ลบข้อความออก = ตั้งใจล้าง ต้องทำได้ (ตารางกรอกหลายวัน
+            // เติมโน้ตเดิมมาให้เห็นก่อนแล้ว) · เดิมเช็กจาก "ค่าที่ส่งมาว่างไหม" จึงล้างโน้ต
+            // ไม่ได้เลยสักทาง และไฟล์ CSV 3 คอลัมน์ถูกปฏิเสธทั้งไฟล์
+            $noteColumnMissing = ($row['note_was_missing'] ?? false) === true;
 
             if (($row['revenue_was_blank'] ?? false) === true
                 || ($row['ad_cost_was_blank'] ?? false) === true
-                || $noteWasBlank
+                || $noteColumnMissing
             ) {
                 $blankCells[$recordDate] = [
                     'row_number' => $rowNumber,
                     'revenue' => ($row['revenue_was_blank'] ?? false) === true,
                     'ad_cost' => ($row['ad_cost_was_blank'] ?? false) === true,
-                    'note' => $noteWasBlank,
+                    'note' => $noteColumnMissing,
                 ];
             }
         }
