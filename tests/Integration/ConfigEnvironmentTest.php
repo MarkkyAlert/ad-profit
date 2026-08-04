@@ -176,14 +176,28 @@ final class ConfigEnvironmentTest extends TestCase
 
             $script = 'require ' . var_export(realpath(__DIR__ . '/../../includes/bootstrap.php'), true)
                 . '; echo "RESULT:", ini_get("error_log");';
+
+            // ⚠️ bootstrap ต่อฐานข้อมูลด้วย · ต้องส่ง DB_* ของ test DB เข้าไปด้วย
+            // ไม่งั้นบนเครื่อง CI (รหัส root ไม่ว่าง) มันจะตายก่อนถึงบรรทัดที่วัด
+            // แล้วเทสต์นี้จะแดงด้วยเหตุผลที่ไม่เกี่ยวกับสิ่งที่ตั้งใจตรวจเลย
             $command = sprintf(
-                'LOG_FILE=%s APP_ENV=production SCHEMA_GUARD_ENABLED=0 php -r %s 2>/dev/null',
+                'LOG_FILE=%s APP_ENV=production SCHEMA_GUARD_ENABLED=0'
+                . ' DB_HOST=%s DB_PORT=%s DB_NAME=%s DB_USER=%s DB_PASS=%s php -r %s 2>&1',
                 escapeshellarg($logFile),
+                escapeshellarg((string)(getenv('TEST_DB_HOST') ?: '127.0.0.1')),
+                escapeshellarg((string)(getenv('TEST_DB_PORT') ?: '3306')),
+                escapeshellarg((string)(getenv('TEST_DB_NAME') ?: 'ad_profit_test')),
+                escapeshellarg((string)(getenv('TEST_DB_USER') ?: 'root')),
+                escapeshellarg((string)(getenv('TEST_DB_PASS') ?: '')),
                 escapeshellarg($script)
             );
             $output = (string)shell_exec($command);
 
-            $this->assertStringContainsString('RESULT:', $output, 'bootstrap ไม่ถึงบรรทัดที่วัด');
+            $this->assertStringContainsString(
+                'RESULT:',
+                $output,
+                "bootstrap ไม่ถึงบรรทัดที่วัด — ผลที่ได้:\n" . $output
+            );
             $resolved = substr($output, strpos($output, 'RESULT:') + 7);
 
             $this->assertNotSame(
