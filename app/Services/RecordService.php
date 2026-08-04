@@ -1458,14 +1458,19 @@ class RecordService
                 ? $this->recordRepository->findByIdAndShopIdForUpdate($recordId, $shopId)
                 : $this->recordRepository->findByIdAndShopId($recordId, $shopId);
 
+            // ไม่มีแถวแล้ว = ผลลัพธ์ตรงกับที่ผู้ใช้ขอไปแล้ว → ตอบสำเร็จ (idempotent)
+            // กด back แล้ว submit ใหม่ หรือเน็ตกระตุกแล้ว retry ไม่ควรได้ error แดง
+            // ownership ถูกตรวจไปแล้วด้านบน (shopId จาก session + userCanAccessShop)
+            // และ findByIdAndShopId scope ด้วย shop_id จึงไม่รั่วข้ามร้าน
             if ($existingRecord === null) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
-                    $this->db->rollBack();
+                    $this->db->commit();
                 }
 
                 return [
-                    'success' => false,
-                    'error' => 'ไม่พบรายการที่ต้องการลบ',
+                    'success' => true,
+                    'message' => 'ลบรายการเรียบร้อยแล้ว',
+                    'already_deleted' => true,
                 ];
             }
 
@@ -1477,7 +1482,7 @@ class RecordService
 
                 return [
                     'success' => false,
-                    'error' => 'ไม่พบรายการที่ต้องการลบ',
+                    'error' => 'ไม่สามารถลบรายการได้',
                 ];
             }
 

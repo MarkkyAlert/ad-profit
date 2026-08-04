@@ -204,4 +204,55 @@ final class OverviewDailyServiceAnalysisTest extends TestCase
         $this->assertArrayNotHasKey('summary', $data);
         $this->assertArrayNotHasKey('days', $data);
     }
+
+    /**
+     * ⭐ วันที่บางร้านยังไม่กรอกต้องไม่ชนะ "วันแย่สุด"
+     *
+     * มี 3 ร้าน · 08-01 กรอกครบได้กำไร 300 · 08-02 กรอกแค่ 1 ร้านได้ 50
+     * ยอด 50 ต่ำเพราะยังกรอกไม่ครบ ไม่ใช่เพราะผลงานแย่ — เดิมมันชนะ worst_day
+     */
+    public function testIncompleteDayDoesNotWinWorstDay(): void
+    {
+        $shops = [['id' => 1, 'name' => 'A'], ['id' => 2, 'name' => 'B'], ['id' => 3, 'name' => 'C']];
+        $service = $this->makeService($this->dailyTotals([
+            ['2026-06-01', 600.0, 300.0, 3],   // ครบ 3 ร้าน → กำไร 300
+            ['2026-06-02', 100.0, 50.0, 1],    // กรอกแค่ 1 ร้าน → กำไร 50
+        ]), $shops);
+
+        $summary = $service->buildDailyOverview(1, self::MONTH)['data']['summary'];
+
+        $this->assertSame('2026-06-01', $summary['worst_day']['record_date']);
+        $this->assertSame('2026-06-01', $summary['best_day']['record_date']);
+        $this->assertSame(1, $summary['incomplete_days']);
+    }
+
+    /** ค่าเฉลี่ยต่อวันต้องไม่ถูกวันที่กรอกไม่ครบเจือจาง */
+    public function testAveragePerDayUsesCompleteDaysOnly(): void
+    {
+        $service = $this->makeService($this->dailyTotals([
+            ['2026-06-01', 400.0, 200.0, 2],   // ครบ 2 ร้าน → กำไร 200
+            ['2026-06-02', 100.0, 50.0, 1],    // ไม่ครบ
+        ]));
+
+        $summary = $service->buildDailyOverview(1, self::MONTH)['data']['summary'];
+
+        $this->assertSame(1, $summary['complete_days_count']);
+        $this->assertSame(200.0, $summary['avg_profit_per_day']);
+    }
+
+    /** ไม่มีวันไหนกรอกครบเลย → ไม่มีวันดี/แย่ให้แสดง แทนที่จะโชว์วันที่ข้อมูลไม่ครบ */
+    public function testNoCompleteDaysLeavesRankingEmpty(): void
+    {
+        $shops = [['id' => 1, 'name' => 'A'], ['id' => 2, 'name' => 'B'], ['id' => 3, 'name' => 'C']];
+        $service = $this->makeService($this->dailyTotals([
+            ['2026-06-01', 100.0, 50.0, 1],
+        ]), $shops);
+
+        $summary = $service->buildDailyOverview(1, self::MONTH)['data']['summary'];
+
+        $this->assertNull($summary['best_day']);
+        $this->assertNull($summary['worst_day']);
+        $this->assertNull($summary['avg_profit_per_day']);
+        $this->assertSame(1, $summary['incomplete_days']);
+    }
 }

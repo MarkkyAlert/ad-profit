@@ -29,6 +29,7 @@ final class AnnualServiceProjectionTest extends TestCase
 
     /**
      * @param array<int,array{0:int,1:float,2:int}> $rows [เดือน, กำไร, จำนวนวันที่กรอก]
+     *        28 = กรอกเกินครึ่งเดือน (เข้าฐาน projection) · 0 = ยังไม่กรอก
      * @return array<int,array<string,mixed>>
      */
     private function monthRows(array $rows): array
@@ -46,7 +47,7 @@ final class AnnualServiceProjectionTest extends TestCase
     public function testProjectionSpansMinToMaxOfRecentMonths(): void
     {
         // 3 เดือนล่าสุด 1000 / 2000 / 3000 → avg 2000 · เหลือ 4 เดือน (lastMonth = 8)
-        $months = $this->monthRows([[6, 1000.0, 5], [7, 2000.0, 5], [8, 3000.0, 5]]);
+        $months = $this->monthRows([[6, 1000.0, 28], [7, 2000.0, 28], [8, 3000.0, 28]]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 6000.0, 8, true);
 
@@ -62,7 +63,7 @@ final class AnnualServiceProjectionTest extends TestCase
 
     public function testRangeIsOrderedLowToHigh(): void
     {
-        $months = $this->monthRows([[5, -500.0, 3], [6, 4000.0, 3], [7, 1200.0, 3], [8, 800.0, 3]]);
+        $months = $this->monthRows([[5, -500.0, 28], [6, 4000.0, 28], [7, 1200.0, 28], [8, 800.0, 28]]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 5500.0, 8, true);
 
@@ -72,7 +73,7 @@ final class AnnualServiceProjectionTest extends TestCase
 
     public function testIdenticalMonthsCollapseRangeToAPoint(): void
     {
-        $months = $this->monthRows([[6, 2000.0, 5], [7, 2000.0, 5], [8, 2000.0, 5]]);
+        $months = $this->monthRows([[6, 2000.0, 28], [7, 2000.0, 28], [8, 2000.0, 28]]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 6000.0, 8, true);
 
@@ -85,11 +86,11 @@ final class AnnualServiceProjectionTest extends TestCase
     {
         // 5 เดือน — 2 เดือนแรกกำไรมหาศาล ต้องไม่ถูกใช้เป็นฐาน
         $months = $this->monthRows([
-            [4, 99000.0, 5],
-            [5, 99000.0, 5],
-            [6, 1000.0, 5],
-            [7, 2000.0, 5],
-            [8, 3000.0, 5],
+            [4, 99000.0, 28],
+            [5, 99000.0, 28],
+            [6, 1000.0, 28],
+            [7, 2000.0, 28],
+            [8, 3000.0, 28],
         ]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 204000.0, 8, true);
@@ -102,7 +103,7 @@ final class AnnualServiceProjectionTest extends TestCase
     public function testUnfilledMonthsAreNotUsedAsBasis(): void
     {
         // เดือน 7 มี profit ติดมาแต่ days_count = 0 (ยังไม่ได้กรอก) → ห้ามใช้เป็นฐาน
-        $months = $this->monthRows([[6, 1000.0, 5], [7, 0.0, 0], [8, 3000.0, 5]]);
+        $months = $this->monthRows([[6, 1000.0, 28], [7, 0.0, 0], [8, 3000.0, 28]]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 4000.0, 8, true);
 
@@ -113,7 +114,7 @@ final class AnnualServiceProjectionTest extends TestCase
 
     public function testMonthsBeyondCutoffAreIgnored(): void
     {
-        $months = $this->monthRows([[7, 1000.0, 5], [8, 3000.0, 5], [11, 90000.0, 5]]);
+        $months = $this->monthRows([[7, 1000.0, 28], [8, 3000.0, 28], [11, 90000.0, 28]]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 4000.0, 8, true);
 
@@ -124,7 +125,7 @@ final class AnnualServiceProjectionTest extends TestCase
 
     public function testRecentLossesProjectBelowCurrentProfit(): void
     {
-        $months = $this->monthRows([[6, -1000.0, 5], [7, -2000.0, 5], [8, -3000.0, 5]]);
+        $months = $this->monthRows([[6, -1000.0, 28], [7, -2000.0, 28], [8, -3000.0, 28]]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 1000.0, 8, true);
 
@@ -136,7 +137,7 @@ final class AnnualServiceProjectionTest extends TestCase
 
     public function testPastYearIsNotProjected(): void
     {
-        $months = $this->monthRows([[10, 1000.0, 5], [11, 2000.0, 5], [12, 3000.0, 5]]);
+        $months = $this->monthRows([[10, 1000.0, 28], [11, 2000.0, 28], [12, 3000.0, 28]]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 6000.0, 12, false);
 
@@ -146,7 +147,7 @@ final class AnnualServiceProjectionTest extends TestCase
 
     public function testCompletedYearIsNotProjected(): void
     {
-        $months = $this->monthRows([[10, 1000.0, 5], [11, 2000.0, 5], [12, 3000.0, 5]]);
+        $months = $this->monthRows([[10, 1000.0, 28], [11, 2000.0, 28], [12, 3000.0, 28]]);
 
         // ธ.ค. แล้ว — ไม่มีเดือนเหลือให้เดา
         $projection = $this->makeService()->calculateYearEndProjection($months, 6000.0, 12, true);
@@ -157,7 +158,7 @@ final class AnnualServiceProjectionTest extends TestCase
 
     public function testSingleFilledMonthIsInsufficient(): void
     {
-        $months = $this->monthRows([[7, 0.0, 0], [8, 3000.0, 5]]);
+        $months = $this->monthRows([[7, 0.0, 0], [8, 3000.0, 28]]);
 
         $projection = $this->makeService()->calculateYearEndProjection($months, 3000.0, 8, true);
 
@@ -179,9 +180,9 @@ final class AnnualServiceProjectionTest extends TestCase
         $recordRepository->method('getMonthlyTotalsByMonthRange')->willReturnCallback(
             static function (int $shopId, string $start, string $end): array {
                 $rows = [
-                    ['month_key' => '2026-06', 'total_revenue' => 3000.0, 'total_ad_cost' => 1000.0, 'days_count' => 5],
-                    ['month_key' => '2026-07', 'total_revenue' => 4000.0, 'total_ad_cost' => 1000.0, 'days_count' => 5],
-                    ['month_key' => '2026-08', 'total_revenue' => 5000.0, 'total_ad_cost' => 1000.0, 'days_count' => 5],
+                    ['month_key' => '2026-06', 'total_revenue' => 3000.0, 'total_ad_cost' => 1000.0, 'days_count' => 28],
+                    ['month_key' => '2026-07', 'total_revenue' => 4000.0, 'total_ad_cost' => 1000.0, 'days_count' => 28],
+                    ['month_key' => '2026-08', 'total_revenue' => 5000.0, 'total_ad_cost' => 1000.0, 'days_count' => 28],
                 ];
 
                 return array_values(array_filter(
@@ -210,7 +211,7 @@ final class AnnualServiceProjectionTest extends TestCase
     {
         $recordRepository = $this->createStub(RecordRepository::class);
         $recordRepository->method('getMonthlyTotalsByMonthRange')->willReturn([
-            ['month_key' => '2025-03', 'total_revenue' => 3000.0, 'total_ad_cost' => 1000.0, 'days_count' => 5],
+            ['month_key' => '2025-03', 'total_revenue' => 3000.0, 'total_ad_cost' => 1000.0, 'days_count' => 28],
         ]);
 
         $shopRepository = $this->createStub(ShopRepository::class);
@@ -222,5 +223,57 @@ final class AnnualServiceProjectionTest extends TestCase
 
         $this->assertFalse($summary['projection']['available']);
         $this->assertSame('not_current_year', $summary['projection']['reason']);
+    }
+
+    /**
+     * ⭐ เดือนที่กรอกไม่ถึงครึ่งต้องไม่เข้าฐานประมาณการ
+     *
+     * ต้นเดือน ส.ค. กรอกไป 2 วันได้กำไร 200 — ถ้านับเป็นเดือนเต็ม ค่าเฉลี่ยจะถูกลากลง
+     * และ projection_low จะเอา 200 ไปคูณเดือนที่เหลือ ทำให้ช่วงต่ำผิดรูป
+     */
+    public function testSparselyFilledMonthIsExcludedFromBasis(): void
+    {
+        $months = $this->monthRows([[6, 3000.0, 28], [7, 3000.0, 28], [8, 200.0, 2]]);
+
+        $projection = $this->makeService()->calculateYearEndProjection($months, 6200.0, 8, true, 2026);
+
+        $this->assertSame(2, $projection['basis_month_count']);   // นับแค่ มิ.ย. กับ ก.ค.
+        $this->assertSame(3000.0, $projection['avg_recent']);
+        $this->assertSame(6200.0 + 4 * 3000.0, $projection['projection_low']);
+    }
+
+    /** กรอกครึ่งเดือนพอดีต้องยังนับ (ขอบเขตล่าง) */
+    public function testMonthFilledExactlyHalfIsIncluded(): void
+    {
+        // ส.ค. มี 31 วัน — 16 วัน (16*2 = 32 >= 31) ผ่านเกณฑ์
+        $months = $this->monthRows([[6, 1000.0, 28], [7, 1000.0, 28], [8, 4000.0, 16]]);
+
+        $projection = $this->makeService()->calculateYearEndProjection($months, 6000.0, 8, true, 2026);
+
+        $this->assertSame(3, $projection['basis_month_count']);
+        $this->assertSame(2000.0, $projection['avg_recent']);
+    }
+
+    /** เดือนที่กรอกน้อยทุกเดือน → ข้อมูลไม่พอ ดีกว่าเดาจากฐานที่บิดเบือน */
+    public function testAllSparseMonthsGiveInsufficientData(): void
+    {
+        $months = $this->monthRows([[6, 100.0, 2], [7, 200.0, 3], [8, 300.0, 1]]);
+
+        $projection = $this->makeService()->calculateYearEndProjection($months, 600.0, 8, true, 2026);
+
+        $this->assertFalse($projection['available']);
+        $this->assertSame('insufficient_data', $projection['reason']);
+    }
+
+    /** ก.พ. ปีอธิกสุรทิน — 14 วันไม่ถึงครึ่งของ 29 แต่ถึงครึ่งของ 28 */
+    public function testFebruaryThresholdFollowsTheActualYear(): void
+    {
+        $months = $this->monthRows([[1, 1000.0, 28], [2, 5000.0, 14], [3, 1000.0, 28]]);
+
+        $leap = $this->makeService()->calculateYearEndProjection($months, 7000.0, 3, true, 2028);
+        $common = $this->makeService()->calculateYearEndProjection($months, 7000.0, 3, true, 2026);
+
+        $this->assertSame(2, $leap['basis_month_count']);    // 2028 ก.พ. มี 29 วัน → ตัดออก
+        $this->assertSame(3, $common['basis_month_count']);  // 2026 ก.พ. มี 28 วัน → นับ
     }
 }

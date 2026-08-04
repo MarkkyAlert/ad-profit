@@ -349,9 +349,15 @@ class ShopService
                     $this->db->rollBack();
                 }
 
+                // ⚠️ ตั้งใจไม่ทำ idempotent ที่นี่ ต่างจาก deleteRecord/deleteGoal เพราะ:
+                // 1) กรณีนี้แยกไม่ออกระหว่าง "เพิ่งลบไปเอง" กับ "ร้านของผู้ใช้คนอื่น"
+                //    (record/goal แยกออกเพราะ shopId มาจาก session ที่ผ่าน userCanAccessShop แล้ว)
+                // 2) controller พึ่ง deleted_shop/next_shop ในผลลัพธ์ที่สำเร็จ — ตอบสำเร็จลอย ๆ
+                //    จะทำให้ api/shops.php ตอบ 500 แล้วเด้งไป /login.php ซึ่งแย่กว่าเดิม
+                // ปรับเฉพาะข้อความให้ไม่กล่าวหาว่าเป็นปัญหาสิทธิ์ เพราะกดลบซ้ำก็มาทางนี้
                 return [
                     'success' => false,
-                    'error' => 'คุณไม่มีสิทธิ์ลบร้านค้านี้',
+                    'error' => 'ไม่พบร้านค้านี้ (อาจถูกลบไปแล้ว)',
                 ];
             }
 

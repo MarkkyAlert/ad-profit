@@ -72,15 +72,21 @@ final class OverviewDailyServiceAnalysisTest extends IntegrationTestCase
 
         $summary = $this->makeService()->buildDailyOverview($userId, self::MONTH)['data']['summary'];
 
-        // กำไรรวม 500 + 3000 - 1500 = 2000 · 3 วัน
+        // ยอดรวมยังนับทุกวันตามเดิม: 500 + 3000 - 1500 = 2000 · 3 วัน
         $this->assertSame(2000.0, $summary['profit']);
         $this->assertSame(3, $summary['days_count']);
-        $this->assertSame(666.67, $summary['avg_profit_per_day']);
+
+        // แต่การจัดอันดับและค่าเฉลี่ยนับเฉพาะวันที่ทุกร้านกรอกครบ
+        // ที่นี่มีแค่ 2 มิ.ย. — 1 มิ.ย. และ 3 มิ.ย. กรอกแค่ร้านเดียว
+        // (เดิม "วันแย่สุด" คือ 3 มิ.ย. ซึ่งยอดต่ำเพราะยังกรอกไม่ครบ ไม่ใช่เพราะผลงานแย่)
+        $this->assertSame(2, $summary['incomplete_days']);
+        $this->assertSame(1, $summary['complete_days_count']);
+        $this->assertSame(3000.0, $summary['avg_profit_per_day']);
 
         $this->assertSame('2026-06-02', $summary['best_day']['record_date']);
         $this->assertSame(3000.0, $summary['best_day']['profit']);
-        $this->assertSame('2026-06-03', $summary['worst_day']['record_date']);
-        $this->assertSame(-1500.0, $summary['worst_day']['profit']);
+        $this->assertSame('2026-06-02', $summary['worst_day']['record_date']);
+        $this->assertSame(3000.0, $summary['worst_day']['profit']);
     }
 
     public function testAllShopsLoggedEveryDayGivesZeroIncomplete(): void

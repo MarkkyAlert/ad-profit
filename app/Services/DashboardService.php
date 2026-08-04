@@ -35,7 +35,7 @@ class DashboardService
             ];
         }
 
-        $range = $this->resolveRange($rangeType, $customStartDate, $customEndDate, $selectedMonth);
+        $range = $this->resolveRange($rangeType, $customStartDate, $customEndDate, $selectedMonth, $today);
         if (($range['success'] ?? false) !== true) {
             return [
                 'success' => false,
@@ -55,7 +55,7 @@ class DashboardService
             $summary = $this->buildSummaryFromRecords($records);
             $dailyChart = $this->buildDailyChart($records);
             $sixMonthChart = $this->buildSixMonthChart($shopId, (string)$rangeData['end_date']);
-            $comparison = $this->buildMonthlyComparison($shopId, $rangeData);
+            $comparison = $this->buildMonthlyComparison($shopId, $rangeData, $today);
             $goalMonth = $this->resolveGoalMonth($rangeData);
             $goalProgress = $this->buildGoalProgress($shopId, $goalMonth, $today);
         } catch (Throwable $exception) {
@@ -128,9 +128,26 @@ class DashboardService
         ];
     }
 
-    private function resolveRange(string $rangeType, ?string $customStartDate, ?string $customEndDate, ?string $selectedMonth): array
-    {
-        $today = new DateTimeImmutable('today');
+    /**
+     * @param string|null $todayInput รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
+     *
+     * ต้องรับ seam ด้วย ไม่งั้นช่วงวันที่ใช้วันนี้จริงขณะที่การเทียบ same-period ใช้ค่า
+     * ที่ส่งเข้ามา → สองส่วนอ้างอิงคนละวันในคำขอเดียวกัน
+     */
+    private function resolveRange(
+        string $rangeType,
+        ?string $customStartDate,
+        ?string $customEndDate,
+        ?string $selectedMonth,
+        ?string $todayInput = null
+    ): array {
+        $normalizedToday = is_string($todayInput) ? trim($todayInput) : '';
+        $today = $normalizedToday !== ''
+            ? DateTimeImmutable::createFromFormat('!Y-m-d', $normalizedToday)
+            : false;
+        if (!$today || $today->format('Y-m-d') !== $normalizedToday) {
+            $today = new DateTimeImmutable('today');
+        }
         $normalizedRangeType = in_array($rangeType, ['week_this', 'week_last', 'month_this', 'month_last', 'month_pick', 'custom'], true)
             ? $rangeType
             : 'month_this';
@@ -315,7 +332,7 @@ class DashboardService
         ];
     }
 
-    private function buildMonthlyComparison(int $shopId, array $rangeData): array
+    private function buildMonthlyComparison(int $shopId, array $rangeData, ?string $today = null): array
     {
         if (($rangeData['is_monthly'] ?? false) !== true) {
             return [
@@ -348,22 +365,21 @@ class DashboardService
             ];
         }
 
-        $rows = $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $previousMonth, $selectedMonth);
-        $rowByMonth = [];
-        foreach ($rows as $row) {
-            $monthKey = (string)($row['month_key'] ?? '');
-            if ($monthKey !== '') {
-                $rowByMonth[$monthKey] = $row;
-            }
-        }
+        // เทียบ "ช่วงเดียวกัน": ถ้าเดือนที่เลือกคือเดือนปัจจุบันซึ่งยังไม่จบ ให้ตัดเดือนก่อน
+        // ที่วันเดียวกันด้วย ไม่งั้นวันที่ 3 ของเดือนจะเทียบ 3 วัน กับ 30 วัน แล้วขึ้น −90%
+        // ทุกการ์ดโดยที่ผลงานจริงไม่ได้แย่ลง (หน้ารายปีทำ same-period แบบนี้อยู่แล้ว)
+        $cutoffDay = $this->resolveComparisonCutoffDay($selectedMonth, $today);
 
-        $selectedRevenue = (float)($rowByMonth[$selectedMonth]['total_revenue'] ?? 0);
-        $selectedAdCost = (float)($rowByMonth[$selectedMonth]['total_ad_cost'] ?? 0);
+        $selected = $this->sumMonthUpToDay($shopId, $selectedMonth, $cutoffDay);
+        $previous = $this->sumMonthUpToDay($shopId, $previousMonth, $cutoffDay);
+
+        $selectedRevenue = $selected['revenue'];
+        $selectedAdCost = $selected['ad_cost'];
         $selectedProfit = $selectedRevenue - $selectedAdCost;
         $selectedRoas = $selectedAdCost > 0 ? round($selectedRevenue / $selectedAdCost, 2) : null;
 
-        $previousRevenue = (float)($rowByMonth[$previousMonth]['total_revenue'] ?? 0);
-        $previousAdCost = (float)($rowByMonth[$previousMonth]['total_ad_cost'] ?? 0);
+        $previousRevenue = $previous['revenue'];
+        $previousAdCost = $previous['ad_cost'];
         $previousProfit = $previousRevenue - $previousAdCost;
         $previousRoas = $previousAdCost > 0 ? round($previousRevenue / $previousAdCost, 2) : null;
 
@@ -371,6 +387,7 @@ class DashboardService
             'enabled' => true,
             'selected_month' => $selectedMonth,
             'previous_month' => $previousMonth,
+            'compared_up_to_day' => $cutoffDay,
             'change' => [
                 'total_revenue' => $this->calculateChangePercent($selectedRevenue, $previousRevenue),
                 'total_ad_cost' => $this->calculateChangePercent($selectedAdCost, $previousAdCost),
@@ -667,6 +684,56 @@ class DashboardService
      * และเดือนที่ขาดทุนหนักขึ้นขึ้นลูกศรขึ้นสีเขียว — ตรงข้ามกับ AnnualService
      * และ OverviewAnnualService ที่ใช้ abs อยู่แล้ว
      */
+    /**
+     * วันสุดท้ายที่ใช้เทียบ — เดือนปัจจุบันตัดที่วันนี้ · เดือนที่จบแล้วใช้ทั้งเดือน (null)
+     */
+    private function resolveComparisonCutoffDay(string $selectedMonth, ?string $today): ?int
+    {
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('!Y-m-d', $todayInput)
+            : false;
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            $todayObject = new DateTimeImmutable('today');
+        }
+
+        return $selectedMonth === $todayObject->format('Y-m') ? (int)$todayObject->format('j') : null;
+    }
+
+    /**
+     * ยอดรวมของเดือน ตั้งแต่วันที่ 1 ถึงวันที่กำหนด (null = ทั้งเดือน)
+     *
+     * วันตัดที่เกินจำนวนวันของเดือนนั้นถูกหดลงให้พอดี — ตัดวันที่ 31 กับเดือน ก.พ.
+     * ต้องได้ทั้งเดือน ไม่ใช่ช่วงว่าง
+     *
+     * @return array{revenue: float, ad_cost: float}
+     */
+    private function sumMonthUpToDay(int $shopId, string $month, ?int $cutoffDay): array
+    {
+        $monthStart = DateTimeImmutable::createFromFormat('!Y-m-d', $month . '-01');
+        if (!$monthStart) {
+            return ['revenue' => 0.0, 'ad_cost' => 0.0];
+        }
+
+        $lastDayOfMonth = (int)$monthStart->format('t');
+        $endDay = $cutoffDay === null ? $lastDayOfMonth : min($cutoffDay, $lastDayOfMonth);
+
+        $records = $this->recordRepository->getByDateRange(
+            $shopId,
+            $monthStart->format('Y-m-d'),
+            $monthStart->setDate((int)$monthStart->format('Y'), (int)$monthStart->format('n'), $endDay)->format('Y-m-d')
+        );
+
+        $revenue = 0.0;
+        $adCost = 0.0;
+        foreach ($records as $record) {
+            $revenue += (float)($record['revenue'] ?? 0);
+            $adCost += (float)($record['ad_cost'] ?? 0);
+        }
+
+        return ['revenue' => $revenue, 'ad_cost' => $adCost];
+    }
+
     private function calculateChangePercent(?float $current, ?float $previous): ?float
     {
         if ($current === null || $previous === null || abs($previous) < 0.00001) {

@@ -111,18 +111,9 @@ class GoalService
                 $startedTransaction = true;
             }
 
-            $deleted = $this->goalRepository->deleteByShopAndMonth($shopId, $goalMonth);
-
-            if (!$deleted) {
-                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
-                    $this->db->rollBack();
-                }
-
-                return [
-                    'success' => false,
-                    'error' => 'ไม่พบเป้าหมายที่ต้องการลบ',
-                ];
-            }
+            // ไม่มีเป้าของเดือนนั้นแล้ว = ผลลัพธ์ตรงกับที่ผู้ใช้ขอ → ตอบสำเร็จ (idempotent)
+            // กด back แล้ว submit ใหม่ไม่ควรได้ error แดง · ownership ตรวจไปแล้วด้านบน
+            $this->goalRepository->deleteByShopAndMonth($shopId, $goalMonth);
 
             if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                 $this->db->commit();

@@ -259,7 +259,8 @@ class AnnualService
                         $months,
                         $cumulativeProfit,
                         $lastMonth,
-                        $year === $currentYear
+                        $year === $currentYear,
+                        $year
                     ),
                 ],
                 'chart' => [
@@ -291,8 +292,11 @@ class AnnualService
         array $months,
         float $cumulativeProfit,
         int $lastMonth,
-        bool $isCurrentYear
+        bool $isCurrentYear,
+        ?int $year = null
     ): array {
+        // ใช้หาจำนวนวันของแต่ละเดือน (ก.พ. ต่างกันตามปีอธิกสุรทิน) — ไม่ส่งมาก็ใช้ปีปัจจุบัน
+        $year = $year ?? (int)date('Y');
         // ปีที่จบไปแล้ว/ยังไม่เริ่ม ไม่ต้องเดา — มีตัวเลขจริงอยู่แล้วหรือยังไม่มีอะไรให้เดา
         if (!$isCurrentYear) {
             return ['available' => false, 'reason' => 'not_current_year'];
@@ -303,16 +307,29 @@ class AnnualService
             return ['available' => false, 'reason' => 'year_complete'];
         }
 
-        // ฐาน = เฉพาะเดือนที่กรอกแล้ว — เดือนที่ยังไม่กรอกมีกำไร 0 ซึ่งจะลากค่าเฉลี่ยลงผิด ๆ
+        // ฐาน = เฉพาะเดือนที่กรอก "มากพอจะเป็นตัวแทนของเดือนนั้น"
+        //
+        // เดือนที่ยังไม่กรอกเลยมีกำไร 0 ซึ่งจะลากค่าเฉลี่ยลงผิด ๆ · เดือนที่กรอกไม่ถึงครึ่ง
+        // (มักเป็นเดือนปัจจุบันต้นเดือน) ก็เช่นกัน — กรอก 2 วันจาก 31 แล้วเอามาเป็นตัวคูณ
+        // ทำให้ projection_low ต่ำผิดรูปและสรุปว่า "ช่วงคร่อม 0" บ่อยเกินจริง
         $filledProfits = [];
         foreach ($months as $row) {
-            if ((int)($row['month'] ?? 0) > $lastMonth) {
+            $month = (int)($row['month'] ?? 0);
+            if ($month > $lastMonth || $month < 1) {
                 continue;
             }
 
-            if ((int)($row['days_count'] ?? 0) > 0) {
-                $filledProfits[] = (float)($row['profit'] ?? 0);
+            $daysCount = (int)($row['days_count'] ?? 0);
+            if ($daysCount <= 0) {
+                continue;
             }
+
+            $daysInMonth = (int)(new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month)))->format('t');
+            if ($daysCount * 2 < $daysInMonth) {
+                continue;
+            }
+
+            $filledProfits[] = (float)($row['profit'] ?? 0);
         }
 
         // เดือนเดียวเดาไม่ได้ว่าเป็นแนวโน้มหรือฟลุ๊ค

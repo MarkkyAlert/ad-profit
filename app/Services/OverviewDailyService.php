@@ -130,6 +130,10 @@ class OverviewDailyService
         $bestDay = null;
         $worstDay = null;
         $incompleteDays = 0;
+        // ยอดของเฉพาะวันที่กรอกครบ — ใช้คิดค่าเฉลี่ยต่อวันให้ไม่ถูกวันกรอกไม่ครบเจือจาง
+        $completeRevenue = 0.0;
+        $completeAdCost = 0.0;
+        $completeDays = 0;
 
         foreach ($dailyRows as $row) {
             $totalRevenue += (float)($row['total_revenue'] ?? 0);
@@ -138,6 +142,15 @@ class OverviewDailyService
             // จัดอันดับด้วยกำไร — วันรายได้สูงสุดอาจแอดหนักจนกำไรน้อย
             // (dailyRows มีเฉพาะวันที่มี record อยู่แล้ว จึงไม่ต้องกันวันว่าง)
             $dayProfit = (float)($row['profit'] ?? 0);
+            $isComplete = ($row['is_complete'] ?? true) === true;
+
+            if (!$isComplete) {
+                $incompleteDays++;
+                // วันที่บางร้านยังไม่กรอกมียอดรวมต่ำโดยธรรมชาติ ถ้านับด้วยจะชนะ "วันแย่สุด"
+                // เกือบทุกครั้งทั้งที่ผลงานจริงอาจดี — จัดอันดับและเฉลี่ยเฉพาะวันที่กรอกครบ
+                continue;
+            }
+
             $day = [
                 'record_date' => (string)($row['record_date'] ?? ''),
                 'profit' => $dayProfit,
@@ -151,9 +164,9 @@ class OverviewDailyService
                 $worstDay = $day;
             }
 
-            if (($row['is_complete'] ?? true) !== true) {
-                $incompleteDays++;
-            }
+            $completeRevenue += (float)($row['total_revenue'] ?? 0);
+            $completeAdCost += (float)($row['total_ad_cost'] ?? 0);
+            $completeDays++;
         }
 
         $profit = $totalRevenue - $totalAdCost;
@@ -166,8 +179,12 @@ class OverviewDailyService
             'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
             'profit_margin' => $totalRevenue > 0 ? round(($profit / $totalRevenue) * 100, 1) : null,
             'days_count' => $daysCount,
-            'avg_revenue_per_day' => $daysCount > 0 ? round($totalRevenue / $daysCount, 2) : null,
-            'avg_profit_per_day' => $daysCount > 0 ? round($profit / $daysCount, 2) : null,
+            // เฉลี่ยต่อวันคิดจากวันที่กรอกครบเท่านั้น (ยอดรวมด้านบนยังนับทุกวันตามเดิม)
+            'complete_days_count' => $completeDays,
+            'avg_revenue_per_day' => $completeDays > 0 ? round($completeRevenue / $completeDays, 2) : null,
+            'avg_profit_per_day' => $completeDays > 0
+                ? round(($completeRevenue - $completeAdCost) / $completeDays, 2)
+                : null,
             'best_day' => $bestDay,
             'worst_day' => $worstDay,
             'total_shops' => $totalShops,
