@@ -76,17 +76,19 @@ final class OverviewDailyServiceAnalysisTest extends IntegrationTestCase
         $this->assertSame(2000.0, $summary['profit']);
         $this->assertSame(3, $summary['days_count']);
 
-        // แต่การจัดอันดับและค่าเฉลี่ยนับเฉพาะวันที่ทุกร้านกรอกครบ
-        // ที่นี่มีแค่ 2 มิ.ย. — 1 มิ.ย. และ 3 มิ.ย. กรอกแค่ร้านเดียว
-        // (เดิม "วันแย่สุด" คือ 3 มิ.ย. ซึ่งยอดต่ำเพราะยังกรอกไม่ครบ ไม่ใช่เพราะผลงานแย่)
-        $this->assertSame(2, $summary['incomplete_days']);
-        $this->assertSame(1, $summary['complete_days_count']);
-        $this->assertSame(3000.0, $summary['avg_profit_per_day']);
+        // การจัดอันดับและค่าเฉลี่ยนับเฉพาะวันที่ "ทุกร้านที่กำลังติดตามอยู่" กรอกครบ
+        //  1 มิ.ย. — ร้าน B ยังไม่เริ่มกรอก (วันแรกของ B คือ 2 มิ.ย.) → ครบสำหรับวันนั้น
+        //  2 มิ.ย. — ทั้งสองร้านกรอก → ครบ
+        //  3 มิ.ย. — B กรอกฝ่ายเดียวทั้งที่ A เริ่มไปแล้ว → ไม่ครบ
+        // (เดิม "วันแย่สุด" คือ 3 มิ.ย. ซึ่งยอดต่ำเพราะกรอกไม่ครบ ไม่ใช่เพราะผลงานแย่)
+        $this->assertSame(1, $summary['incomplete_days']);
+        $this->assertSame(2, $summary['complete_days_count']);
+        $this->assertSame(1750.0, $summary['avg_profit_per_day']);  // (500 + 3000) / 2
 
         $this->assertSame('2026-06-02', $summary['best_day']['record_date']);
         $this->assertSame(3000.0, $summary['best_day']['profit']);
-        $this->assertSame('2026-06-02', $summary['worst_day']['record_date']);
-        $this->assertSame(3000.0, $summary['worst_day']['profit']);
+        $this->assertSame('2026-06-01', $summary['worst_day']['record_date']);
+        $this->assertSame(500.0, $summary['worst_day']['profit']);
     }
 
     public function testAllShopsLoggedEveryDayGivesZeroIncomplete(): void
@@ -123,5 +125,76 @@ final class OverviewDailyServiceAnalysisTest extends IntegrationTestCase
         $this->assertSame(2, $data['summary']['total_shops']);
         $this->assertSame(0, $data['summary']['incomplete_days']);
         $this->assertSame(1800.0, $data['summary']['profit']);   // ไม่รวมร้านคนอื่น
+    }
+
+    /**
+     * ⭐ เพิ่มร้านใหม่ต้องไม่ทำให้สถิติของประวัติเก่าหายไป
+     *
+     * is_complete เคยเทียบกับ "จำนวนร้าน ณ ปัจจุบัน" → สร้างร้านที่ 3 วันนี้ แล้ววันในอดีต
+     * ที่ 2 ร้านกรอกครบ กลายเป็น "ไม่ครบ" ทั้งหมด → avg/best/worst เป็น null ทุกเดือนย้อนหลัง
+     */
+    public function testAddingAShopLaterDoesNotInvalidateHistory(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        foreach (['2026-06-01', '2026-06-02'] as $date) {
+            $this->createRecord($shopA, $date, 1000.0, 200.0);
+            $this->createRecord($shopB, $date, 1000.0, 200.0);
+        }
+
+        $before = $this->makeService()->buildDailyOverview($userId, self::MONTH)['data']['summary'];
+        $this->assertSame(0, $before['incomplete_days']);
+        $this->assertSame(1600.0, $before['avg_profit_per_day']);
+
+        // ร้านที่ 3 เพิ่งสร้างวันนี้ — ไม่เคยมีอยู่ตอน มิ.ย.
+        $this->createShop($userId, 'ร้าน C');
+
+        $after = $this->makeService()->buildDailyOverview($userId, self::MONTH)['data']['summary'];
+
+        $this->assertSame(0, $after['incomplete_days'], 'ร้านใหม่ทำให้วันในอดีตกลายเป็นไม่ครบ');
+        $this->assertSame(1600.0, $after['avg_profit_per_day']);
+        $this->assertSame('2026-06-01', $after['best_day']['record_date']);
+    }
+
+    /**
+     * ร้านที่ "เคยกรอกแล้ว" แต่วันนั้นไม่ได้กรอก → ยังนับว่าวันนั้นไม่ครบ
+     *
+     * เกณฑ์คือ "ร้านที่มีข้อมูลตั้งแต่วันนั้นหรือก่อนหน้า" ไม่ใช่ shops.created_at
+     * เพราะร้านที่สร้างวันนี้แล้ว import ประวัติย้อนหลังก็ถือว่าถูกติดตามมาก่อน
+     */
+    public function testShopThatAlreadyStartedLoggingMakesLaterGapsIncomplete(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        // ทั้งสองร้านเริ่มกรอกวันที่ 1
+        $this->createRecord($shopA, '2026-06-01', 1000.0, 200.0);
+        $this->createRecord($shopB, '2026-06-01', 1000.0, 200.0);
+        // วันที่ 2 ร้าน B ไม่ได้กรอก ทั้งที่เริ่มติดตามไปแล้ว
+        $this->createRecord($shopA, '2026-06-02', 1000.0, 200.0);
+
+        $summary = $this->makeService()->buildDailyOverview($userId, self::MONTH)['data']['summary'];
+
+        $this->assertSame(1, $summary['incomplete_days']);
+        $this->assertSame('2026-06-01', $summary['best_day']['record_date']);
+    }
+
+    /** ร้านที่ยังไม่เคยกรอกอะไรเลย ต้องไม่ทำให้วันของร้านอื่นกลายเป็นไม่ครบ */
+    public function testShopThatNeverLoggedDoesNotMakeOtherDaysIncomplete(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+        $this->createShop($userId, 'ร้าน C ที่ยังไม่เคยใช้');
+
+        $this->createRecord($shopA, '2026-06-01', 1000.0, 200.0);
+        $this->createRecord($shopB, '2026-06-01', 1000.0, 200.0);
+
+        $summary = $this->makeService()->buildDailyOverview($userId, self::MONTH)['data']['summary'];
+
+        $this->assertSame(0, $summary['incomplete_days']);
     }
 }

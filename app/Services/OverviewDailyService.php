@@ -42,6 +42,7 @@ class OverviewDailyService
 
             $shopIds[] = $shopId;
             $shopNameById[$shopId] = (string)($shop['name'] ?? 'ร้านค้า');
+
         }
 
         $shopsCount = count($shopIds);
@@ -70,6 +71,9 @@ class OverviewDailyService
         try {
             $dailyTotals = $this->recordRepository->getDailyTotalsByShopIdsAndDateRange($shopIds, $startDate, $endDate);
             $shopTotals = $this->recordRepository->getTotalsByShopIdsAndDateRange($shopIds, $startDate, $endDate);
+            // วันแรกที่แต่ละร้านมีข้อมูล — ใช้ตัดสิน "ครบทุกร้าน" ของแต่ละวัน
+            $trackingSince = array_values($this->recordRepository->getFirstRecordDateByShopIds($shopIds));
+            sort($trackingSince);
         } catch (Throwable $exception) {
             error_log('[overview-daily] buildDailyOverview query failed: ' . $exception->getMessage());
             return [
@@ -78,7 +82,7 @@ class OverviewDailyService
             ];
         }
 
-        $dailyRows = $this->buildDailyRows($dailyTotals, $shopsCount);
+        $dailyRows = $this->buildDailyRows($dailyTotals, $trackingSince);
         $summary = $this->buildSummary($dailyRows, $shopsCount);
         $chart = $this->buildChart($dailyRows);
         $shopRows = $this->buildShopRows($shopTotals, $shopNameById);
@@ -97,7 +101,10 @@ class OverviewDailyService
         ];
     }
 
-    private function buildDailyRows(array $dailyTotals, int $totalShops): array
+    /**
+     * @param array<int,string> $trackingSince วันแรกที่แต่ละร้านมีข้อมูล (Y-m-d, เรียงแล้ว)
+     */
+    private function buildDailyRows(array $dailyTotals, array $trackingSince): array
     {
         $rows = [];
 
@@ -106,9 +113,10 @@ class OverviewDailyService
             $adCost = (float)($row['total_ad_cost'] ?? 0);
             $profit = $revenue - $adCost;
             $shopsCount = (int)($row['shops_count'] ?? 0);
+            $recordDate = (string)($row['record_date'] ?? '');
 
             $rows[] = [
-                'record_date' => (string)($row['record_date'] ?? ''),
+                'record_date' => $recordDate,
                 'total_revenue' => $revenue,
                 'total_ad_cost' => $adCost,
                 'profit' => $profit,
@@ -116,11 +124,39 @@ class OverviewDailyService
                 'profit_margin' => $revenue > 0 ? round(($profit / $revenue) * 100, 1) : null,
                 'shops_count' => $shopsCount,
                 // วันที่บางร้านยังไม่กรอก — ยอดรวมของวันนั้นเทียบกับวันอื่นตรง ๆ ไม่ได้
-                'is_complete' => $shopsCount >= $totalShops,
+                // เทียบกับจำนวนร้านที่ "มีอยู่ ณ วันนั้น" ไม่ใช่จำนวนร้านปัจจุบัน
+                // ไม่งั้นการเพิ่มร้านใหม่ทำให้ทุกวันในอดีตกลายเป็นไม่ครบย้อนหลังทั้งหมด
+                'is_complete' => $shopsCount >= $this->countShopsTrackedOn($trackingSince, $recordDate),
             ];
         }
 
         return $rows;
+    }
+
+    /**
+     * จำนวนร้านที่ "กำลังถูกติดตาม" ณ วันที่กำหนด = ร้านที่มีข้อมูลวันแรกไม่เกินวันนั้น
+     *
+     * ร้านที่ยังไม่เคยกรอกอะไรเลยจะไม่ถูกนับ — ไม่งั้นการเพิ่มร้านใหม่ทำให้ทุกวันในอดีต
+     * กลายเป็น "กรอกไม่ครบ" ย้อนหลังทั้งหมด และสถิติรายวันของประวัติหายพร้อมกัน
+     *
+     * @param array<int,string> $trackingSince วันแรกที่มีข้อมูล (Y-m-d) เรียงจากน้อยไปมาก
+     */
+    private function countShopsTrackedOn(array $trackingSince, string $recordDate): int
+    {
+        if ($recordDate === '') {
+            return count($trackingSince);
+        }
+
+        $count = 0;
+        foreach ($trackingSince as $firstDate) {
+            if ($firstDate > $recordDate) {
+                break; // เรียงแล้ว — ที่เหลือเริ่มมีข้อมูลทีหลังทั้งหมด
+            }
+
+            $count++;
+        }
+
+        return $count;
     }
 
     private function buildSummary(array $dailyRows, int $totalShops): array

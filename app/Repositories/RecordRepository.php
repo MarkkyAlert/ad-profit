@@ -144,6 +144,46 @@ class RecordRepository
         return $stmt->fetchColumn() !== false;
     }
 
+    /**
+     * วันแรกที่แต่ละร้านมีข้อมูล — ใช้ตัดสินว่า ณ วันนั้นร้านไหน "กำลังถูกติดตาม" อยู่บ้าง
+     *
+     * ใช้แทน shops.created_at เพราะร้านที่สร้างวันนี้แล้ว import ประวัติย้อนหลังเข้ามา
+     * ก็ถือว่าถูกติดตามตั้งแต่วันที่ข้อมูลระบุ ไม่ใช่ตั้งแต่วันที่สร้างร้าน
+     *
+     * @param int[] $shopIds
+     * @return array<int,string> shop_id => วันแรกที่มีข้อมูล (Y-m-d)
+     */
+    public function getFirstRecordDateByShopIds(array $shopIds): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $shopIds), static fn(int $id): bool => $id > 0));
+        if ($ids === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($ids as $index => $shopId) {
+            $placeholder = ':shop_id_' . $index;
+            $placeholders[] = $placeholder;
+            $params[$placeholder] = $shopId;
+        }
+
+        $sql = 'SELECT shop_id, MIN(record_date) AS first_date
+                FROM daily_records
+                WHERE shop_id IN (' . implode(', ', $placeholders) . ')
+                GROUP BY shop_id';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $result = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $result[(int)$row['shop_id']] = (string)$row['first_date'];
+        }
+
+        return $result;
+    }
+
     public function findByIdAndShopId(int $recordId, int $shopId): ?array
     {
         $sql = 'SELECT id, shop_id, record_date, revenue, ad_cost, note, created_at, updated_at

@@ -26,6 +26,20 @@ final class OverviewDailyServiceAnalysisTest extends TestCase
         $recordRepository->method('getDailyTotalsByShopIdsAndDateRange')->willReturn($dailyTotals);
         $recordRepository->method('getTotalsByShopIdsAndDateRange')->willReturn([]);
 
+        // ทุกร้านเริ่มติดตามตั้งแต่วันแรกของชุดข้อมูล — เคสที่ร้านเริ่มไม่พร้อมกัน
+        // อยู่ใน tests/Integration/OverviewDailyServiceAnalysisTest.php ซึ่งใช้ DB จริง
+        $firstDate = $dailyTotals === [] ? '0000-00-00' : (string)$dailyTotals[0]['record_date'];
+        $recordRepository->method('getFirstRecordDateByShopIds')->willReturnCallback(
+            static function (array $shopIds) use ($firstDate): array {
+                $map = [];
+                foreach ($shopIds as $shopId) {
+                    $map[(int)$shopId] = $firstDate;
+                }
+
+                return $map;
+            }
+        );
+
         $shopRepository = $this->createStub(ShopRepository::class);
         $shopRepository->method('listByUserId')->willReturn($shops ?? [
             ['id' => 1, 'name' => 'ร้าน A'],
