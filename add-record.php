@@ -16,6 +16,14 @@ $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 
 $recentRecords = $recordService->getRecentRecords($userId, $shopId, 7);
 
+// เติมค่าของวันที่ฟอร์มตั้งต้นไว้ (วันนี้) — การบันทึกเป็นการเขียนทับทุกช่อง
+// ถ้าไม่เติมโน้ตเดิมกลับมา การแก้แค่ยอดขายจะลบโน้ตของวันนั้นทิ้งไปด้วย
+$todayDate = date('Y-m-d');
+$existingResult = $recordService->getRecordForDate($userId, $shopId, $todayDate);
+$existingRecord = ($existingResult['success'] ?? false) === true
+    ? ($existingResult['data'] ?? null)
+    : null;
+
 // วันที่ยังไม่ได้กรอกของเดือนปัจจุบัน (ใช้โชว์ banner + เติมลงตาราง bulk)
 $currentMonth = date('Y-m');
 $unfilledResult = $recordService->getUnfilledDatesForMonth($userId, $shopId, $currentMonth);
@@ -68,6 +76,7 @@ require __DIR__ . '/includes/header.php';
 
     <form action="<?= e(app_url('/api/records.php')) ?>" method="post" class="mt-5 grid gap-4 md:grid-cols-2">
         <?= csrf_field() ?>
+        <?= shop_context_field($shopId) ?>
         <input type="hidden" name="action" value="upsert">
 
         <div>
@@ -77,7 +86,7 @@ require __DIR__ . '/includes/header.php';
                 name="record_date"
                 type="date"
                 data-date="<?= e(date('d/m/Y')) ?>"
-                value="<?= e(date('Y-m-d')) ?>"
+                value="<?= e($todayDate) ?>"
                 required
                 class="w-full rounded-xl px-4 py-2.5 transition-all date-input-formatted"
                 style="position: relative;"
@@ -97,6 +106,7 @@ require __DIR__ . '/includes/header.php';
                 min="0"
                 step="0.01"
                 required
+                value="<?= $existingRecord !== null ? e((string)$existingRecord['revenue']) : '' ?>"
                 class="w-full rounded-xl px-4 py-2.5 transition-all">
         </div>
 
@@ -109,6 +119,7 @@ require __DIR__ . '/includes/header.php';
                 min="0"
                 step="0.01"
                 required
+                value="<?= $existingRecord !== null ? e((string)$existingRecord['ad_cost']) : '' ?>"
                 class="w-full rounded-xl px-4 py-2.5 transition-all">
         </div>
 
@@ -120,10 +131,14 @@ require __DIR__ . '/includes/header.php';
                 rows="3"
                 maxlength="255"
                 class="w-full rounded-xl px-4 py-2.5 transition-all"
-                placeholder="เช่น แอดชุดใหม่เริ่มวิ่ง"></textarea>
+                placeholder="เช่น แอดชุดใหม่เริ่มวิ่ง"><?= $existingRecord !== null ? e((string)$existingRecord['note']) : '' ?></textarea>
         </div>
 
         <div class="md:col-span-2">
+            <?php // บอกให้รู้ตัวว่ากำลังแก้ของเดิม ไม่ใช่เพิ่มใหม่ — JS อัปเดตข้อความนี้ตอนเปลี่ยนวัน ?>
+            <p id="existing-record-hint" class="mb-2 text-xs text-amber-300 <?= $existingRecord !== null ? '' : 'hidden' ?>">
+                ✎ วันนี้มีข้อมูลอยู่แล้ว — ระบบเติมค่าเดิมไว้ให้ กดบันทึกจะเป็นการแก้ไขทับ
+            </p>
             <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">
                 ✓ บันทึกข้อมูล
             </button>
@@ -164,6 +179,7 @@ require __DIR__ . '/includes/header.php';
 
     <form action="<?= e(app_url('/api/records.php')) ?>" method="post">
         <?= csrf_field() ?>
+        <?= shop_context_field($shopId) ?>
         <input type="hidden" name="action" value="bulk_upsert">
 
         <p class="mb-2 text-xs text-slate-400">
@@ -228,6 +244,18 @@ require __DIR__ . '/includes/header.php';
         </td>
     </tr>
 </template>
+
+<script>
+    // ── โหลดข้อมูลทั้งเดือนมาแก้ (AJAX read-only จุดเดียวของแอป) ──────────────
+    // ⚠️ แอปนี้เป็น server-render + form POST เป็นหลัก — นี่เป็นข้อยกเว้นที่ตั้งใจ
+    //    GET api/month-grid.php อ่านอย่างเดียว ไม่เปลี่ยน state จึงไม่ต้องมี CSRF
+    //    (auth ผ่าน session cookie) · การบันทึกยังเป็น form POST + CSRF เหมือนเดิม
+    // ประกาศนอก IIFE เพราะใช้ 2 ที่: ตารางกรอกหลายวัน และฟอร์มหลัก (เติมค่าเดิม)
+    const MONTH_GRID_URL = <?= json_encode(
+        app_url('/api/month-grid.php'),
+        JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+    ) ?>;
+</script>
 
 <script>
     (function() {
@@ -520,15 +548,6 @@ require __DIR__ . '/includes/header.php';
             }
         });
 
-        // ── โหลดข้อมูลทั้งเดือนมาแก้ (AJAX read-only จุดเดียวของแอป) ──────────
-        // ⚠️ แอปนี้เป็น server-render + form POST เป็นหลัก — นี่เป็นข้อยกเว้นที่ตั้งใจ
-        //    GET api/month-grid.php อ่านอย่างเดียว ไม่เปลี่ยน state จึงไม่ต้องมี CSRF
-        //    (auth ผ่าน session cookie) · การบันทึกยังเป็น form POST + CSRF เหมือนเดิม
-        const MONTH_GRID_URL = <?= json_encode(
-            app_url('/api/month-grid.php'),
-            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-        ) ?>;
-
         const monthInput = document.getElementById('bulk-month');
         let loadedMonth = monthInput ? monthInput.value : '';
 
@@ -694,6 +713,7 @@ require __DIR__ . '/includes/header.php';
     <form action="<?= e(app_url('/api/records.php')) ?>" method="post" enctype="multipart/form-data"
         class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <?= csrf_field() ?>
+        <?= shop_context_field($shopId) ?>
         <input type="hidden" name="action" value="import_csv">
 
         <input
@@ -777,6 +797,82 @@ require __DIR__ . '/includes/header.php';
         dateInput.addEventListener('change', sync);
         dateInput.addEventListener('input', sync);
         sync();
+    })();
+
+    // ── เปลี่ยนวันที่ → ดึงค่าเดิมของวันนั้นมาเติมให้ ────────────────────────────
+    // การบันทึกเป็นการเขียนทับทุกช่อง ถ้าไม่เติมโน้ตเดิมกลับมา การแก้แค่ยอดขาย
+    // จะลบโน้ตของวันนั้นทิ้ง · ใช้ endpoint เดิม (api/month-grid.php) ไม่เพิ่มจุดใหม่
+    (() => {
+        const dateInput = document.getElementById('record-date');
+        const revenueInput = document.getElementById('revenue');
+        const adCostInput = document.getElementById('ad-cost');
+        const noteInput = document.getElementById('note');
+        const hint = document.getElementById('existing-record-hint');
+
+        if (!dateInput || !revenueInput || !adCostInput || !noteInput || !hint) {
+            return;
+        }
+
+        const monthCache = new Map();          // 'YYYY-MM' → Map(วันที่ → ข้อมูล)
+        let lastAppliedDate = dateInput.value; // ค่าที่เซิร์ฟเวอร์เติมมาให้ตอนโหลดหน้า
+
+        const loadMonth = async (month) => {
+            if (monthCache.has(month)) {
+                return monthCache.get(month);
+            }
+
+            const response = await fetch(
+                MONTH_GRID_URL + '?month=' + encodeURIComponent(month),
+                { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }
+            );
+            const payload = await response.json();
+
+            if (!payload || payload.success !== true) {
+                throw new Error('load failed');
+            }
+
+            const byDate = new Map();
+            const days = (payload.data && payload.data.days) ? payload.data.days : [];
+            days.forEach((day) => { byDate.set(day.date, day); });
+            monthCache.set(month, byDate);
+
+            return byDate;
+        };
+
+        const applyDay = (day) => {
+            if (day && (day.revenue !== null || day.ad_cost !== null || day.note)) {
+                revenueInput.value = day.revenue === null ? '' : String(day.revenue);
+                adCostInput.value = day.ad_cost === null ? '' : String(day.ad_cost);
+                noteInput.value = day.note || '';
+                hint.classList.remove('hidden');
+                return;
+            }
+
+            revenueInput.value = '';
+            adCostInput.value = '';
+            noteInput.value = '';
+            hint.classList.add('hidden');
+        };
+
+        dateInput.addEventListener('change', async () => {
+            const value = dateInput.value;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value === lastAppliedDate) {
+                return;
+            }
+
+            try {
+                const byDate = await loadMonth(value.slice(0, 7));
+                applyDay(byDate.get(value) || null);
+                lastAppliedDate = value;
+            } catch (error) {
+                // โหลดไม่ได้ → ล้างช่องแล้วเตือน ดีกว่าปล่อยค่าของวันก่อนหน้าค้างไว้
+                // แล้วผู้ใช้กดบันทึกทับวันใหม่ด้วยตัวเลขของวันเก่า
+                applyDay(null);
+                lastAppliedDate = value;
+                hint.textContent = '⚠️ โหลดข้อมูลเดิมของวันนี้ไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก';
+                hint.classList.remove('hidden');
+            }
+        });
     })();
 </script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

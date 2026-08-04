@@ -263,10 +263,15 @@ class RecordService
 
             // ช่องว่าง = 0 — วันที่ไม่ได้ยิงแอด/ไม่มีรายได้เป็นเรื่องปกติ และ UI ก็ปล่อยว่างได้
             // (เดิม parser ปล่อยผ่านเป็น '' แล้วชั้นบันทึกปฏิเสธ ทำให้ทั้งไฟล์ไม่ถูกนำเข้า)
-            if ($revenue === '') {
+            //
+            // ⚠️ ต้องจำไว้ด้วยว่า 0 นี้มาจาก "ช่องว่าง" ไม่ใช่ "ผู้ใช้พิมพ์ 0" — ชั้นบันทึก
+            // ใช้แยกสองกรณีนี้: ทับวันที่มีข้อมูลอยู่แล้วด้วยช่องว่าง = อุบัติเหตุ ต้องปฏิเสธ
+            $revenueWasBlank = $revenue === '';
+            $adCostWasBlank = $adCost === '';
+            if ($revenueWasBlank) {
                 $revenue = '0';
             }
-            if ($adCost === '') {
+            if ($adCostWasBlank) {
                 $adCost = '0';
             }
 
@@ -292,6 +297,8 @@ class RecordService
                 'revenue' => $revenue,
                 'ad_cost' => $adCost,
                 'note' => $note === '' ? null : $note,
+                'revenue_was_blank' => $revenueWasBlank,
+                'ad_cost_was_blank' => $adCostWasBlank,
             ];
         }
 
@@ -463,6 +470,9 @@ class RecordService
                 'revenue' => $row['revenue'] ?? null,
                 'ad_cost' => $row['ad_cost'] ?? null,
                 'note' => $noteRaw === '' ? null : $noteRaw,
+                // มาจาก parser ของ CSV เท่านั้น — ทางตารางกรอกหลายวันไม่เคยตั้งธงนี้
+                'revenue_was_blank' => ($row['revenue_was_blank'] ?? false) === true,
+                'ad_cost_was_blank' => ($row['ad_cost_was_blank'] ?? false) === true,
             ];
         }
 
@@ -484,6 +494,8 @@ class RecordService
         // validate ทุกแถวให้ครบก่อน แล้วค่อยเขียน (กันเขียนครึ่ง ๆ กลาง ๆ)
         $payloads = [];
         $seenDates = [];
+        /** @var array<string,array{row_number:int,revenue:bool,ad_cost:bool}> $blankCells */
+        $blankCells = [];
         foreach ($filledRows as $row) {
             $rowNumber = (int)$row['row_number'];
 
@@ -520,6 +532,22 @@ class RecordService
 
             $seenDates[$recordDate] = true;
             $payloads[] = $payload;
+
+            // ช่องตัวเลขที่ "ว่าง" ในไฟล์ CSV ถูกแปลงเป็น 0 ไปแล้ว — ถ้าวันนั้นมีข้อมูลอยู่
+            // การเขียนทับจะลบยอดจริงทิ้งโดยที่ผู้ใช้ตั้งใจแค่ "ไม่แก้ช่องนี้"
+            // เก็บไว้เช็กทีเดียวหลังลูป (ต้องรู้ช่วงวันทั้งหมดก่อนจึงจะ query ครั้งเดียวได้)
+            if (($row['revenue_was_blank'] ?? false) === true || ($row['ad_cost_was_blank'] ?? false) === true) {
+                $blankCells[$recordDate] = [
+                    'row_number' => $rowNumber,
+                    'revenue' => ($row['revenue_was_blank'] ?? false) === true,
+                    'ad_cost' => ($row['ad_cost_was_blank'] ?? false) === true,
+                ];
+            }
+        }
+
+        $overwriteCheck = $this->rejectBlankCellsOverwritingExistingDays($shopId, $blankCells);
+        if ($overwriteCheck !== null) {
+            return $overwriteCheck;
         }
 
         $startedTransaction = false;
@@ -684,6 +712,123 @@ class RecordService
         return [
             'success' => true,
             'message' => 'แก้ไขรายการเรียบร้อยแล้ว',
+        ];
+    }
+
+    /**
+     * ข้อมูลของวันเดียว — ไว้ให้ฟอร์มเติมค่าเดิมก่อนให้ผู้ใช้แก้
+     *
+     * ⚠️ จำเป็นเพราะการบันทึกเป็น upsert ที่เขียนทับทุกช่องเสมอ ถ้าฟอร์มไม่เติมโน้ตเดิม
+     * กลับมา การแก้แค่ยอดขายจะลบโน้ตของวันนั้นทิ้งไปด้วย (หน้าประวัติกับตารางกรอก
+     * หลายวันเติมค่าเดิมอยู่แล้ว — ฟอร์มหลักเป็นจุดเดียวที่ตกหล่น)
+     *
+     * @return array{success:bool,data?:array<string,mixed>|null,error?:string}
+     */
+    /**
+     * ปฏิเสธการนำเข้าเมื่อ "ช่องว่างในไฟล์" จะไปทับวันที่มีข้อมูลอยู่แล้ว
+     *
+     * กติกา "ช่องว่าง = 0" ใช้กับวันใหม่ (ไม่ได้ยิงแอด/ไม่มียอด เป็นเรื่องปกติ) แต่ถ้าวันนั้น
+     * มีตัวเลขอยู่แล้ว การเขียนทับด้วย 0 เกือบทุกครั้งคืออุบัติเหตุตอนแก้ไฟล์ใน Excel
+     * — ตัดสินแล้วว่าให้ปฏิเสธทั้งไฟล์พร้อมบอกแถว ดีกว่าลบยอดจริงแล้วรายงานว่าสำเร็จ
+     *
+     * ผู้ใช้ที่ตั้งใจให้เป็น 0 จริง ๆ ยังพิมพ์ 0 ลงไปได้ตามปกติ
+     *
+     * @param array<string,array{row_number:int,revenue:bool,ad_cost:bool}> $blankCells
+     * @return array{success:bool,error:string}|null null = ผ่าน
+     */
+    private function rejectBlankCellsOverwritingExistingDays(int $shopId, array $blankCells): ?array
+    {
+        if ($blankCells === []) {
+            return null;
+        }
+
+        $dates = array_keys($blankCells);
+        sort($dates);
+
+        try {
+            $existing = $this->recordRepository->getByDateRange($shopId, $dates[0], $dates[count($dates) - 1]);
+        } catch (Throwable $exception) {
+            error_log('[record] blank-cell overwrite check failed: ' . $exception->getMessage());
+
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถตรวจสอบข้อมูลเดิมได้ กรุณาลองใหม่อีกครั้ง',
+            ];
+        }
+
+        $existingByDate = [];
+        foreach ($existing as $row) {
+            $existingByDate[(string)($row['record_date'] ?? '')] = $row;
+        }
+
+        // ไล่ตามลำดับวัน เพื่อให้รายงานแถวแรกที่มีปัญหาเสมอ (ผลลัพธ์คาดเดาได้)
+        foreach ($dates as $date) {
+            $row = $existingByDate[$date] ?? null;
+            if ($row === null) {
+                continue;
+            }
+
+            $blank = $blankCells[$date];
+            $fields = [];
+            if ($blank['revenue']) {
+                $fields[] = 'รายได้ (มียอด ' . number_format((float)($row['revenue'] ?? 0), 2) . ' อยู่แล้ว)';
+            }
+            if ($blank['ad_cost']) {
+                $fields[] = 'ค่าแอด (มียอด ' . number_format((float)($row['ad_cost'] ?? 0), 2) . ' อยู่แล้ว)';
+            }
+
+            return [
+                'success' => false,
+                'error' => 'แถวที่ ' . $blank['row_number'] . ': เว้นช่อง' . implode(' และ ', $fields)
+                    . ' — วันที่ ' . $date . ' มีข้อมูลอยู่แล้ว ระบบไม่นำเข้าทั้งไฟล์เพื่อไม่ให้ยอดเดิมหาย '
+                    . 'ถ้าต้องการให้เป็น 0 จริง ๆ กรุณาพิมพ์ 0 ลงในช่องนั้น',
+            ];
+        }
+
+        return null;
+    }
+
+    public function getRecordForDate(int $userId, int $shopId, string $recordDate): array
+    {
+        if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
+            return [
+                'success' => false,
+                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+            ];
+        }
+
+        $date = trim($recordDate);
+        $dateObject = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if (!$dateObject || $dateObject->format('Y-m-d') !== $date) {
+            return [
+                'success' => false,
+                'error' => 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD',
+            ];
+        }
+
+        try {
+            $records = $this->recordRepository->getByDateRange($shopId, $date, $date);
+        } catch (Throwable $exception) {
+            error_log('[record] getRecordForDate failed: ' . $exception->getMessage());
+            return [
+                'success' => false,
+                'error' => 'ไม่สามารถโหลดข้อมูลของวันนี้ได้',
+            ];
+        }
+
+        $row = $records[0] ?? null;
+        if (!is_array($row)) {
+            return ['success' => true, 'data' => null];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'record_date' => (string)($row['record_date'] ?? $date),
+                'revenue' => (float)($row['revenue'] ?? 0),
+                'ad_cost' => (float)($row['ad_cost'] ?? 0),
+                'note' => (string)($row['note'] ?? ''),
+            ],
         ];
     }
 

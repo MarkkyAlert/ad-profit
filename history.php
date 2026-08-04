@@ -127,6 +127,7 @@ require __DIR__ . '/includes/header.php';
 
                                     <form action="<?= e(app_url('/api/records.php')) ?>" method="post" data-delete-form data-confirm="ยืนยันการลบรายการวันที่ <?= e(formatThaiDate($recordDate)) ?> ใช่หรือไม่?">
                                         <?= csrf_field() ?>
+        <?= shop_context_field($shopId) ?>
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
                                         <input type="hidden" name="record_id" value="<?= e((string)$recordId) ?>">
@@ -167,6 +168,7 @@ require __DIR__ . '/includes/header.php';
 
         <form action="<?= e(app_url('/api/records.php')) ?>" method="post" class="grid gap-4 md:grid-cols-2">
             <?= csrf_field() ?>
+        <?= shop_context_field($shopId) ?>
             <input type="hidden" name="action" value="update">
             <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
             <input type="hidden" name="record_id" id="edit-record-id" value="">

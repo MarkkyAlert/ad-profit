@@ -35,6 +35,10 @@ ensure_post_request_or_respond($wantsJson, $redirectPath);
 ensure_form_content_type_or_respond($wantsJson, $redirectPath);
 ensure_post_body_not_truncated_or_respond($wantsJson, $redirectPath);
 
+// ฟอร์มถูกเรนเดอร์ให้ร้านไหน ต้องตรงกับร้านที่ session ชี้อยู่ตอนนี้
+// (เปิดหน้าค้างไว้ สลับร้านในอีกแท็บ แล้วกดบันทึก = ข้อมูลลงผิดร้าน)
+ensure_shop_context_or_respond($wantsJson, $redirectPath, $shopId);
+
 if ($action === 'upsert') {
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));
 

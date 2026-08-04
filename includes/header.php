@@ -588,11 +588,14 @@ $flashError = get_flash('error');
                         <select name="shop_id" aria-label="เลือกร้านค้า" onchange="this.form.submit()" class="w-full sm:w-48 lg:w-56 rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 sm:py-1.5 text-sm text-slate-300 font-medium shadow-sm hover:border-indigo-500/50 transition-colors">
                             <?php foreach ($headerShops as $shop): ?>
                                 <?php
-                                $shopId = (int)($shop['id'] ?? 0);
+                                // ⚠️ ห้ามใช้ชื่อ $shopId — header.php ถูก include กลางหน้า
+                                // ตัวแปรจึงอยู่ scope เดียวกับเพจ การใช้ชื่อซ้ำจะทับค่าของเพจ
+                                // ด้วย "ร้านสุดท้ายในรายการ" แล้วโค้ดหลังจากนี้ใช้ค่าผิดทั้งหมด
+                                $switcherShopId = (int)($shop['id'] ?? 0);
                                 $shopNameFull = (string)($shop['name'] ?? 'ร้านค้า');
                                 $shopNameShort = mb_strlen($shopNameFull) > 30 ? mb_substr($shopNameFull, 0, 27) . '...' : $shopNameFull;
                                 ?>
-                                <option value="<?= e((string)$shopId) ?>" <?= $shopId === $currentShopId ? 'selected' : '' ?>>
+                                <option value="<?= e((string)$switcherShopId) ?>" <?= $switcherShopId === $currentShopId ? 'selected' : '' ?>>
                                     🏪 <?= e($shopNameShort) ?>
                                 </option>
                             <?php endforeach; ?>

@@ -629,6 +629,7 @@ require __DIR__ . '/includes/header.php';
 
         <form id="delete-goal-form" action="<?= e(app_url('/api/goals.php')) ?>" method="post" class="mt-4" data-confirm="ยืนยันการลบเป้าหมายของเดือน <?= e($goalMonthLabel) ?> ใช่หรือไม่?">
             <?= csrf_field() ?>
+        <?= shop_context_field($shopId) ?>
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="goal_month" value="<?= e($goalMonth) ?>">
             <input type="hidden" name="redirect_to" value="<?= e($goalRedirectTo) ?>">
@@ -649,6 +650,7 @@ require __DIR__ . '/includes/header.php';
 
         <form action="<?= e(app_url('/api/goals.php')) ?>" method="post" class="grid gap-4 md:grid-cols-2">
             <?= csrf_field() ?>
+        <?= shop_context_field($shopId) ?>
             <input type="hidden" name="action" value="upsert">
             <input type="hidden" name="goal_month" value="<?= e($goalMonth) ?>">
             <input type="hidden" name="redirect_to" value="<?= e($goalRedirectTo) ?>">

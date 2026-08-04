@@ -386,6 +386,48 @@ function ensure_valid_csrf_or_respond(bool $wantsJson, string $redirectUrl, ?str
     }
 }
 
+/**
+ * ช่องซ่อนบอกว่า "หน้านี้ถูกเรนเดอร์ให้ร้านไหน"
+ *
+ * ทุก endpoint ที่เขียนข้อมูลอ่านรหัสร้านจาก `$_SESSION['current_shop_id']` ซึ่งเปลี่ยนได้
+ * จากอีกแท็บ — เปิดหน้าบันทึกของร้าน A ค้างไว้ สลับไปร้าน B ในอีกแท็บ แล้วกลับมากดบันทึก
+ * ข้อมูลจะลงร้าน B และถ้าร้าน B มีวันนั้นอยู่แล้ว ตัวเลขจริงจะถูกเขียนทับ พร้อมข้อความ
+ * "บันทึกเรียบร้อยแล้ว" สีเขียว
+ *
+ * ไม่ใช่กลไกความปลอดภัย (สิทธิ์ยังตรวจที่ Service เหมือนเดิม) — เป็นการกันอุบัติเหตุ
+ * ของผู้ใช้กับร้านของตัวเอง
+ */
+function shop_context_field(int $shopId): string
+{
+    return '<input type="hidden" name="shop_context_id" value="' . (int)$shopId . '">';
+}
+
+/**
+ * ปฏิเสธเมื่อฟอร์มถูกเรนเดอร์ให้ร้านหนึ่ง แต่ session ชี้ไปอีกร้านแล้ว
+ *
+ * ฟอร์มที่ไม่ได้ส่งค่านี้มา (หน้าที่ค้างอยู่ตั้งแต่ก่อนอัปเดต) ทำงานเหมือนเดิม —
+ * ตั้งใจให้ผ่อนผัน เพราะกันอุบัติเหตุ ไม่ได้กันการโจมตี
+ */
+function ensure_shop_context_or_respond(bool $wantsJson, string $redirectUrl, int $sessionShopId): void
+{
+    $submittedShopId = isset($_POST['shop_context_id']) ? (int)$_POST['shop_context_id'] : 0;
+
+    if ($submittedShopId <= 0 || $submittedShopId === $sessionShopId) {
+        return;
+    }
+
+    api_respond(
+        [
+            'success' => false,
+            'error' => 'หน้านี้เปิดค้างไว้ตอนที่คุณอยู่อีกร้านหนึ่ง '
+                . 'ระบบไม่บันทึกให้เพื่อไม่ให้ข้อมูลลงผิดร้าน กรุณาโหลดหน้านี้ใหม่แล้วลองอีกครั้ง',
+        ],
+        409,
+        $redirectUrl,
+        $wantsJson
+    );
+}
+
 function normalize_month_input(?string $month, ?string $fallback = null): string
 {
     $normalizedFallback = is_string($fallback) && preg_match('/^\d{4}-\d{2}$/', $fallback) === 1

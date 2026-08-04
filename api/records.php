@@ -21,6 +21,10 @@ ensure_post_body_not_truncated_or_respond($wantsJson, '/add-record.php');
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
+// ⚠️ ต้องอยู่ "หลัง" $shopId ถูกกำหนดค่า — ฟอร์มถูกเรนเดอร์ให้ร้านไหน ต้องตรงกับร้าน
+// ที่ session ชี้อยู่ตอนนี้ (เปิดหน้าค้างไว้ สลับร้านในอีกแท็บ แล้วกดบันทึก = ลงผิดร้าน)
+ensure_shop_context_or_respond($wantsJson, '/add-record.php', $shopId);
+
 $recordRepository = new RecordRepository($pdo);
 $shopRepository = new ShopRepository($pdo);
 $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
