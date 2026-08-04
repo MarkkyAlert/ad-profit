@@ -9,15 +9,8 @@ class AuthService
     /** bucket ที่ผูกกับ IP ล้วน — กัน password spraying ที่ bucket ต่ออีเมลจับไม่ได้ */
     private const LOGIN_IP_ACTION = 'login_ip';
 
-    /**
-     * hash ทิ้ง สำหรับเผาเวลาให้เท่ากับการ verify จริงเมื่อไม่พบอีเมล
-     *
-     * ⚠️ ต้องเป็น bcrypt hash ที่ถูกต้องจริง — password_verify() กับสตริงที่ไม่ใช่ hash
-     * จะคืน false ทันทีโดยไม่ทำงานอะไรเลย (วัดแล้ว 0.16 ms เทียบกับของจริง 268 ms)
-     * ซึ่งเท่ากับไม่ได้ปิดช่องเวลาเลย · สร้างจาก password_hash(random, PASSWORD_DEFAULT)
-     * และทิ้ง plaintext ไป จึงไม่มีรหัสผ่านใดตรงกับ hash นี้
-     */
-    private const DUMMY_PASSWORD_HASH = '$2y$12$EPlFLkxCgyuo7pqUid4y.eg4A7VynhfmBQtNIJzqPxb9E1mErtKg2';
+    /** cache ของ dummy hash ต่อ process — คิดครั้งเดียวแล้วใช้ซ้ำ */
+    private static ?string $dummyPasswordHash = null;
 
     private PDO $db;
     private UserRepository $userRepository;
@@ -169,7 +162,7 @@ class AuthService
         $user = $this->userRepository->findByEmail($normalizedEmail);
         if ($user === null) {
             // เผาเวลาเท่ากับการ verify จริง ไม่งั้นเวลาตอบบอกได้ว่าอีเมลไหนมีในระบบ
-            password_verify($password, self::DUMMY_PASSWORD_HASH);
+            password_verify($password, self::dummyPasswordHash());
             $this->markFailedLoginAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
@@ -480,6 +473,25 @@ class AuthService
         $_SESSION['last_activity_at'] = time();
         $_SESSION['current_shop_id'] = $shopId;
         $_SESSION['current_shop_name'] = $shopName;
+    }
+
+    /**
+     * hash ทิ้งสำหรับเผาเวลาให้เท่ากับการ verify จริงเมื่อไม่พบอีเมล
+     *
+     * ⚠️ ต้องสร้างด้วย PASSWORD_DEFAULT ตอน runtime ไม่ใช่ hardcode — cost ของ
+     * PASSWORD_DEFAULT ต่างกันตามเวอร์ชัน PHP (8.2/8.3 = 10 · 8.4+ = 12) การ hardcode
+     * cost 12 ทำให้บนเซิร์ฟเวอร์ PHP 8.3 เส้นทาง "ไม่มีอีเมลนี้" ช้ากว่าเส้นทางปกติ
+     * ~4 เท่า = ยังบอกใบ้ได้ว่าอีเมลไหนมีในระบบ แค่กลับทิศ
+     *
+     * plaintext ถูกทิ้งไปทันที จึงไม่มีรหัสผ่านใดตรงกับ hash นี้
+     */
+    private static function dummyPasswordHash(): string
+    {
+        if (self::$dummyPasswordHash === null) {
+            self::$dummyPasswordHash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
+        }
+
+        return self::$dummyPasswordHash;
     }
 
     /** นับความพยายามที่ล้มเหลวทั้ง bucket ต่อบัญชี และ bucket ต่อ IP */

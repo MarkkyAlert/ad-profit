@@ -1458,15 +1458,25 @@ class RecordService
                 ? $this->recordRepository->findByIdAndShopIdForUpdate($recordId, $shopId)
                 : $this->recordRepository->findByIdAndShopId($recordId, $shopId);
 
-            // ไม่มีแถวแล้ว = ผลลัพธ์ตรงกับที่ผู้ใช้ขอไปแล้ว → ตอบสำเร็จ (idempotent)
-            // กด back แล้ว submit ใหม่ หรือเน็ตกระตุกแล้ว retry ไม่ควรได้ error แดง
-            // ownership ถูกตรวจไปแล้วด้านบน (shopId จาก session + userCanAccessShop)
-            // และ findByIdAndShopId scope ด้วย shop_id จึงไม่รั่วข้ามร้าน
             if ($existingRecord === null) {
+                // ⚠️ ไม่เจอในร้านปัจจุบัน ยังสรุปไม่ได้ว่า "ลบไปแล้ว" — shopId มาจาก session
+                // ซึ่งสลับได้ในอีกแท็บ ถ้าแถวยังอยู่ในร้านอื่นของผู้ใช้ ต้องตอบว่าล้มเหลว
+                // ไม่งั้นผู้ใช้เห็น flash เขียวทั้งที่ข้อมูลยังอยู่และยอดรวมยังนับต่อ
+                $existsElsewhere = $this->recordRepository->existsByIdAndUserId($recordId, $userId);
+
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                     $this->db->commit();
                 }
 
+                if ($existsElsewhere) {
+                    return [
+                        'success' => false,
+                        'error' => 'รายการนี้อยู่ในร้านอื่น กรุณาสลับไปร้านนั้นก่อนลบ',
+                    ];
+                }
+
+                // ไม่มีอยู่ในร้านไหนของผู้ใช้เลย = ผลลัพธ์ตรงกับที่ขอไปแล้ว → idempotent
+                // (รายการของผู้ใช้อื่นก็มาทางนี้ ตอบเหมือนกันทุกไบต์ จึงไม่บอกใบ้ว่ามีอยู่จริงไหม)
                 return [
                     'success' => true,
                     'message' => 'ลบรายการเรียบร้อยแล้ว',

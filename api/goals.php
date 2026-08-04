@@ -32,8 +32,8 @@ $redirectPath = resolve_safe_redirect_path(
 // (เดิมตรวจอยู่ในแต่ละ branch ซึ่งไม่มีวันทำงาน เพราะ $action อ่านจาก $_POST ที่ว่างเปล่า
 //  เมื่อเป็น GET หรือ JSON → ตกไป "Invalid action" 404 แทนที่จะเป็น 405/415)
 ensure_post_request_or_respond($wantsJson, $redirectPath);
-ensure_post_body_not_truncated_or_respond($wantsJson, $redirectPath);
 ensure_form_content_type_or_respond($wantsJson, $redirectPath);
+ensure_post_body_not_truncated_or_respond($wantsJson, $redirectPath);
 
 if ($action === 'upsert') {
     ensure_valid_csrf_or_respond($wantsJson, $redirectPath, (string)($_POST['csrf_token'] ?? ''));

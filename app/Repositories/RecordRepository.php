@@ -120,6 +120,30 @@ class RecordRepository
         return $stmt->fetchAll();
     }
 
+    /**
+     * รายการนี้ยังมีอยู่ในร้านใดร้านหนึ่งของผู้ใช้หรือไม่ (ไม่จำกัดร้านปัจจุบัน)
+     *
+     * ใช้แยก "ลบไปแล้วจริง" ออกจาก "อยู่ในร้านอื่นของตัวเอง" — เคสหลังเกิดเมื่อ session
+     * ถูกสลับร้านในอีกแท็บ ถ้าตอบว่าลบสำเร็จผู้ใช้จะเชื่อว่าแถวหายทั้งที่ยังอยู่
+     */
+    public function existsByIdAndUserId(int $recordId, int $userId): bool
+    {
+        $sql = 'SELECT 1
+                FROM daily_records dr
+                JOIN shops s ON s.id = dr.shop_id
+                WHERE dr.id = :record_id
+                  AND s.user_id = :user_id
+                LIMIT 1';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':record_id' => $recordId,
+            ':user_id' => $userId,
+        ]);
+
+        return $stmt->fetchColumn() !== false;
+    }
+
     public function findByIdAndShopId(int $recordId, int $shopId): ?array
     {
         $sql = 'SELECT id, shop_id, record_date, revenue, ad_cost, note, created_at, updated_at

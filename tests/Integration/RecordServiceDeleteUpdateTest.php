@@ -199,4 +199,37 @@ final class RecordServiceDeleteUpdateTest extends IntegrationTestCase
 
         $this->assertFalse($result['success']);
     }
+
+    /**
+     * ⭐ ลบ record ของ "ร้านอื่นของตัวเอง" ต้องไม่ตอบว่าสำเร็จ
+     *
+     * shopId มาจาก session ซึ่งเปลี่ยนได้ระหว่างที่แท็บอื่นเปิดค้าง: เปิดประวัติร้าน A ไว้
+     * → สลับไปร้าน B อีกแท็บ → กลับมากดลบที่แท็บ A → record ไม่อยู่ในร้าน B
+     * ถ้าตอบ idempotent success ผู้ใช้จะเชื่อว่าลบแล้วทั้งที่แถวยังอยู่ และยอดรวมยังนับต่อ
+     */
+    public function testDeletingARecordThatLivesInAnotherOwnShopFails(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+        $recordId = $this->seedRecord($shopA);
+
+        // session ชี้ร้าน B แล้ว แต่กดลบจากแท็บของร้าน A
+        $result = $this->makeService()->deleteRecord($userId, $shopB, $recordId);
+
+        $this->assertFalse($result['success'], 'ตอบว่าลบสำเร็จทั้งที่แถวยังอยู่');
+        $this->assertSame(1, $this->countRows('daily_records'));
+    }
+
+    /** ลบซ้ำ (แถวไม่มีอยู่ในร้านไหนของผู้ใช้เลย) ยังต้อง idempotent เหมือนเดิม */
+    public function testDeletingAnAlreadyDeletedRecordIsStillIdempotent(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $recordId = $this->seedRecord($shopId);
+
+        $service = $this->makeService();
+        $this->assertTrue($service->deleteRecord($userId, $shopId, $recordId)['success']);
+        $this->assertTrue($service->deleteRecord($userId, $shopId, $recordId)['success']);
+    }
 }

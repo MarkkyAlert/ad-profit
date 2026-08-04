@@ -342,13 +342,4 @@ final class AuthServiceLoginTest extends IntegrationTestCase
         $this->assertFalse($service->login('attacker@example.com', 'password123', self::IP)['success']);
     }
 
-    /** hash ที่ใช้เผาเวลาต้องเป็น bcrypt จริง ไม่งั้น password_verify คืน false ทันทีโดยไม่ทำงาน */
-    public function testDummyHashUsedForTimingIsARealBcryptHash(): void
-    {
-        $reflection = new \ReflectionClass(AuthService::class);
-        $dummy = (string)$reflection->getConstant('DUMMY_PASSWORD_HASH');
-
-        $this->assertSame('bcrypt', password_get_info($dummy)['algoName']);
-        $this->assertFalse(password_verify('any-password', $dummy));
-    }
 }
