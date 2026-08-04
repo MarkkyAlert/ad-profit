@@ -13,6 +13,9 @@ class RecordService
     /** เพดานของ revenue/ad_cost — ตรงกับ DECIMAL(12,2) ใน database/schema.sql */
     public const MAX_AMOUNT = 9999999999.99;
 
+    /** จำนวนทศนิยมที่คอลัมน์เก็บได้ — daily_records/monthly_goals เป็น DECIMAL(12,2) */
+    public const AMOUNT_DECIMALS = 2;
+
     /**
      * จำนวนวันขั้นต่ำที่ถือว่า "พอจะสรุปแนวโน้มของวันนั้นในสัปดาห์ได้"
      *
@@ -332,6 +335,25 @@ class RecordService
      *
      * เดิมบล็อกนี้ถูกคัดลอกไว้ 4 ที่ — รวมไว้จุดเดียวเพื่อไม่ให้แก้ที่หนึ่งแล้วลืมอีกสามที่
      */
+    /**
+     * ค่าเงินนี้มีทศนิยมเกินที่คอลัมน์เก็บได้ไหม (DECIMAL(12,2) = 2 ตำแหน่ง)
+     *
+     * ⚠️ ห้ามเทียบสตริงตรง ๆ — 0.1 + 0.2 ในเลขทศนิยมฐานสองได้ 0.30000000000000004
+     * ค่าที่ผู้ใช้ตั้งใจว่าเป็น 2 ตำแหน่งจะถูกปฏิเสธผิด ๆ · เทียบกับค่าที่ปัดแล้วแทน
+     * โดยเผื่อคลาดเคลื่อนระดับ floating point ไว้
+     *
+     * ที่ต้องมีเพราะ MySQL จะปัดให้เงียบ ๆ แล้วระบบรายงานว่า "บันทึกเรียบร้อยแล้ว"
+     * ทั้งที่ตัวเลขที่เก็บไม่ใช่ตัวเลขที่ผู้ใช้กรอก (และถ้าไม่ใช่ strict mode ก็ตัดเงียบเช่นกัน)
+     */
+    public static function hasTooManyDecimals(float $amount): bool
+    {
+        if (!is_finite($amount)) {
+            return false;
+        }
+
+        return abs($amount - round($amount, self::AMOUNT_DECIMALS)) > 1e-9;
+    }
+
     private function resolveToday(?string $today): string
     {
         $input = is_string($today) ? trim($today) : '';
@@ -1705,6 +1727,14 @@ class RecordService
             return [
                 'success' => false,
                 'error' => 'รายได้และค่าแอดต้องไม่เกิน ' . number_format(self::MAX_AMOUNT, 2),
+            ];
+        }
+
+        // MySQL จะปัดให้เองแล้วรายงานว่าสำเร็จ — ตัวเลขที่เก็บจะไม่ใช่ตัวเลขที่ผู้ใช้กรอก
+        if (self::hasTooManyDecimals($revenue) || self::hasTooManyDecimals($adCost)) {
+            return [
+                'success' => false,
+                'error' => 'รายได้และค่าแอดใส่ทศนิยมได้ไม่เกิน ' . self::AMOUNT_DECIMALS . ' ตำแหน่ง',
             ];
         }
 

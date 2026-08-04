@@ -8,7 +8,9 @@ require_once __DIR__ . '/includes/auth.php';
 requireAuth();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
-$shopId = (int)($_SESSION['current_shop_id'] ?? 0);
+// ⚠️ ต้องซ่อม session ก่อนดึงข้อมูล — ร้านอาจถูกลบจากอุปกรณ์อื่นไปแล้ว
+// (เดิมการซ่อมอยู่ใน header.php ซึ่ง include ท้ายไฟล์ หน้าจึงขึ้น "ไม่มีสิทธิ์" + ฿0 หนึ่งครั้ง)
+$shopId = resolve_current_shop_id($pdo, $userId);
 $selectedRangeType = (string)($_GET['range'] ?? 'month_this');
 $customStartDateInput = isset($_GET['start_date']) ? trim((string)$_GET['start_date']) : null;
 $customEndDateInput = isset($_GET['end_date']) ? trim((string)$_GET['end_date']) : null;

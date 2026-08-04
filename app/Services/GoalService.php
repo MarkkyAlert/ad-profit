@@ -71,6 +71,14 @@ class GoalService
                     'error' => $label . 'ต้องไม่เกิน ' . number_format(self::MAX_AMOUNT, 2),
                 ];
             }
+
+            // คอลัมน์ชนิดเดียวกับ daily_records — ใช้เกณฑ์ทศนิยมตัวเดียวกัน
+            if (RecordService::hasTooManyDecimals($value)) {
+                return [
+                    'success' => false,
+                    'error' => $label . 'ใส่ทศนิยมได้ไม่เกิน ' . RecordService::AMOUNT_DECIMALS . ' ตำแหน่ง',
+                ];
+            }
         }
 
         if ($targetRevenue === null && $targetProfit === null) {

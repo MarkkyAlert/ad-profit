@@ -90,15 +90,6 @@ class ShopService
             ];
         }
 
-        // ตรวจเบื้องต้นนอกล็อก เพื่อตอบเร็วโดยไม่ต้องเปิดทรานแซกชัน
-        // (ค่าที่ใช้ตัดสินจริงคือค่าที่อ่านใต้ล็อกด้านล่าง)
-        if ($this->shopRepository->countByUserId($userId) >= self::MAX_SHOPS_PER_USER) {
-            return [
-                'success' => false,
-                'error' => self::SHOP_LIMIT_ERROR,
-            ];
-        }
-
         $startedTransaction = false;
         $canLockRows = false;
         try {
@@ -111,23 +102,14 @@ class ShopService
                 $canLockRows = $this->db->inTransaction();
                 if ($canLockRows) {
                     $this->userRepository->lockForUpdate($userId);
-
-                    // ต้องเทียบซ้ำใต้ล็อก — เดิมเรียกแล้วทิ้งค่าไป ทำให้ค่าที่ใช้ตัดสินเป็นค่าที่
-                    // อ่านก่อนเข้าล็อก สองแท็บที่กดพร้อมกันตอนมี 19-20 ร้านจึงทะลุ 20 ได้
-                    // (ไม่มี constraint ระดับ DB มากั้น)
-                    if ($this->shopRepository->countByUserIdForUpdate($userId) >= self::MAX_SHOPS_PER_USER) {
-                        if ($startedTransaction && $this->db->inTransaction()) {
-                            $this->db->rollBack();
-                        }
-
-                        return [
-                            'success' => false,
-                            'error' => self::SHOP_LIMIT_ERROR,
-                        ];
-                    }
                 }
             }
 
+            // ⭐ เช็ก "ชื่อซ้ำ" ก่อนเช็กโควตาเสมอ
+            //
+            // ชื่อที่มีอยู่แล้ว = สลับไปร้านนั้นให้ ไม่ได้สร้างแถวใหม่ โควตาจึงไม่เกี่ยว
+            // เดิมเช็กโควตาก่อน ทำให้ผู้ใช้ที่มีครบ 20 ร้านพิมพ์ชื่อร้านที่ตัวเองมีอยู่แล้ว
+            // ได้ข้อความ "สร้างร้านเพิ่มไม่ได้ (จำกัด 20 ร้าน)" ทั้งที่ไม่ได้จะสร้างอะไรเลย
             $existingShop = $this->shopRepository->findByNameAndUserId($shopName, $userId);
             if ($existingShop !== null) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
@@ -138,6 +120,23 @@ class ShopService
                     'success' => true,
                     'shop_id' => (int)($existingShop['id'] ?? 0),
                     'already_exists' => true,
+                ];
+            }
+
+            // โควตา — อ่านใต้ล็อกเมื่อล็อกได้ (สองแท็บที่กดพร้อมกันตอนมี 19-20 ร้าน
+            // เคยทะลุ 20 ได้ เพราะไม่มี constraint ระดับ DB มากั้น)
+            $shopCount = $canLockRows
+                ? $this->shopRepository->countByUserIdForUpdate($userId)
+                : $this->shopRepository->countByUserId($userId);
+
+            if ($shopCount >= self::MAX_SHOPS_PER_USER) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return [
+                    'success' => false,
+                    'error' => self::SHOP_LIMIT_ERROR,
                 ];
             }
 

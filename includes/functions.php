@@ -397,6 +397,73 @@ function ensure_valid_csrf_or_respond(bool $wantsJson, string $redirectUrl, ?str
  * ไม่ใช่กลไกความปลอดภัย (สิทธิ์ยังตรวจที่ Service เหมือนเดิม) — เป็นการกันอุบัติเหตุ
  * ของผู้ใช้กับร้านของตัวเอง
  */
+/**
+ * รายการร้านของผู้ใช้ + ร้านที่กำลังใช้งาน พร้อม "ซ่อม" session ให้ถ้าชี้ไปร้านที่หายไปแล้ว
+ *
+ * ⚠️ ทุกเพจต้องเรียกตัวนี้ "ก่อน" ดึงข้อมูลใด ๆ
+ * เดิมการซ่อมอยู่ใน `includes/header.php` ซึ่งถูก include ท้ายไฟล์ — หน้าเว็บจึงยิง query
+ * ด้วยรหัสร้านที่ตายแล้วไปก่อน ได้ผลลัพธ์ "คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้" กับยอด ฿0
+ * ทั้งหน้า แล้วค่อยซ่อม session ทีหลัง (รีเฟรชอีกครั้งถึงจะปกติ) — เกิดจริงเมื่อผู้ใช้
+ * ลบร้านจากอีกอุปกรณ์/อีกเบราว์เซอร์ที่ล็อกอินบัญชีเดียวกัน
+ *
+ * cache ต่อ request เพื่อไม่ให้ header.php ยิง query ซ้ำอีกรอบ
+ *
+ * @return array{shops:array<int,array<string,mixed>>,current_shop:array<string,mixed>|null,switched:bool}
+ */
+function shop_context_for_user(PDO $pdo, int $userId): array
+{
+    static $cache = [];
+
+    if (isset($cache[$userId])) {
+        return $cache[$userId];
+    }
+
+    $requestedShopId = (int)($_SESSION['current_shop_id'] ?? 0);
+    $context = (new ShopService(new ShopRepository($pdo), new UserRepository($pdo)))
+        ->getShopContext($userId, $requestedShopId > 0 ? $requestedShopId : null);
+
+    $shops = is_array($context['shops'] ?? null) ? array_values((array)$context['shops']) : [];
+    $currentShop = is_array($context['current_shop'] ?? null) ? (array)$context['current_shop'] : null;
+    $currentShopId = $currentShop !== null ? (int)($currentShop['id'] ?? 0) : 0;
+
+    // ร้านที่ session ชี้อยู่หายไป (ถูกลบจากอุปกรณ์อื่น) แล้วระบบเลือกร้านอื่นให้แทน
+    $switched = $requestedShopId > 0 && $currentShopId > 0 && $currentShopId !== $requestedShopId;
+
+    if ($currentShop !== null) {
+        $_SESSION['current_shop_id'] = $currentShopId;
+        $_SESSION['current_shop_name'] = (string)($currentShop['name'] ?? '');
+    }
+
+    $cache[$userId] = [
+        'shops' => $shops,
+        'current_shop' => $currentShop,
+        'switched' => $switched,
+    ];
+
+    return $cache[$userId];
+}
+
+/**
+ * รหัสร้านที่กำลังใช้งาน หลังซ่อม session แล้ว — สิ่งที่เพจควรใช้แทนการอ่าน session ตรง ๆ
+ *
+ * บอกผู้ใช้ด้วยว่าถูกสลับร้านให้ ไม่งั้นจะงงว่าทำไมตัวเลขเปลี่ยนไปทั้งหน้า
+ */
+function resolve_current_shop_id(PDO $pdo, int $userId): int
+{
+    $context = shop_context_for_user($pdo, $userId);
+
+    if (($context['switched'] ?? false) === true) {
+        $shopName = (string)($context['current_shop']['name'] ?? '');
+        set_flash(
+            'error',
+            'ร้านที่คุณเปิดค้างไว้ไม่มีอยู่แล้ว (อาจถูกลบจากอุปกรณ์อื่น) '
+            . 'ระบบสลับไปที่ร้าน "' . $shopName . '" ให้แล้ว'
+        );
+    }
+
+    return $context['current_shop'] !== null ? (int)($context['current_shop']['id'] ?? 0) : 0;
+}
+
 function shop_context_field(int $shopId): string
 {
     return '<input type="hidden" name="shop_context_id" value="' . (int)$shopId . '">';

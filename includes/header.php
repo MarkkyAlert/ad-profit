@@ -11,10 +11,9 @@ $headerShops = [];
 
 if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0) {
     $headerUserId = (int)$_SESSION['user_id'];
-    $headerShopRepository = new ShopRepository($pdo);
-    $headerUserRepository = new UserRepository($pdo);
-    $headerShopService = new ShopService($headerShopRepository, $headerUserRepository);
-    $shopContext = $headerShopService->getShopContext($headerUserId, $currentShopId > 0 ? $currentShopId : null);
+    // ใช้ผลที่เพจ resolve ไว้แล้ว (cache ต่อ request) — ไม่ยิง query ซ้ำ
+    // และไม่ใช่จุดที่ "ซ่อม" session อีกต่อไป เพราะซ่อมช้าไปหนึ่งจังหวะเสมอ
+    $shopContext = shop_context_for_user($pdo, $headerUserId);
 
     $headerShops = is_array($shopContext['shops'] ?? null) ? (array)$shopContext['shops'] : [];
     $currentShop = is_array($shopContext['current_shop'] ?? null) ? (array)$shopContext['current_shop'] : null;

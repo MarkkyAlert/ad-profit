@@ -8,22 +8,16 @@ require_once __DIR__ . '/includes/auth.php';
 requireAuth();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
-$currentSessionShopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
 $shopRepository = new ShopRepository($pdo);
 $userRepository = new UserRepository($pdo);
 $shopService = new ShopService($shopRepository, $userRepository);
 
-$shopContext = $shopService->getShopContext($userId, $currentSessionShopId > 0 ? $currentSessionShopId : null);
+// helper เดียวกับทุกเพจ (ซ่อม session + cache ต่อ request) — เดิมหน้านี้ทำเองซ้ำ
+$currentShopId = resolve_current_shop_id($pdo, $userId);
+$shopContext = shop_context_for_user($pdo, $userId);
 $shops = is_array($shopContext['shops'] ?? null) ? array_values((array)$shopContext['shops']) : [];
 $currentShop = is_array($shopContext['current_shop'] ?? null) ? (array)$shopContext['current_shop'] : null;
-
-if ($currentShop !== null) {
-    $_SESSION['current_shop_id'] = (int)($currentShop['id'] ?? 0);
-    $_SESSION['current_shop_name'] = (string)($currentShop['name'] ?? '');
-}
-
-$currentShopId = (int)($_SESSION['current_shop_id'] ?? 0);
 $currentShopName = (string)($_SESSION['current_shop_name'] ?? 'ร้านค้าของฉัน');
 $shopCount = count($shops);
 $canDeleteShop = $shopService->canDeleteShop($userId);

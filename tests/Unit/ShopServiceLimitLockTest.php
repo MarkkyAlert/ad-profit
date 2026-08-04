@@ -51,6 +51,45 @@ final class ShopServiceLimitLockTest extends TestCase
         $this->assertStringContainsString('20', $result['error']);
     }
 
+    /**
+     * ⭐ ชื่อที่มีอยู่แล้ว = สลับไปร้านนั้น ไม่ใช่การสร้างใหม่ → โควตาไม่ควรมาขวาง
+     *
+     * เดิมเช็กโควตาก่อนเช็กชื่อซ้ำ ผู้ใช้ที่มีครบ 20 ร้านจึงพิมพ์ชื่อร้านที่ตัวเองมีอยู่แล้ว
+     * ไม่ได้เลย ได้ข้อความ "สร้างร้านเพิ่มไม่ได้" ทั้งที่ไม่มีแถวใหม่เกิดขึ้นสักแถว
+     */
+    public function testExistingShopNameStillSwitchesWhenAlreadyAtTheLimit(): void
+    {
+        $shopRepository = $this->createStub(ShopRepository::class);
+        $shopRepository->method('countByUserId')->willReturn(ShopService::MAX_SHOPS_PER_USER);
+        $shopRepository->method('countByUserIdForUpdate')->willReturn(ShopService::MAX_SHOPS_PER_USER);
+        $shopRepository->method('findByNameAndUserId')->willReturn(['id' => 7, 'name' => 'ร้านหลัก']);
+
+        $pdo = $this->createStub(PDO::class);
+        $pdo->method('inTransaction')->willReturn(true);
+        $pdo->method('beginTransaction')->willReturn(true);
+        $pdo->method('commit')->willReturn(true);
+        $pdo->method('rollBack')->willReturn(true);
+
+        $result = (new ShopService($shopRepository, $this->createStub(UserRepository::class), $pdo))
+            ->createShop(1, 'ร้านหลัก');
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertTrue($result['already_exists']);
+        $this->assertSame(7, $result['shop_id']);
+    }
+
+    /** ชื่อใหม่จริง ๆ ตอนครบโควตา ยังต้องถูกปฏิเสธเหมือนเดิม */
+    public function testABrandNewNameIsStillRejectedAtTheLimit(): void
+    {
+        $result = $this->makeService(
+            ShopService::MAX_SHOPS_PER_USER,
+            ShopService::MAX_SHOPS_PER_USER
+        )->createShop(1, 'ร้านที่ยังไม่มี');
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('20', $result['error']);
+    }
+
     public function testAllowsCreationWhenStillUnderTheLimitUnderLock(): void
     {
         $result = $this->makeService(18, 19)->createShop(1, 'ร้านใหม่');
