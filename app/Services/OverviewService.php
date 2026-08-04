@@ -121,7 +121,22 @@ class OverviewService
         }
 
         // จัดอันดับด้วย "กำไร" ไม่ใช่รายได้ — ร้านรายได้สูงแต่ค่าแอดหนักไม่ควรอยู่บนสุด
-        usort($rows, static fn(array $left, array $right): int => $right['profit'] <=> $left['profit']);
+        //
+        // ⚠️ ร้านที่ยังไม่มีข้อมูลเลย (days_count = 0) ต้องตกไปท้ายตารางเสมอ ไม่ว่ากำไรจะเป็น
+        // เท่าไหร่ — กำไร 0.0 ของร้านที่ไม่ได้กรอกอะไร "มากกว่า" ร้านที่ขาดทุนจริงเชิงตัวเลข
+        // ทำให้เดือนที่ทุกร้านขาดทุน ร้านที่ไม่ได้กรอกขึ้นอันดับ 1 พร้อมเลข ฿0 ทั้งแถว
+        // ร้านที่ไม่มีข้อมูลคือ "ยังไม่รู้" ไม่ใช่ "ดีที่สุด"
+        //
+        // เกณฑ์รองไว้กันอันดับสลับไปมาเวลากำไรเท่ากันเป๊ะ (query ไม่การันตีลำดับ):
+        // กรอกครบกว่าอยู่บน → เท่ากันอีกเรียงตามชื่อ
+        usort($rows, static function (array $left, array $right): int {
+            $leftHasData = ((int)$left['days_count']) > 0;
+            $rightHasData = ((int)$right['days_count']) > 0;
+
+            return [$rightHasData, $right['profit'], $right['days_count']]
+                <=> [$leftHasData, $left['profit'], $left['days_count']]
+                ?: strcmp((string)$left['shop_name'], (string)$right['shop_name']);
+        });
 
         return $rows;
     }

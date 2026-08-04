@@ -49,6 +49,46 @@ function formatPercent(?float $value): string
     return $value === null ? '–' : number_format($value, 1) . '%';
 }
 
+/**
+ * ป้าย "เปลี่ยนแปลงกี่ %" พร้อมลูกศรและสี — ใช้ร่วมกันทุกหน้า
+ *
+ * เดิมแต่ละหน้าเขียนเองแล้วออกมาไม่ตรงกัน: `annual.php`/`overview.php` (มุมรายปี)
+ * ถือว่า 0% เป็นกลาง แต่ `history.php`/`dashboard.php`/ตารางรายปีในหน้ารวมร้าน
+ * ใช้ `>= 0` จึงขึ้น "↑ 0.0%" สีเขียว ทั้งที่ยอดเท่าเดิมเป๊ะ
+ *
+ * ตัดสินจากค่า "หลังปัดทศนิยม 1 ตำแหน่ง" เพื่อให้ลูกศรกับตัวเลขที่เห็นตรงกันเสมอ
+ * (−0.04% ปัดแล้วเป็น 0.0% ต้องไม่ขึ้นลูกศรลงสีแดงคู่กับเลขศูนย์)
+ *
+ * @return array{text:string,class:string,direction:int} direction: 1 ขึ้น · 0 เท่าเดิม · -1 ลง
+ */
+function format_change_badge(?float $percent, string $nullText = '–'): array
+{
+    if ($percent === null) {
+        return ['text' => $nullText, 'class' => 'text-slate-400', 'direction' => 0];
+    }
+
+    $rounded = round($percent, 1);
+    $direction = $rounded <=> 0.0;
+
+    $arrow = match ($direction) {
+        1 => '↑ ',
+        -1 => '↓ ',
+        default => '',
+    };
+
+    $class = match ($direction) {
+        1 => 'text-green-400',
+        -1 => 'text-red-400',
+        default => 'text-slate-400',
+    };
+
+    return [
+        'text' => $arrow . number_format(abs($rounded), 1) . '%',
+        'class' => $class,
+        'direction' => $direction,
+    ];
+}
+
 function formatThaiDate(string $date): string
 {
     $dateObject = DateTime::createFromFormat('Y-m-d', $date);

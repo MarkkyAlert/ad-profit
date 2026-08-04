@@ -272,7 +272,14 @@ class OverviewDailyService
         }
 
         // จัดอันดับด้วยกำไร ให้สอดคล้องกับมุมเดือน/แดชบอร์ด
-        usort($rows, static fn(array $left, array $right): int => $right['profit'] <=> $left['profit']);
+        // กำไรเท่ากันเรียงตามชื่อ — query ไม่การันตีลำดับ อันดับจึงสลับไปมาระหว่างรีเฟรชได้
+        // (ที่นี่ไม่ต้องกันร้านที่ไม่มีข้อมูลเหมือน OverviewService เพราะ $shopTotals มาจาก
+        //  query ที่คืนเฉพาะร้านที่มีรายการในวันนั้นอยู่แล้ว)
+        usort(
+            $rows,
+            static fn(array $left, array $right): int => ($right['profit'] <=> $left['profit'])
+                ?: strcmp((string)$left['shop_name'], (string)$right['shop_name'])
+        );
 
         return $rows;
     }

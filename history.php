@@ -107,16 +107,8 @@ require __DIR__ . '/includes/header.php';
                             <td class="px-3 py-2 <?= $profit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($profit)) ?></td>
                             <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($roas)) ?></td>
                             <td class="px-3 py-2 font-medium">
-                                <?php if ($comparePercent === null): ?>
-                                    <span class="text-slate-400">–</span>
-                                <?php else: ?>
-                                    <?php
-                                    $isPositive = $comparePercent >= 0;
-                                    $arrow = $isPositive ? '↑' : '↓';
-                                    $compareText = $arrow . ' ' . ($comparePercent > 0 ? '+' : '') . number_format($comparePercent, 1) . '%';
-                                    ?>
-                                    <span class="<?= $isPositive ? 'text-green-400' : 'text-red-400' ?>"><?= e($compareText) ?></span>
-                                <?php endif; ?>
+                                <?php $compareBadge = format_change_badge($comparePercent); ?>
+                                <span class="<?= e($compareBadge['class']) ?>"><?= e($compareBadge['text']) ?></span>
                             </td>
                             <td class="px-3 py-2 text-slate-400"><?= $note !== '' ? e($note) : '-' ?></td>
                             <td class="px-3 py-2 text-center">

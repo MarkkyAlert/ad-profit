@@ -260,7 +260,8 @@ class AnnualService
                         $cumulativeProfit,
                         $lastMonth,
                         $year === $currentYear,
-                        $year
+                        $year,
+                        $todayObject->format('Y-m-d')
                     ),
                 ],
                 'chart' => [
@@ -293,7 +294,8 @@ class AnnualService
         float $cumulativeProfit,
         int $lastMonth,
         bool $isCurrentYear,
-        ?int $year = null
+        ?int $year = null,
+        ?string $today = null
     ): array {
         // ใช้หาจำนวนวันของแต่ละเดือน (ก.พ. ต่างกันตามปีอธิกสุรทิน) — ไม่ส่งมาก็ใช้ปีปัจจุบัน
         $year = $year ?? (int)date('Y');
@@ -303,7 +305,16 @@ class AnnualService
         }
 
         $monthsRemaining = 12 - $lastMonth;
-        if ($monthsRemaining <= 0) {
+
+        // เศษของ "เดือนปัจจุบัน" ที่ยังไม่เกิดขึ้น
+        //
+        // $cumulativeProfit นับเดือนนี้เท่าที่กรอกมา (ต้นเดือนอาจแค่ไม่กี่วัน) แต่
+        // $monthsRemaining ถือว่าเดือนนี้ผ่านไปแล้วทั้งเดือน — วันที่เหลือจึงหายไปทั้งสองทาง
+        // ทำให้ประมาณการต่ำกว่าจริงเกือบเต็มเดือนเมื่ออยู่ต้นเดือน
+        [$currentMonthRemainingRatio, $currentMonthRemainingDays] =
+            $this->currentMonthRemainder($year, $lastMonth, $today);
+
+        if ($monthsRemaining <= 0 && $currentMonthRemainingRatio <= 0.0) {
             return ['available' => false, 'reason' => 'year_complete'];
         }
 
@@ -340,15 +351,50 @@ class AnnualService
 
         $average = array_sum($basis) / count($basis);
 
+        // ตัวคูณจริง = เดือนเต็มที่เหลือ + เศษของเดือนนี้
+        $effectiveMonths = $monthsRemaining + $currentMonthRemainingRatio;
+
         return [
             'available' => true,
+            // ยังเป็น "เดือนเต็มที่เหลือ" ตามเดิม เพื่อให้ป้ายในหน้าเว็บอ่านแล้วตรงกับปฏิทิน
             'months_remaining' => $monthsRemaining,
+            'current_month_remaining_ratio' => round($currentMonthRemainingRatio, 4),
+            // จำนวนวันไว้ให้หน้าเว็บ/xlsx เขียนป้ายได้ตรงกัน ("+ อีก N วันของเดือนนี้")
+            'current_month_remaining_days' => $currentMonthRemainingDays,
             'basis_month_count' => count($basis),
             'avg_recent' => round($average, 2),
-            'projection_low' => round($cumulativeProfit + ($monthsRemaining * min($basis)), 2),
-            'projection_mid' => round($cumulativeProfit + ($monthsRemaining * $average), 2),
-            'projection_high' => round($cumulativeProfit + ($monthsRemaining * max($basis)), 2),
+            'projection_low' => round($cumulativeProfit + ($effectiveMonths * min($basis)), 2),
+            'projection_mid' => round($cumulativeProfit + ($effectiveMonths * $average), 2),
+            'projection_high' => round($cumulativeProfit + ($effectiveMonths * max($basis)), 2),
         ];
+    }
+
+    /**
+     * ส่วนของเดือนปัจจุบันที่ยังมาไม่ถึง — คืน [สัดส่วน 0.0–1.0, จำนวนวัน]
+     *
+     * นับจากปฏิทิน ไม่ใช่จากจำนวนวันที่กรอก — วันที่ผ่านไปแล้วแต่ยังไม่กรอกถือเป็น
+     * "ช่องว่างของข้อมูล" ไม่ใช่ "อนาคตที่ต้องเดา" · ถ้า $today ไม่ได้อยู่ในเดือน
+     * ที่กำลังคิดอยู่ (เช่นเรียกด้วยปี/เดือนอื่น) คืน 0 เพราะไม่มีเศษให้บวก
+     *
+     * @return array{0:float,1:int}
+     */
+    private function currentMonthRemainder(int $year, int $lastMonth, ?string $today): array
+    {
+        if ($lastMonth < 1 || $lastMonth > 12) {
+            return [0.0, 0];
+        }
+
+        // ใช้ resolveToday ตัวเดียวกับ buildYearlySummary — อย่าคัดลอกตรรกะแปลงวันซ้ำ
+        $todayObject = $this->resolveToday($today);
+
+        if ($todayObject->format('Y-m') !== sprintf('%04d-%02d', $year, $lastMonth)) {
+            return [0.0, 0];
+        }
+
+        $daysInMonth = (int)$todayObject->format('t');
+        $daysRemaining = $daysInMonth - (int)$todayObject->format('j');
+
+        return [$daysRemaining / $daysInMonth, $daysRemaining];
     }
 
     /**

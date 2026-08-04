@@ -48,6 +48,8 @@ $weekdayData = ($weekdayResult['success'] ?? false) === true
     : [];
 $weekdayHasData = (bool)($weekdayData['has_data'] ?? false);
 $weekdayComparable = (bool)($weekdayData['comparable'] ?? false);
+// ฟันธง "สูงกว่า/ต่ำกว่าปกติ" ได้เมื่อมีตัวอย่างพอเท่านั้น — เกณฑ์เดียวกับตารางแยกตามวัน
+$weekdayTrendReliable = (bool)($weekdayData['trend_reliable'] ?? false);
 $weekdayName = isset($weekdayData['weekday']) && $weekdayData['weekday'] !== null
     ? formatThaiWeekday((int)$weekdayData['weekday'])
     : '';
@@ -72,7 +74,7 @@ $weekdayAvgProfit = isset($weekdayData['avg_profit']) && $weekdayData['avg_profi
 // หมายเหตุ: ใช้ ratio ไม่ได้ เพราะกำไร -50 เทียบเฉลี่ย -100 คือ "ดีขึ้น" แต่ ratio จะได้ 0.5
 $weekdayHint = null;
 $weekdayHintClass = 'text-slate-400';
-if ($weekdayComparable && $weekdayAvgProfit !== null) {
+if ($weekdayTrendReliable && $weekdayAvgProfit !== null) {
     $weekdayProfitDiff = $weekdayTargetProfit - $weekdayAvgProfit;
     $weekdayTolerance = abs($weekdayAvgProfit) * 0.1;
 
@@ -107,13 +109,15 @@ $breakdownData = ($breakdownResult['success'] ?? false) === true
 $breakdownHasData = (bool)($breakdownData['has_data'] ?? false);
 $breakdownRows = array_values((array)($breakdownData['weekdays'] ?? []));
 
-// ไฮไลต์ดี/เงียบ เฉพาะวันที่มีข้อมูลพอ (sample_count >= 3) และต้องมีอย่างน้อย 2 วันให้เทียบ
-$breakdownMinSample = 3;
+// ไฮไลต์ดี/เงียบ เฉพาะวันที่มีข้อมูลพอ และต้องมีอย่างน้อย 2 วันให้เทียบ
+// เกณฑ์มาจาก service ตัวเดียวกับ trend_reliable ของการ์ดด้านบน — อย่าฮาร์ดโค้ดซ้ำ
+$breakdownMinSample = RecordService::WEEKDAY_MIN_SAMPLE;
 $breakdownBestWeekday = null;
 $breakdownWorstWeekday = null;
 $breakdownEligible = array_values(array_filter(
     $breakdownRows,
-    static fn(array $row): bool => (int)($row['sample_count'] ?? 0) >= 3 && ($row['avg_profit'] ?? null) !== null
+    static fn(array $row): bool => (int)($row['sample_count'] ?? 0) >= $breakdownMinSample
+        && ($row['avg_profit'] ?? null) !== null
 ));
 
 if (count($breakdownEligible) >= 2) {
@@ -272,20 +276,11 @@ $comparisonChanges = (array)($comparison['change'] ?? []);
 $comparisonEnabled = (bool)($comparison['enabled'] ?? false);
 
 $comparisonMeta = static function (?float $value): array {
-    if ($value === null) {
-        return [
-            'text' => 'เทียบเดือนก่อน: –',
-            'class' => 'text-slate-400',
-        ];
-    }
-
-    $isUp = $value >= 0;
-    $arrow = $isUp ? '↑' : '↓';
-    $sign = $value > 0 ? '+' : '';
+    $badge = format_change_badge($value);
 
     return [
-        'text' => 'เทียบเดือนก่อน: ' . $arrow . ' ' . $sign . number_format($value, 1) . '%',
-        'class' => $isUp ? 'text-green-400' : 'text-red-400',
+        'text' => 'เทียบเดือนก่อน: ' . $badge['text'],
+        'class' => $badge['class'],
     ];
 };
 
@@ -716,6 +711,11 @@ require __DIR__ . '/includes/header.php';
                 <?php endif; ?>
                 <?php if ($weekdayHint !== null): ?>
                     <p class="text-xs <?= e($weekdayHintClass) ?>"><?= e($weekdayHint) ?></p>
+                <?php elseif ($weekdayComparable): ?>
+                    <?php // มีค่าเฉลี่ยให้ดู แต่ยังน้อยเกินจะฟันธงว่าสูง/ต่ำกว่าปกติ ?>
+                    <p class="text-xs text-slate-500">
+                        ยังมีวัน<?= e($weekdayName) ?>ไม่ถึง <?= e((string)RecordService::WEEKDAY_MIN_SAMPLE) ?> วันในเดือนนี้ — ยังสรุปแนวโน้มไม่ได้
+                    </p>
                 <?php endif; ?>
                 <p class="text-xs text-slate-500">
                     รายได้ <?= e(formatMoney($weekdayTargetRevenue)) ?>

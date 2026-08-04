@@ -193,23 +193,9 @@ $yoyPercent = isset($summary['yoy_profit_change_percent']) && $summary['yoy_prof
     ? (float)$summary['yoy_profit_change_percent']
     : null;
 
-// แสดง % การเปลี่ยนแปลง — null (ไม่มีฐานให้เทียบ) ต้องไม่กลายเป็น 0%
-$formatYoyPercent = static function (?float $percent): string {
-    if ($percent === null) {
-        return '—';
-    }
-
-    $arrow = $percent > 0 ? '↑' : ($percent < 0 ? '↓' : '');
-    return $arrow . number_format(abs($percent), 1) . '%';
-};
-
-$yoyToneClass = static function (?float $percent): string {
-    if ($percent === null || abs($percent) < 0.00001) {
-        return 'text-slate-400';
-    }
-
-    return $percent > 0 ? 'text-green-400' : 'text-red-400';
-};
+// แสดง % การเปลี่ยนแปลง — helper กลาง (null ต้องไม่กลายเป็น 0%)
+$formatYoyPercent = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
+$yoyToneClass = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
 
 $chartRaw = (array)($annualData['chart'] ?? []);
 $chartLabels = array_map(
@@ -586,6 +572,12 @@ require __DIR__ . '/includes/header.php';
     $projectionMid = (float)($projection['projection_mid'] ?? 0);
     $projectionHigh = (float)($projection['projection_high'] ?? 0);
     $projectionRemaining = (int)($projection['months_remaining'] ?? 0);
+    $projectionRemainingDays = (int)($projection['current_month_remaining_days'] ?? 0);
+    // ป้ายต้องบอกทั้งเดือนเต็มและเศษของเดือนนี้ ไม่งั้นตัวเลขที่โชว์อธิบายผลลัพธ์ไม่ได้
+    // ⚠️ ข้อความเดียวกันนี้อยู่ใน XlsxReportService::buildProjectionBlock ด้วย — แก้ต้องแก้คู่
+    $projectionRemainingText = $projectionRemainingDays > 0
+        ? $projectionRemaining . ' เดือน + อีก ' . $projectionRemainingDays . ' วันของเดือนนี้'
+        : $projectionRemaining . ' เดือน';
     $projectionBasisCount = (int)($projection['basis_month_count'] ?? 0);
     // ช่วงคร่อม 0 = ยังบอกไม่ได้ว่าจะจบปีบวกหรือลบ — ไม่ควรระบายเขียว
     $projectionTone = $projectionHigh < 0
@@ -595,7 +587,7 @@ require __DIR__ . '/includes/header.php';
     <section class="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.015] p-4 sm:p-5">
         <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
             <h2 class="text-sm font-semibold text-slate-400">🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)</h2>
-            <span class="text-xs text-slate-500">เหลืออีก <?= e((string)$projectionRemaining) ?> เดือน</span>
+            <span class="text-xs text-slate-500">เหลืออีก <?= e($projectionRemainingText) ?></span>
         </div>
 
         <p class="text-xl sm:text-2xl font-bold <?= e($projectionTone) ?>">
@@ -606,7 +598,7 @@ require __DIR__ . '/includes/header.php';
         </p>
 
         <p class="mt-3 border-t border-white/[0.06] pt-2 text-xs leading-relaxed text-slate-500">
-            สมมติเดือนที่เหลือ (<?= e((string)$projectionRemaining) ?>) ทำได้เท่า <?= e((string)$projectionBasisCount) ?> เดือนล่าสุด
+            สมมติช่วงที่เหลือ (<?= e($projectionRemainingText) ?>) ทำได้เท่า <?= e((string)$projectionBasisCount) ?> เดือนล่าสุด
             <span class="text-slate-600">·</span>
             ไม่คิดฤดูกาล/การเปิดรอบ — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง
         </p>

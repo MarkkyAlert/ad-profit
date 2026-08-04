@@ -13,6 +13,14 @@ class RecordService
     /** เพดานของ revenue/ad_cost — ตรงกับ DECIMAL(12,2) ใน database/schema.sql */
     public const MAX_AMOUNT = 9999999999.99;
 
+    /**
+     * จำนวนวันขั้นต่ำที่ถือว่า "พอจะสรุปแนวโน้มของวันนั้นในสัปดาห์ได้"
+     *
+     * ใช้ทั้งคำวินิจฉัยของการ์ดเทียบวันล่าสุด (`trend_reliable`) และการเลือกวันดี/วันเงียบ
+     * ในตารางแยกตามวัน — เดิมสองที่นี้ใช้เกณฑ์คนละตัว (1 กับ 3) ทั้งที่อยู่หน้าจอเดียวกัน
+     */
+    public const WEEKDAY_MIN_SAMPLE = 3;
+
     /** ช่วงปีที่รายงานรองรับ — ตรงกับ resolve_calendar_year() และ isValidYear ของ service รายปี */
     public const MIN_RECORD_YEAR = 2000;
     public const MAX_RECORD_YEAR = 2100;
@@ -865,6 +873,7 @@ class RecordService
                 'avg_profit' => null,
                 'avg_roas' => null,
                 'comparable' => false,
+                'trend_reliable' => false,
             ],
         ];
 
@@ -971,7 +980,10 @@ class RecordService
                 'avg_roas' => ($sampleCount > 0 && $sampleAdCostTotal > 0)
                     ? round($sampleRevenueTotal / $sampleAdCostTotal, 2)
                     : null,
+                // มีอะไรให้เทียบไหม (โชว์ค่าเฉลี่ยพร้อมกำกับ "จาก N วัน" ได้)
                 'comparable' => $sampleCount >= 1,
+                // พอจะฟันธงว่า "สูงกว่า/ต่ำกว่าปกติ" ไหม — 1–2 วันยังเป็นความบังเอิญ
+                'trend_reliable' => $sampleCount >= self::WEEKDAY_MIN_SAMPLE,
             ],
         ];
     }

@@ -1025,8 +1025,15 @@ class XlsxReportService
         $sheet->setCellValueExplicit(
             'A' . ($startRow + 1),
             sprintf(
-                'สมมติเดือนที่เหลือ (%d) ทำได้เท่า %d เดือนล่าสุด · ไม่คิดฤดูกาล — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง',
-                (int)($projection['months_remaining'] ?? 0),
+                // ⚠️ ข้อความเดียวกับ annual.php ($projectionRemainingText) — แก้ต้องแก้คู่
+                'สมมติช่วงที่เหลือ (%s) ทำได้เท่า %d เดือนล่าสุด · ไม่คิดฤดูกาล — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง',
+                ((int)($projection['current_month_remaining_days'] ?? 0)) > 0
+                    ? sprintf(
+                        '%d เดือน + อีก %d วันของเดือนนี้',
+                        (int)($projection['months_remaining'] ?? 0),
+                        (int)($projection['current_month_remaining_days'] ?? 0)
+                    )
+                    : sprintf('%d เดือน', (int)($projection['months_remaining'] ?? 0)),
                 (int)($projection['basis_month_count'] ?? 0)
             ),
             DataType::TYPE_STRING

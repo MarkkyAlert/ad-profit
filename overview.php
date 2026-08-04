@@ -215,22 +215,8 @@ if ($view === 'day') {
         ? (float)$yearlySummary['yoy_profit_change_percent']
         : null;
 
-    $yearlyYoyText = static function (?float $percent): string {
-        if ($percent === null) {
-            return '—';
-        }
-
-        $arrow = $percent > 0 ? '↑' : ($percent < 0 ? '↓' : '');
-        return $arrow . number_format(abs($percent), 1) . '%';
-    };
-
-    $yearlyYoyTone = static function (?float $percent): string {
-        if ($percent === null || abs($percent) < 0.00001) {
-            return 'text-slate-400';
-        }
-
-        return $percent > 0 ? 'text-green-400' : 'text-red-400';
-    };
+    $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
+    $yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
 
     $chartRaw = (array)($yearlyData['chart'] ?? []);
     $chartLabels = array_map(
@@ -1027,13 +1013,11 @@ require __DIR__ . '/includes/header.php';
                                     <?= $rowProfitShare !== null ? e(formatPercent($rowProfitShare)) : '—' ?>
                                 </td>
                                 <td class="px-3 py-1.5 font-medium">
+                                    <?php $rowChangeBadge = format_change_badge($rowChangePercent, 'ใหม่'); ?>
                                     <?php if ($rowChangePercent === null): ?>
-                                        <span class="text-slate-500" title="ไม่มีข้อมูลเดือนก่อน">ใหม่</span>
+                                        <span class="text-slate-500" title="ไม่มีข้อมูลเดือนก่อน"><?= e($rowChangeBadge['text']) ?></span>
                                     <?php else: ?>
-                                        <span class="<?= $rowChangePercent >= 0 ? 'text-green-400' : 'text-red-400' ?>">
-                                            <?= $rowChangePercent >= 0 ? '↑' : '↓' ?>
-                                            <?= e(formatPercent(abs($rowChangePercent))) ?>
-                                        </span>
+                                        <span class="<?= e($rowChangeBadge['class']) ?>"><?= e($rowChangeBadge['text']) ?></span>
                                         <span class="text-xs text-slate-500">(<?= e(formatMoney($rowChange)) ?>)</span>
                                     <?php endif; ?>
                                 </td>
