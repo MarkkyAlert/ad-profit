@@ -2,6 +2,29 @@
 
 declare(strict_types=1);
 
+/**
+ * อ่านค่าตัวเลขบวกจาก environment — ค่าที่ตั้งผิด (ติดลบ/ศูนย์/ไม่ใช่ตัวเลข) ใช้ค่าปริยายแทน
+ *
+ * ⚠️ `(int)"4h"` = 4 และ `(int)"-1"` = -1 ซึ่งทั้งคู่บูตผ่านโดยไม่มีอะไรเตือน
+ * (ค่าติดลบใน SESSION_*_TIMEOUT ทำให้การหมดอายุถูกปิดเงียบ ๆ)
+ */
+function config_positive_int(string $key, int $default): int
+{
+    $raw = trim((string)(getenv($key) ?: ''));
+
+    if ($raw === '' || preg_match('/^\d+$/', $raw) !== 1) {
+        if ($raw !== '') {
+            error_log(sprintf('[config] %s="%s" ใช้ไม่ได้ (ต้องเป็นจำนวนเต็มบวก) — ใช้ค่าปริยาย %d', $key, $raw, $default));
+        }
+
+        return $default;
+    }
+
+    $value = (int)$raw;
+
+    return $value > 0 ? $value : $default;
+}
+
 $projectRoot = dirname(__DIR__);
 $envFilePath = $projectRoot . '/.env';
 
@@ -104,12 +127,14 @@ if (!defined('DB_PASS')) {
     define('DB_PASS', (string)(getenv('DB_PASS') ?: ''));
 }
 
+// ⚠️ ต้องอ่านจาก env จริง — .env.example เขียนสองค่านี้ไว้ให้ผู้ดูแลปรับ แต่เดิมโค้ด
+// ฮาร์ดโค้ดไว้ ตั้งค่าใน .env แล้วไม่มีผลอะไรและไม่มีอะไรเตือน
 if (!defined('RATE_LIMIT_MAX_ATTEMPTS')) {
-    define('RATE_LIMIT_MAX_ATTEMPTS', 5);
+    define('RATE_LIMIT_MAX_ATTEMPTS', config_positive_int('RATE_LIMIT_MAX_ATTEMPTS', 5));
 }
 
 if (!defined('RATE_LIMIT_WINDOW_SECONDS')) {
-    define('RATE_LIMIT_WINDOW_SECONDS', 60);
+    define('RATE_LIMIT_WINDOW_SECONDS', config_positive_int('RATE_LIMIT_WINDOW_SECONDS', 60));
 }
 
 if (!defined('PASSWORD_MIN_LENGTH')) {
@@ -122,11 +147,11 @@ if (!defined('PASSWORD_MAX_BYTES')) {
 }
 
 if (!defined('SESSION_IDLE_TIMEOUT_SECONDS')) {
-    define('SESSION_IDLE_TIMEOUT_SECONDS', (int)(getenv('SESSION_IDLE_TIMEOUT_SECONDS') ?: 14400));
+    define('SESSION_IDLE_TIMEOUT_SECONDS', config_positive_int('SESSION_IDLE_TIMEOUT_SECONDS', 14400));
 }
 
 if (!defined('SESSION_ABSOLUTE_TIMEOUT_SECONDS')) {
-    define('SESSION_ABSOLUTE_TIMEOUT_SECONDS', (int)(getenv('SESSION_ABSOLUTE_TIMEOUT_SECONDS') ?: 86400));
+    define('SESSION_ABSOLUTE_TIMEOUT_SECONDS', config_positive_int('SESSION_ABSOLUTE_TIMEOUT_SECONDS', 86400));
 }
 
 if (!defined('SCHEMA_GUARD_ENABLED')) {

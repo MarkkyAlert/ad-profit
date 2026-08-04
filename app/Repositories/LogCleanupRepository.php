@@ -5,11 +5,25 @@ declare(strict_types=1);
 class LogCleanupRepository
 {
     /**
-     * ชื่อไฟล์นี้เป็นไฟล์ log ไหม — รับ `xxx.log` และไฟล์ที่หมุนแล้ว (`xxx.log.1`, `xxx.log.gz`)
+     * ชื่อไฟล์นี้เป็นไฟล์ log ไหม
+     *
+     * รับ `xxx.log` · ไฟล์ที่หมุนแล้ว (`xxx.log.1`, `xxx.log.gz`, `xxx.log-20260101`)
+     * และชื่อที่โฮสต์สร้างเองแบบไม่มีนามสกุล (`error_log` ของ cPanel/Hostinger)
+     *
+     * ⚠️ `LOG_FILE` ตั้งได้จาก env — ถ้าชื่อไม่เข้าเกณฑ์เหล่านี้ cron จะรายงานว่าทำงาน
+     * สำเร็จทุกวันโดยไม่ลบอะไรเลย ซึ่งเป็นอาการเดิมที่รอบก่อนตั้งใจแก้ แค่เงียบกว่า
      */
     private static function looksLikeLogFile(string $fileName): bool
     {
-        return preg_match('/\.log(\.[A-Za-z0-9]+)?$/', $fileName) === 1;
+        $name = strtolower($fileName);
+
+        // ชื่อที่โฮสต์สร้างเองโดยไม่มีนามสกุล (cPanel/Hostinger ใช้ `error_log`)
+        if ($name === 'error_log' || $name === 'php_errorlog') {
+            return true;
+        }
+
+        // `app.log` · `app.log.1` · `app.log.gz` · `app.log-20260101` (logrotate dateext)
+        return preg_match('/\.log([.\-][a-z0-9]+)?$/', $name) === 1;
     }
 
     /**

@@ -70,6 +70,32 @@ final class LogCleanupRepositoryTest extends TestCase
         $this->assertFileExists($other, 'ไฟล์ที่ไม่เกี่ยวกับ log ถูกลบ');
     }
 
+    /**
+     * ⭐ ชื่อไฟล์ที่โฮสต์จริงใช้ต้อง "เห็น" ด้วย
+     *
+     * `LOG_FILE` ตั้งได้จาก env และ cPanel/Hostinger สร้างไฟล์ชื่อ `error_log`
+     * (ไม่มีนามสกุล) ถ้าตัวลบมองไม่เห็น cron จะรายงานว่าสำเร็จทุกวันโดยไม่ลบอะไรเลย
+     */
+    public function testHostGeneratedLogNamesAreRecognised(): void
+    {
+        $recognised = ['php-error.log', 'php-error.log.3', 'error_log', 'ERROR.LOG', 'app.log-20260101', 'app.log.gz'];
+        $skipped = ['.htaccess', '.gitkeep', 'backup.sql', 'notes.logo', 'php_errors.txt'];
+
+        $paths = [];
+        foreach (array_merge($recognised, $skipped) as $name) {
+            $paths[$name] = $this->makeFile($name, 60);
+        }
+
+        (new LogCleanupRepository())->deleteFilesOlderThanDays($this->directory, 30);
+
+        foreach ($recognised as $name) {
+            $this->assertFileDoesNotExist($paths[$name], "ไม่ได้ลบไฟล์ log ชื่อ {$name}");
+        }
+        foreach ($skipped as $name) {
+            $this->assertFileExists($paths[$name], "ลบไฟล์ที่ไม่ใช่ log: {$name}");
+        }
+    }
+
     /** ไฟล์ที่ยังไม่ถึงกำหนดต้องอยู่ */
     public function testRecentLogsAreKept(): void
     {

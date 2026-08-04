@@ -34,11 +34,11 @@ class ProfileService
             return;
         }
 
-        try {
-            $this->passwordResetRepository->deleteByUserId($userId);
-        } catch (Throwable $exception) {
-            error_log('[profile] revokePasswordResetTokens failed: ' . $exception->getMessage());
-        }
+        // ⚠️ ห้าม catch ที่นี่ — เมธอดนี้ถูกเรียกอยู่ "ใน" ทรานแซกชันเดียวกับการเปลี่ยน
+        // credential ถ้ากลืน error ไว้ ระบบจะ commit การเปลี่ยนรหัสผ่านต่อไปโดยที่ลิงก์
+        // รีเซ็ตเก่ายังใช้ได้ แล้วบอกผู้ใช้ว่า "สำเร็จ" ซึ่งคือสิ่งที่การแก้นี้ตั้งใจปิดพอดี
+        // ปล่อยให้ throw ขึ้นไปให้ catch ชั้นนอก rollback ทั้งชุด
+        $this->passwordResetRepository->deleteByUserId($userId);
     }
 
     public function getProfile(int $userId): array

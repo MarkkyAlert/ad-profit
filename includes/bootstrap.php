@@ -21,11 +21,22 @@ header('Referrer-Policy: same-origin');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
 if (session_status() === PHP_SESSION_NONE) {
+    // ⚠️ PHP มีตัวเก็บกวาด session ของตัวเอง (`gc_maxlifetime` ค่าปริยาย 1440 วิ = 24 นาที)
+    // ถ้าไม่ตั้งให้ยาวอย่างน้อยเท่ากับ idle timeout ของแอป (14400 วิ = 4 ชม.) ไฟล์ session
+    // จะถูกลบก่อน แล้วผู้ใช้หลุดจากระบบตั้งแต่พักไป ~24 นาที ทั้งที่หน้าจอบอกว่า 4 ชั่วโมง
+    // (พิสูจน์แล้วว่าเกิดจริง — session ที่ไม่ถูกแตะ 30 นาทีถูกลบทิ้ง)
+    // เผื่อไว้อีก 1 ชม. เพราะการเก็บกวาดเป็นการสุ่ม ไม่ได้ตรงเวลาเป๊ะ
+    $sessionLifetime = max(
+        (int)SESSION_IDLE_TIMEOUT_SECONDS,
+        (int)SESSION_ABSOLUTE_TIMEOUT_SECONDS
+    ) + 3600;
+
     session_start([
         'cookie_httponly' => true,
         'cookie_secure' => $cookieSecure,
         'cookie_samesite' => 'Lax',
         'use_strict_mode' => true,
+        'gc_maxlifetime' => $sessionLifetime,
     ]);
 }
 
