@@ -66,9 +66,11 @@ require __DIR__ . '/includes/header.php';
                 <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
             </form>
 
-            <a href="<?= e(app_url('/api/export.php?month=' . rawurlencode($selectedMonth))) ?>" data-loading-link="true" class="btn-teal px-4 py-2 text-sm">
-                📥 Export CSV
-            </a>
+            <?php if ($historyError === null): ?>
+                <a href="<?= e(app_url('/api/export.php?month=' . rawurlencode($selectedMonth))) ?>" data-loading-link="true" class="btn-teal px-4 py-2 text-sm">
+                    📥 Export CSV
+                </a>
+            <?php endif; ?>
         </div>
     </div>
 

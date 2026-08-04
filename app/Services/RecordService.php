@@ -81,6 +81,15 @@ class RecordService
         $this->db = $db;
     }
 
+    /** ร้านหายไประหว่างที่หน้าเปิดค้างอยู่ — ข้อความเดียวกันทุกทางที่เขียน */
+    private static function shopVanishedResult(): array
+    {
+        return [
+            'success' => false,
+            'error' => 'ร้านนี้ถูกลบไปแล้ว กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
+        ];
+    }
+
     public function upsertRecord(
         int $userId,
         int $shopId,
@@ -121,8 +130,14 @@ class RecordService
                     // อยู่แล้ว และ (2) เมื่อยังไม่มีข้อมูลของวันนั้น MySQL จะจอง "ช่องว่าง"
                     // ระหว่างวันแทน สองคนที่บันทึกคนละวันในช่องว่างเดียวกันจึงล็อกกันเอง
                     // จนถูกตัดทิ้งเป็น deadlock · ที่ต้องจองจริง ๆ คือแถวร้าน เพื่อให้ลำดับ
-                    // ตรงกับตอนลบร้าน (ร้าน → ข้อมูลในร้าน) ดู ShopRepository::lockForShare()
-                    $this->shopRepository->lockForShare($shopId, $userId);
+                    // ตรงกับตอนลบร้าน (ร้าน → ข้อมูลในร้าน) ดู ShopRepository::lockForWrite()
+                    if (!$this->shopRepository->lockForWrite($shopId, $userId)) {
+                        // ร้านถูกลบจากอีกอุปกรณ์ระหว่างที่หน้านี้เปิดค้างไว้ — ถ้าปล่อยผ่าน
+                        // จะไปตายที่ foreign key แล้วผู้ใช้เห็นแค่ "ไม่สามารถบันทึกข้อมูลได้"
+                        $this->db->rollBack();
+
+                        return self::shopVanishedResult();
+                    }
                 }
             }
 
@@ -589,7 +604,11 @@ class RecordService
                 $canLockRows = $this->db->inTransaction();
                 if ($canLockRows) {
                     // จองแถวร้านครั้งเดียวก่อนเขียนทั้งชุด — ลำดับเดียวกับตอนลบร้าน
-                    $this->shopRepository->lockForShare($shopId, $userId);
+                    if (!$this->shopRepository->lockForWrite($shopId, $userId)) {
+                        $this->db->rollBack();
+
+                        return self::shopVanishedResult();
+                    }
                 }
             }
 
@@ -688,6 +707,13 @@ class RecordService
             if ($this->db instanceof PDO && !$this->db->inTransaction()) {
                 $this->db->beginTransaction();
                 $startedTransaction = true;
+            }
+
+            if ($this->db instanceof PDO && $this->db->inTransaction()) {
+                // ⚠️ ต้องจองก่อนเหมือนทางเขียนอื่น ๆ — เมธอดนี้ยังจองแถว "วัน" ที่จะย้ายไป
+                // ด้วย FOR UPDATE (เช็กว่าวันนั้นมีข้อมูลอยู่แล้วไหม) ซึ่งกลายเป็น gap lock
+                // เมื่อวันนั้นยังว่าง สองแท็บที่ย้ายรายการไปคนละวันว่างจึงเคยชนกันได้
+                $this->shopRepository->lockForWrite($shopId, $userId);
             }
 
             $existingRecord = $this->recordRepository->findByIdAndShopIdForUpdate($recordId, $shopId);
@@ -1686,6 +1712,10 @@ class RecordService
                 }
 
                 $canLockRows = $this->db->inTransaction();
+                if ($canLockRows) {
+                    // จองแถวร้านก่อนแตะข้อมูลข้างใน — ลำดับเดียวกับทุกทางที่เขียน
+                    $this->shopRepository->lockForWrite($shopId, $userId);
+                }
             }
 
             $existingRecord = $canLockRows

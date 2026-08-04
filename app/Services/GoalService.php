@@ -132,7 +132,7 @@ class GoalService
                 if ($canLockRows) {
                     // จองแถวร้านก่อนแตะแถวเป้าหมาย — ลำดับเดียวกับตอนลบร้าน
                     // (ร้าน → ข้อมูลในร้าน) ไม่งั้นสองคำขอจะวนรอกันจนถูกตัดทิ้ง
-                    $this->shopRepository->lockForShare($shopId, $userId);
+                    $this->shopRepository->lockForWrite($shopId, $userId);
                 }
             }
 

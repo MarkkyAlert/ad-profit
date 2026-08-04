@@ -95,7 +95,7 @@ final class ConcurrentWriteLockOrderTest extends IntegrationTestCase
 
         $other = $this->newConnection();
         $other->beginTransaction();
-        $other->query("SELECT id FROM shops WHERE id = {$shopId} FOR UPDATE")->fetchAll();
+        (new ShopRepository($other))->lockForWrite($shopId, $userId);
 
         $writer = $this->newConnection();
         $writer->exec('SET SESSION innodb_lock_wait_timeout = 1');
@@ -107,6 +107,111 @@ final class ConcurrentWriteLockOrderTest extends IntegrationTestCase
         $this->assertFalse($result['success'], 'ตั้งเป้าผ่านทั้งที่แถวร้านถูกจับไว้');
         $this->assertFalse($writer->inTransaction());
         $this->assertSame(0, $this->countRows('monthly_goals'));
+    }
+
+    /**
+     * ⭐ ตัวกัน "ช่องว่างทับของเดิม" ต้องกันได้จริงเมื่อสองคนเขียนพร้อมกัน
+     *
+     * นี่คือเทสต์ที่ควรมีตั้งแต่แรก — การจองแถวร้านเคยใช้ล็อกแบบ *อ่าน* (share) ซึ่ง
+     * สองคนถือพร้อมกันได้ ตัวกันจึงยังเห็นภาพก่อนที่อีกฝ่ายจะบันทึก แล้วทับด้วยศูนย์
+     * พร้อมข้อความ "บันทึกข้อมูลเรียบร้อยแล้ว" ทั้งสองฝั่ง
+     *
+     * วิธีพิสูจน์: ให้ผู้เขียนคนที่ 1 เริ่ม transaction แล้วจองแถวร้านค้างไว้
+     * ผู้เขียนคนที่ 2 (นำเข้าไฟล์ที่เว้นช่องรายได้) ต้อง **รอ** ไม่ใช่เดินหน้าอ่านต่อ
+     */
+    public function testTheBlankGuardCannotBeRacedByASecondWriter(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        // ⚠️ ผู้ถือต้องจอง **ด้วยวิธีเดียวกับที่ service ใช้** ไม่ใช่ FOR UPDATE ตรง ๆ
+        // ไม่งั้นเทสต์จะเขียวแม้ตอนที่ service ใช้ล็อกแบบอ่าน (ซึ่งกันอะไรไม่ได้เลย)
+        // เพราะ FOR UPDATE ของเทสต์เองไปบล็อกให้ — คือพิสูจน์ผิดตัว (เคยเขียนพลาดมาแล้ว)
+        $holder = $this->newConnection();
+        $holder->beginTransaction();
+        (new ShopRepository($holder))->lockForWrite($shopId, $userId);
+
+        $importer = $this->newConnection();
+        $importer->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $service = new RecordService(new RecordRepository($importer), new ShopRepository($importer), $importer);
+        $parsed = $service->parseImportCsv("date,revenue,ad_cost,note\n2026-08-01,,900,\n");
+        $result = $service->upsertManyRecords($userId, $shopId, $parsed['rows']);
+
+        $holder->rollBack();
+
+        $this->assertFalse(
+            $result['success'],
+            'ผู้เขียนคนที่สองเดินหน้าต่อได้ทั้งที่แถวร้านถูกจองไว้ = ล็อกไม่ได้กันอะไรเลย'
+        );
+        $this->assertFalse($importer->inTransaction());
+        $this->assertSame(0, $this->countRows('daily_records'));
+    }
+
+    /**
+     * ⭐ ตั้งเป้าคนละเดือนพร้อมกัน ต้องเข้าคิว ไม่ใช่ชนกันเอง
+     *
+     * `monthly_goals` ยังต้องจองแถวเป้าด้วย FOR UPDATE (อ่านค่าเดิมมาคงไว้) ซึ่งกลายเป็น
+     * การจอง "ช่องว่าง" เมื่อเดือนนั้นยังไม่มีเป้า สองแท็บที่ตั้งเป้าคนละเดือนของร้านเดียวกัน
+     * จึงเคยจองไขว้กันจน MySQL ตัดทิ้ง · การจองแถวร้านก่อนทำให้ไปถึงตรงนั้นทีละคน
+     */
+    public function testTwoGoalsForDifferentMonthsDoNotCollide(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $first = $this->newConnection();
+        $second = $this->newConnection();
+        $second->exec('SET SESSION innodb_lock_wait_timeout = 2');
+
+        $firstResult = (new GoalService(new GoalRepository($first), new ShopRepository($first), $first))
+            ->upsertGoal($userId, $shopId, '2026-05', 10000.0, null);
+        $secondResult = (new GoalService(new GoalRepository($second), new ShopRepository($second), $second))
+            ->upsertGoal($userId, $shopId, '2026-07', 20000.0, null);
+
+        $this->assertTrue($firstResult['success'], (string)($firstResult['error'] ?? ''));
+        $this->assertTrue($secondResult['success'], (string)($secondResult['error'] ?? ''));
+        $this->assertSame(2, $this->countRows('monthly_goals'));
+    }
+
+    /**
+     * ⭐ ตัวจองแถวร้านต้องบอกได้ว่า "จองไม่ได้" ไม่ใช่เงียบแล้วปล่อยให้ไปตายที่ foreign key
+     *
+     * เป็นค่าที่ service ใช้ตัดสินว่าจะตอบ "ร้านนี้ถูกลบไปแล้ว" (ข้อความที่ทำอะไรต่อได้)
+     * แทน "ไม่สามารถบันทึกข้อมูลได้" (ข้อความที่อ่านแล้วไม่รู้จะทำยังไง) เมื่อร้านหายไป
+     * ในจังหวะระหว่างการตรวจสิทธิ์กับการเขียนจริง
+     */
+    public function testTheShopLockReportsWhetherItGotTheRow(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $strangerId = $this->createUser('stranger@example.com');
+        $strangerShop = $this->createShop($strangerId, 'ร้านของคนอื่น');
+
+        $repository = new ShopRepository($this->pdo);
+        $this->pdo->beginTransaction();
+
+        $this->assertTrue($repository->lockForWrite($shopId, $userId), 'จองร้านของตัวเองไม่ได้');
+        $this->assertFalse(
+            $repository->lockForWrite($strangerShop, $userId),
+            'จองร้านของคนอื่นได้ — ข้อมูลจะไปตกร้านผิดคน'
+        );
+        $this->assertFalse($repository->lockForWrite($shopId + 9999, $userId), 'จองร้านที่ไม่มีอยู่ได้');
+
+        $this->pdo->rollBack();
+    }
+
+    /** ร้านที่ถูกลบไปก่อนแล้ว → ปฏิเสธตั้งแต่ตรวจสิทธิ์ และต้องไม่เขียนอะไรเลย */
+    public function testSavingIntoADeletedShopWritesNothing(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $this->createShop($userId, 'ร้านที่ยังอยู่');
+        $this->pdo->exec("DELETE FROM shops WHERE id = {$shopId}");
+
+        $result = $this->recordService()->upsertRecord($userId, $shopId, '2026-08-01', 1000.0, 200.0, null);
+
+        $this->assertFalse($result['success']);
+        $this->assertSame(0, $this->countRows('daily_records'));
     }
 
     /** ทางปกติ (ไม่มีใครแย่ง) ยังบันทึกได้ตามเดิม */

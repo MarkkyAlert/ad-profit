@@ -61,7 +61,7 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 - **Frontend เป็น server-render เป็นหลัก:** state-changing = native `<form method="post" action="/api/...">` + `csrf_field()` + hidden `action` → redirect+flash; ปุ่มยืนยัน/loading/กันกดซ้ำ อยู่ใน `includes/footer.php`; **CSRF ไม่ได้ expose เป็น meta/JS**
 - ⚠️ **AJAX มีจุดเดียวที่ตั้งใจ (controlled exception):** `GET api/month-grid.php` — โหลดข้อมูลทั้งเดือนมาเติมตาราง bulk ในหน้า `add-record.php` **read-only ไม่เปลี่ยน state จึงไม่มี CSRF** (auth ผ่าน session เหมือน `*-data.php`) · **การเขียนทุกอย่างยังเป็น form POST + CSRF เหมือนเดิม** · **ห้ามเพิ่มจุด AJAX ใหม่เพราะ "add-record ก็ทำ"** — ถ้าจะเพิ่มต้องเป็นการตัดสินใจที่มีเหตุผลชัดเจนเฉพาะกรณีนั้น
 - **`api/dashboard-data.php`, `overview-data.php`, `annual-data.php` ไม่ถูกเรียกจาก UI** (data page เรียก Service ตรงในเพจ) — อย่าเข้าใจผิดว่าหน้าเว็บ fetch endpoint พวกนี้
-- **กันกดซ้ำพึ่ง unique key ระดับ DB + row lock เท่านั้น** — ตาราง `idempotency_requests` + repository + cron ถูกลบทิ้งแล้ว (ไม่เคยถูกเรียกจากที่ไหนเลย) ⚠️ ผลข้างเคียงที่ดี: schema ไม่ต้องใช้คอลัมน์ชนิด JSON อีกต่อไป → host ไม่ต้องรองรับ JSON · ⚠️ **การลบซ้ำ (กด back แล้ว submit ใหม่) ยังตอบ error "ไม่พบรายการที่ต้องการลบ" ทั้งที่ลบสำเร็จไปแล้ว** — ถ้าจะแก้ต้องออกแบบ idempotency ใหม่ทั้งชุด
+- **กันกดซ้ำพึ่ง unique key ระดับ DB + row lock เท่านั้น** — ตาราง `idempotency_requests` + repository + cron ถูกลบทิ้งแล้ว (ไม่เคยถูกเรียกจากที่ไหนเลย) ⚠️ ผลข้างเคียงที่ดี: schema ไม่ต้องใช้คอลัมน์ชนิด JSON อีกต่อไป → host ไม่ต้องรองรับ JSON · **การลบซ้ำ (กด back แล้ว submit ใหม่) ตอบว่าสำเร็จแล้ว** — `deleteRecord`/`deleteGoal` ทำ idempotent เอง: หาไม่เจอในร้านปัจจุบัน → เช็กก่อนว่าอยู่ในร้านอื่นของผู้ใช้ไหม (ถ้าใช่ = ตอบ error ให้สลับร้าน) ถ้าไม่มีที่ไหนเลย = ผลตรงกับที่ขอ → ตอบสำเร็จ ⚠️ **ห้ามเพิ่ม flag/ข้อความแยกให้เคสนี้** ต้องเหมือนการลบที่สำเร็จจริงทุกไบต์ ไม่งั้นบอกใบ้ว่ารายการของคนอื่นมีอยู่จริงไหม · `ShopService::deleteShop` **ตั้งใจไม่ทำ idempotent** (เหตุผลอยู่ในคอมเมนต์ของเมธอด)
 - **Schema Guard ใน `includes/bootstrap.php`:** ถ้า schema ไม่ตรง (ตาราง/คอลัมน์/index ที่กำหนด) ระบบตอบ 503 / CLI exit(1) ควบคุมด้วย flag `SCHEMA_GUARD_ENABLED` — **เวลาแก้ schema ต้องอัปเดต guard ด้วย**
 - **`database/schema.sql` เป็น DROP + CREATE** — ห้ามรันทับ database จริง; ถ้าจะแก้โครงบน DB ที่มีข้อมูล ใช้ `ALTER` แยกต่างหาก ⚠️ ไฟล์**ขึ้นต้นด้วย `CREATE DATABASE ad_profit; USE ad_profit;` (hardcode ชื่อ DB จริง)** → `mysql < schema.sql` บนเซิร์ฟเวอร์ = **DROP ตารางใน `ad_profit` จริงทันที**; integration test loader (`tests/Integration/IntegrationTestCase.php`) จึง**ตัด 2 บรรทัดนี้ทิ้ง** ให้ DDL ลงเฉพาะ DB ที่ต่ออยู่
 - ⚠️ **`session_start()` ต้องตั้ง `gc_maxlifetime` ให้ยาวกว่า idle timeout ของแอป** — ค่าปริยายของ PHP คือ 1440 วิ (24 นาที) ตัวเก็บกวาดของ PHP จึงลบไฟล์ session ทิ้งก่อนที่ guard ของแอปจะได้ทำงาน ผู้ใช้หลุดจากระบบตั้งแต่พักไป ~24 นาที ทั้งที่ตั้งไว้ 4 ชม. (พิสูจน์แล้ว) · ตอนนี้ `bootstrap.php` ตั้งเป็น `max(idle, absolute) + 3600`
@@ -123,11 +123,15 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 - **ข้อความ error ตอน import CSV ใช้ "แถวที่ N" ไม่ใช่ "บรรทัดที่ N"** — `fgetcsv` คืน 1 record ต่อครั้ง โน้ตที่มีขึ้นบรรทัดใหม่ในเครื่องหมายคำพูดกินหลายบรรทัดในไฟล์ เลขนี้จึงตรงกับเลขแถวใน Excel (สิ่งที่ผู้ใช้เปิดดูจริง) ไม่ตรงกับเลขบรรทัดของไฟล์ดิบ
 - **หน้าเว็บห้ามเดาแทนข้อมูล — โหลดไม่สำเร็จ = ไม่แสดงตัวเลขเลย** `dashboard.php` / `annual.php` / `history.php` / `overview.php` ห่อทั้งเนื้อหาไว้ใน `if (error === null)` · เดิมค่าตั้งต้น ฿0 ถูกเรนเดอร์ต่อ ผู้ใช้จึงเห็น "ไม่มีสิทธิ์เข้าถึงร้านค้านี้" คู่กับ "ทั้งปีทำได้ ฿0 · เดือนกำไรดีสุด ม.ค." และคำเชิญ "ลองเริ่มบันทึกข้อมูล" ในหน้าเดียวกัน ⚠️ **แถวรวมใน `<tfoot>` ก็ต้องซ่อนด้วย** (พลาดมาแล้ว) · มีเทสต์ `PageRenderTest` ล็อกทั้ง 3 หน้า
 - **ข้อความ/สูตรที่หน้าเว็บกับไฟล์ Excel ใช้ร่วมกัน ต้องอยู่ใน helper ตัวเดียว** — `projection_remaining_label()`, `projection_footnote_text()`, `annual_month_outcome_counts()` ใน `includes/functions.php` ⚠️ เดิมคัดลอกไว้ 2 ที่พร้อมคอมเมนต์ "แก้ต้องแก้คู่" แล้วก็เพี้ยนจริง (หน้าเว็บ "ไม่คิดฤดูกาล/การเปิดรอบ" ส่วน Excel "ไม่คิดฤดูกาล"; หน้าเว็บนับ "เท่าทุน" ส่วน Excel ไม่นับ) · `AnnualReportParityTest` ล็อกไว้
-- ⚠️ **ทุกทางที่ "เขียน" ต้องจองแถวร้านก่อนด้วย `ShopRepository::lockForShare()`** — ลำดับเดียวกับตอนลบร้าน (ร้าน → ข้อมูลในร้าน) · เดิม `RecordService` จองแถว *วัน* ด้วย `FOR UPDATE` ก่อน upsert ซึ่ง (1) ไม่ช่วยอะไรเพราะ `INSERT … ON DUPLICATE KEY UPDATE` กันชนกันเองอยู่แล้ว และ (2) เมื่อวันนั้นยังไม่มีข้อมูล MySQL จองเป็น **gap lock** สองคนที่บันทึกคนละวันในช่องว่างเดียวกันจึง deadlock · `upsertManyRecords` ยัง `usort` ตามวันที่ก่อนเขียนเสมอ (ลำดับที่ผู้ใช้พิมพ์ทำให้สองแท็บจองไขว้กัน) · `ConcurrentWriteLockOrderTest` พิสูจน์ว่าได้ **1205 (รอ)** ไม่ใช่ **1213 (deadlock)**
-- **ตัวกัน "ช่องว่างทับของเดิม" ต้องอ่านข้างใน transaction** — `rejectBlankCellsOverwritingExistingDays()` ถูกย้ายมาหลัง `beginTransaction` + `lockForShare` · เดิมอ่านก่อนเปิด transaction อีกแท็บที่บันทึกแทรกเข้ามาระหว่างนั้นจะถูกทับด้วยศูนย์พร้อมข้อความ "สำเร็จ"
+- ⚠️ **ทุกทางที่ "เขียน" ต้องจองแถวร้านก่อนด้วย `ShopRepository::lockForWrite()`** (`FOR UPDATE`) — ครบทั้ง 5 ทาง: `upsertRecord`, `upsertManyRecords`, `updateRecord`, `deleteRecord`, `GoalService::upsertGoal` · ทำ 2 อย่างพร้อมกัน: **(1) ลำดับล็อกตรงกับตอนลบร้าน** (ร้าน → ข้อมูลในร้าน) และ **(2) บังคับให้การเขียนของร้านเดียวกันเข้าคิว** ซึ่งเป็นสิ่งเดียวที่ทำให้ตัวกัน "ช่องว่างทับของเดิม" (อ่านแล้วค่อยเขียน) ใช้ได้จริง
+  · ⚠️ **ห้ามเปลี่ยนเป็น `LOCK IN SHARE MODE`** — สองคนถือล็อกแบบอ่านพร้อมกันได้ ข้อ (2) จึงหายไปทั้งหมด (เคยเขียนผิดมาแล้ว: ตัวกันเห็นภาพก่อนอีกฝ่ายบันทึก แล้วทับด้วยศูนย์ พร้อมข้อความ "สำเร็จ" ทั้งสองฝั่ง)
+  · เดิม `RecordService` จองแถว *วัน* ด้วย `FOR UPDATE` ก่อน upsert ซึ่งไม่ช่วยอะไร (`INSERT … ON DUPLICATE KEY UPDATE` กันชนกันเองอยู่แล้ว) และเมื่อวันนั้นยังไม่มีข้อมูล MySQL จองเป็น **gap lock** สองคนที่บันทึกคนละวันในช่องว่างเดียวกันจึง deadlock · `upsertManyRecords` ยัง `usort` ตามวันที่ก่อนเขียนเสมอ (ลำดับที่ผู้ใช้พิมพ์ทำให้สองแท็บจองไขว้กัน)
+  · ⚠️ **เทสต์ concurrency ต้องให้ "ผู้ถือ" จองด้วย `lockForWrite()` เอง ไม่ใช่เขียน `FOR UPDATE` ตรง ๆ ในเทสต์** — ไม่งั้นเทสต์เขียวแม้ตอนที่โค้ดใช้ล็อกแบบอ่าน (เทสต์ไปบล็อกให้เอง = พิสูจน์ผิดตัว) · `ConcurrentWriteLockOrderTest` พิสูจน์ว่าได้ **1205 (รอ)** ไม่ใช่ **1213 (deadlock)** และแดงจริงเมื่อสลับกลับเป็น share lock
+- **ตัวกัน "ช่องว่างทับของเดิม" ต้องอ่านข้างใน transaction หลังจองแถวร้านแล้ว** — `rejectBlankCellsOverwritingExistingDays()` อยู่หลัง `beginTransaction` + `lockForWrite` · เดิมอ่านก่อนเปิด transaction อีกแท็บที่บันทึกแทรกเข้ามาระหว่างนั้นจะถูกทับด้วยศูนย์พร้อมข้อความ "สำเร็จ" ⚠️ **ห้ามใส่ `SELECT` ธรรมดาไว้ระหว่าง `beginTransaction` กับตัวกันนี้** — REPEATABLE READ จะตรึงภาพไว้ตั้งแต่ query แรก ตัวกันจะกลับไปอ่านของเก่าอีกโดยไม่มีอะไรเตือน (`lockForWrite` เป็น locking read จึงไม่ตรึงภาพ)
 - **คอลัมน์ "เทียบครั้งก่อน" ใน CSV ห้ามขึ้นต้นด้วย `+`** — Excel แปลงเซลล์ที่ขึ้นต้นด้วย `+` เป็น *สูตร* (มรดก Lotus 1-2-3) ช่องนี้จึงเป็นสูตรช่องเดียวในไฟล์และพังบนเครื่องที่ตั้งทศนิยมเป็นจุลภาค · เครื่องหมายลบไม่มีปัญหา (Excel อ่าน `-50.0%` เป็นจำนวนลบ) · `ExportServiceTest::testNoSystemGeneratedCellStartsAFormula` กวาดทุกเซลล์ที่ไม่ใช่โน้ต
 - **405 ต้องมาคู่กับ header `Allow: POST` เสมอ** (`ensure_post_request_or_respond`) — RFC 9110 บังคับ ไม่งั้นฝั่งที่เรียกได้แต่ "ห้ามใช้วิธีนี้" โดยไม่รู้ว่าต้องใช้อะไรแทน
 - **`config_positive_int()` ห่อด้วย `function_exists`** — `includes/config.php` ถูก include ได้จากหลายทาง เดิม include ซ้ำ = fatal "Cannot redeclare" ทั้งที่ค่าคงที่ข้างล่างกันตัวเองด้วย `if (!defined(...))` อยู่แล้ว ⚠️ และอ่าน env ด้วย `getenv() === false` ไม่ใช่ `?: ''` เพราะ `"0"` เป็น falsy — ค่าที่ตั้งผิดเป็น 0 เคยเงียบสนิทเหมือนไม่ได้ตั้ง
+- **JS ที่คัดลอกกติกามาจาก PHP ต้องมีเทสต์เทียบเสมอ** — `BrowserScriptParityTest` **ดึงตัวฟังก์ชันออกมาจาก `add-record.php` ตรง ๆ** (หา `const <ชื่อ> = ` แล้วนับวงเล็บจนถึง `;` นอกวงเล็บ) ไปรันด้วย node แล้วเทียบผลกับ PHP ชุดค่าเดียวกับ `MoneyInputParsingTest` ⚠️ **ห้ามคัดลอกโค้ด JS มาไว้ในเทสต์** ไม่งั้นได้สำเนาที่ 3 ให้เพี้ยนอีก · เปลี่ยนวิธีประกาศฟังก์ชัน (เช่นไปเป็น `function foo()`) เทสต์จะแดง — ต้องมาอัปเดตตัวดึง ไม่ใช่ปิดเทสต์ · ไม่มี node = skip (CI ของ GitHub มี node ติดมาอยู่แล้ว)
 - **เกณฑ์ตัวอย่างขั้นต่ำของวันในสัปดาห์ = `RecordService::WEEKDAY_MIN_SAMPLE`** — `comparable` (มีอะไรให้เทียบไหม) ยังเป็น `>= 1` แต่การฟันธง "สูงกว่า/ต่ำกว่าปกติ" ใช้ `trend_reliable` (`>= 3`) เกณฑ์เดียวกับที่ตารางแยกตามวันใช้เลือกวันดี/วันเงียบ · **อย่าฮาร์ดโค้ด 3 ซ้ำในเพจ**
 
 > ตรรกะที่เคยอยู่ที่ controller และถูกย้ายลง service/helper แล้ว — อย่าย้ายกลับ:
@@ -161,11 +165,21 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 | ชั้น controller (`api/*.php`) — ด่านตรวจ (auth/405/415/CSRF/409) | ครอบแล้ว (`EndpointGuardChainTest`, `RecordEndpointGuardTest`) |
 | ชั้นเพจ — เปิดขึ้นจริง, กันคนไม่ล็อกอิน, ไม่โกหก ฿0, หดช่วงอนาคต | ครอบแล้ว (`PageRenderTest`) |
 | **ชั้น controller — ตรรกะเฉพาะของแต่ละ action** | **บางส่วน** — ครอบเฉพาะ `records.php` ที่เหลือครอบแค่ด่านตรวจ |
-| **JavaScript ทั้งหมด** (paste TSV, month-grid, typed-confirm) | **0** — ไม่มี JS test runner |
+| JS ที่ต้องตรงกับ PHP (อ่านจำนวนเงิน / วันที่กำกวม / แยกหัวตาราง) | ครอบแล้ว (`BrowserScriptParityTest` — ดึงฟังก์ชันจาก `add-record.php` ไปรันด้วย node แล้วเทียบกับ PHP) |
+| **JS ส่วนที่เหลือ** (เติมค่าเมื่อเปลี่ยนวัน, month-grid, typed-confirm, วางจาก Excel ทั้งกระบวนการ) | **0** — ไม่มี JS test runner |
 | **EmailService การส่งจริง** | ตรวจได้แค่คอนฟิก — การส่งถึงจริง **ต้อง verify มือ** |
 
-**JS ยังไม่มีตาข่าย** — logic ที่อยู่ตรงนั้นให้ย้ายลง service/helper ก่อนแก้
+**JS ส่วนที่เหลือยังไม่มีตาข่าย** — logic ที่อยู่ตรงนั้นให้ย้ายลง service/helper ก่อนแก้
 (มีตัวอย่างในหัวข้อด้านบน) หรือถ้าย้ายไม่ได้ ให้ verify ด้วยเบราว์เซอร์จริง
+
+- ⚠️ **เทสต์ที่เขียวไม่ได้แปลว่าโค้ดถูก — ต้องลองทำให้โค้ดพังแล้วดูว่าแดงไหมทุกครั้ง** กับดักที่เจอมาแล้วจริงในโปรเจกต์นี้:
+  · **เทสต์ concurrency ไปจองล็อกเองด้วยวิธีที่เข้มกว่าโค้ด** → เขียวแม้โค้ดใช้ล็อกที่กันอะไรไม่ได้ (ต้องจองผ่านเมธอดเดียวกับที่โค้ดใช้)
+  · **`assertNotSame(200, …)`** → 404 "ไม่รู้จักคำสั่ง" ก็ผ่าน ทั้งที่ยังไม่ถึงด่านที่จะตรวจ (ต้องส่ง payload ที่ใช้ได้จริงแล้วยืนยันรหัสสถานะเป๊ะ ๆ)
+  · **`assertContains($status, [302,401,403])`** → ถอด `requireAuth()` ออกก็ยังผ่าน เพราะด่าน CSRF ตอบรหัสเดียวกัน (ต้องดู `Location` ว่าไป `login.php` ไหม)
+  · **`value="…" selected`** กับ `<input type="month">` → คำว่า selected ไม่มีวันปรากฏ เทสต์จึงไม่ได้ตรวจอะไร (ต้องยืนยันทั้ง "ค่าอนาคตไม่มี" และ "ค่าที่หดแล้วมี")
+  · **หา `"Warning:"` ในหน้า HTML** → PHP ห่อเป็น `<b>Warning</b>:` ต้อง `strip_tags()` ก่อน · และเซิร์ฟเวอร์ทดสอบต้องรันด้วย `APP_ENV=development` ไม่งั้น `display_errors` ปิดอยู่ ไม่มีอะไรให้ตรวจตั้งแต่แรก
+  · **`markTestSkipped` ตอนยกเซิร์ฟเวอร์ไม่ขึ้น** → เทสต์ทั้งชั้นหายไปโดย CI ยังเขียว (ต้อง `fail()` เมื่อ DB พร้อมแล้วแต่เซิร์ฟเวอร์ไม่ขึ้น)
+  · **สถานะ 0 จากคำขอที่ไปไม่ถึงเซิร์ฟเวอร์** → ผ่านทุก assert ที่เขียนว่า "ไม่ใช่ 200"
 
 ### เทสต์ชั้นหน้าเว็บ (controller + page) — `ControllerTestCase`
 
@@ -173,14 +187,15 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 guard) จึง `require` เข้ามาเรียกใน process ของ PHPUnit ไม่ได้ · `tests/Integration/ControllerTestCase.php`
 จึง **ยก `php -S` ขึ้นมา 1 ตัวต่อคลาสเทสต์** ชี้ `DB_*` ไปที่ test DB เดิม แล้วยิง HTTP จริง
 
-- `startSession($userId, $shopId)` — เขียนไฟล์ session ตรง ๆ (ไม่ต้องรู้รหัสผ่าน, เลี่ยง rate limit)
+- `startSession($userId, $shopId)` — เขียนไฟล์ session ตรง ๆ (ไม่ต้องรู้รหัสผ่าน, เลี่ยง rate limit) ⚠️ **คีย์ต้องตรงกับ `AuthService::establishSession()` เป๊ะ ๆ** (`email`, `auth_started_at`, `last_activity_at`, `current_shop_id`, `current_shop_name`, `session_version`) — เดิมเขียนคีย์ที่แอปไม่ได้อ่าน แล้ว `isAuthSessionAlive()` เติมให้เองเงียบ ๆ ทำให้ด่านหมดเวลาเทสต์ไม่ได้เลย
 - `get/post` = โหมดฟอร์ม (ตอบ **302 + flash**) · `getJson/postJson` = โหมด XHR (ตอบ **รหัสสถานะจริง**)
   ⚠️ **ทั้งสองโหมดต้องตัดสินเหมือนกัน ต่างแค่วิธีบอกผู้ใช้** — เทสต์ 409/405 ต้องยิงทั้งคู่
   (`api_respond()` เลือกจาก `Accept: application/json`)
-- `csrfTokenFor($sessionId)` — ดึง token จากหน้าจริง · `flashMessages()` — อ่านไฟล์ session ดิบ
+- `csrfTokenFor($sessionId)` — ดึง token จากหน้าจริง · `flashMessages()` — อ่านไฟล์ session ดิบ (fail เมื่อไฟล์หาย เพราะ `session_regenerate_id(true)` ลบไฟล์ทิ้ง)
 - ⚠️ ชื่อ field คือ **`shop_context_id`** (จาก `shop_context_field()`) ไม่ใช่ `shop_context`
-- ⚠️ **เพิ่ม endpoint ใหม่ใน `api/` ต้องเพิ่มชื่อใน `EndpointGuardChainTest::writeEndpointProvider()`**
-  ไม่งั้นด่านตรวจของไฟล์ใหม่จะไม่มีใครเช็ก
+- ⚠️ **เพิ่ม endpoint ใหม่ใน `api/` ต้องเพิ่มชื่อใน `EndpointGuardChainTest`** — มี `testEveryApiFileIsAccountedFor()` กวาด `glob('api/*.php')` เทียบกับรายชื่อในเทสต์ ลืมแล้วชุดเทสต์แดงทันที
+- ⚠️ **payload ในรายชื่อต้องเป็นคำสั่งที่ไฟล์นั้นรู้จักจริง** — `api/shops.php`/`api/profile.php` วางด่าน CSRF ไว้ *ข้างใน* แต่ละ `if ($action === …)` ส่งคำสั่งมั่ว ๆ จะตกไป 404 ตั้งแต่ยังไม่ถึงด่าน
+- ⚠️ **เทสต์ทั้งชั้นนี้แชร์ test DB เดียวกัน** — รัน `phpunit` สองโปรเซสพร้อมกัน (เช่นเปิดอีกหน้าต่างหนึ่ง) จะพังใส่กันด้วย `Duplicate entry` / `Table … doesn't exist` ไม่ใช่บั๊กของโค้ด
 
 ### Framework
 - **PHPUnit** เป็น dev dependency, รันด้วย `composer test`

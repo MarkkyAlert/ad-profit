@@ -29,6 +29,7 @@ abstract class ControllerTestCase extends IntegrationTestCase
     private static $serverProcess = null;
     private static ?string $baseUrl = null;
     private static ?string $sessionDir = null;
+    private static ?string $startupError = null;
 
     public static function setUpBeforeClass(): void
     {
@@ -68,7 +69,10 @@ abstract class ControllerTestCase extends IntegrationTestCase
             'DB_NAME' => $credentials['name'],
             'DB_USER' => $credentials['user'],
             'DB_PASS' => $credentials['pass'],
-            'APP_ENV' => 'testing',
+            // ⚠️ ต้องเป็น development — `includes/bootstrap.php` ปิด display_errors
+            // ในโหมดอื่นทั้งหมด แล้ว warning/notice จะไม่โผล่บนหน้า เทสต์ที่ตรวจว่า
+            // "ไม่มี error หลุดบนจอ" จึงผ่านตลอดโดยไม่ได้ตรวจอะไรเลย (เคยพลาดมาแล้ว)
+            'APP_ENV' => 'development',
         ]);
 
         $process = @proc_open($command, $descriptors, $pipes, $projectRoot, $environment);
@@ -94,8 +98,11 @@ abstract class ControllerTestCase extends IntegrationTestCase
     {
         parent::setUp();
 
+        // ⚠️ มาถึงตรงนี้ได้แปลว่า test DB พร้อมแล้ว (ไม่งั้น parent::setUp() skip ไปก่อน)
+        // ดังนั้นถ้าเซิร์ฟเวอร์ไม่ขึ้น = พัง ต้องแดง ไม่ใช่ข้ามเงียบ ๆ
+        // เดิม skip ทั้งชั้น controller+page ได้โดยที่ CI ยังเขียว (phpunit exit 0)
         if (self::$baseUrl === null) {
-            $this->markTestSkipped('ยก php -S สำหรับเทสต์ชั้นหน้าเว็บไม่ได้');
+            $this->fail('ยก php -S สำหรับเทสต์ชั้นหน้าเว็บไม่ได้: ' . (self::$startupError ?? 'ไม่ทราบสาเหตุ'));
         }
     }
 
@@ -109,14 +116,19 @@ abstract class ControllerTestCase extends IntegrationTestCase
     {
         $sessionId = 'ctrl' . bin2hex(random_bytes(12));
         $now = time();
+
+        // ⚠️ ต้องเป็นคีย์ชุดเดียวกับ `AuthService::establishSession()` เป๊ะ ๆ
+        // เดิมเขียนคีย์ที่แอปไม่ได้อ่าน (user_email/last_activity/created_at) แล้วขาด
+        // คีย์ที่แอปอ่านจริง — `isAuthSessionAlive()` เติมให้เองเงียบ ๆ เทสต์จึงผ่าน
+        // แต่ด่านหมดเวลา (idle/absolute) กลายเป็นสิ่งที่เทสต์ผ่านชั้นนี้ไม่ได้เลย
         $values = [
             'user_id' => $userId,
-            'user_email' => 'owner@example.com',
-            'display_name' => 'เจ้าของร้าน',
+            'email' => 'owner@example.com',
             'session_version' => $sessionVersion,
+            'auth_started_at' => $now,
+            'last_activity_at' => $now,
             'current_shop_id' => $shopId,
-            'last_activity' => $now,
-            'created_at' => $now,
+            'current_shop_name' => 'ร้านทดสอบ',
         ];
 
         $payload = '';
@@ -239,6 +251,12 @@ abstract class ControllerTestCase extends IntegrationTestCase
             }
         }
 
+        // ⚠️ ต่อไม่ติด/timeout จะได้ status = 0 ซึ่ง "ไม่เท่ากับ 200" — เทสต์ที่เช็กแค่
+        // assertNotSame(200, …) จึงผ่านทั้งที่คำขอไปไม่ถึงแอปเลย ต้องแดงตรงนี้แทน
+        if ($status === 0) {
+            $this->fail(sprintf('ยิง %s %s ไม่ถึงเซิร์ฟเวอร์ทดสอบ', $method, $path));
+        }
+
         return [
             'status' => $status,
             'headers' => $responseHeaders,
@@ -247,11 +265,20 @@ abstract class ControllerTestCase extends IntegrationTestCase
     }
 
     /** ข้อความ flash ที่ถูกตั้งไว้ใน session (redirect+flash คือทางตอบปกติของฟอร์ม) */
+    /**
+     * ⚠️ คืนสตริงว่างเงียบ ๆ ไม่ได้ — `session_regenerate_id(true)` (เปลี่ยนรหัสผ่าน/อีเมล,
+     * ออกจากระบบ) **ลบไฟล์เดิมทิ้ง** เทสต์ที่อ่าน flash หลังจากนั้นจะได้ '' แล้วเข้าใจว่า
+     * "ไม่มีข้อความ" ทั้งที่จริง ๆ คืออ่านผิดที่
+     */
     protected function flashMessages(string $sessionId): string
     {
         $file = (string)self::$sessionDir . '/sess_' . $sessionId;
 
-        return is_file($file) ? (string)file_get_contents($file) : '';
+        if (!is_file($file)) {
+            $this->fail('ไม่พบไฟล์ session ' . $sessionId . ' — อาจถูกสร้างใหม่ (session_regenerate_id)');
+        }
+
+        return (string)file_get_contents($file);
     }
 
     private static function findFreePort(): ?int
@@ -273,23 +300,27 @@ abstract class ControllerTestCase extends IntegrationTestCase
         return $port > 0 ? $port : null;
     }
 
+    /**
+     * ⚠️ ต้องยิง HTTP จริงแล้วดูว่าได้หน้าของแอปกลับมา — เช็กแค่ "พอร์ตเปิด" ไม่พอ
+     * เพราะโปรเซสอื่นอาจแย่งพอร์ตไปก่อน แล้วเทสต์ทั้งชุดจะไปยิงเซิร์ฟเวอร์ของคนอื่น
+     */
     private static function waitForServer(string $baseUrl): bool
     {
-        for ($attempt = 0; $attempt < 100; $attempt++) {
-            $connection = @stream_socket_client(
-                str_replace('http://', 'tcp://', $baseUrl),
-                $errorNumber,
-                $errorMessage,
-                0.2
-            );
+        $context = stream_context_create([
+            'http' => ['method' => 'GET', 'ignore_errors' => true, 'timeout' => 2, 'follow_location' => 0],
+        ]);
 
-            if (is_resource($connection)) {
-                fclose($connection);
+        for ($attempt = 0; $attempt < 100; $attempt++) {
+            $body = @file_get_contents($baseUrl . '/login.php', false, $context);
+
+            if (is_string($body) && str_contains($body, 'csrf_token')) {
                 return true;
             }
 
             usleep(100000);
         }
+
+        self::$startupError = 'ยิง ' . $baseUrl . '/login.php แล้วไม่ได้หน้าเข้าสู่ระบบกลับมาภายใน 10 วินาที';
 
         return false;
     }

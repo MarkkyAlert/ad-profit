@@ -28,7 +28,14 @@ final class RecordEndpointGuardTest extends ControllerTestCase
             'ad_cost' => '100',
         ]);
 
-        $this->assertContains($response['status'], [302, 401, 403], 'คนที่ไม่ได้ล็อกอินเขียนข้อมูลได้');
+        // ⚠️ ต้องดู "ถูกพาไปไหน" ไม่ใช่แค่ "ไม่ใช่ 200" — การไม่มี CSRF ก็ตอบ 302 เหมือนกัน
+        // เทสต์ที่เช็กแค่สถานะจึงเขียวต่อแม้ถอดด่านล็อกอินออกทั้งอัน
+        $this->assertSame(302, $response['status'], 'คนที่ไม่ได้ล็อกอินเขียนข้อมูลได้');
+        $this->assertStringContainsString(
+            'login.php',
+            $response['headers']['location'] ?? '',
+            'ไม่ได้พากลับไปหน้าเข้าสู่ระบบ — แปลว่าผ่านด่านล็อกอินไปแล้ว'
+        );
         $this->assertSame(0, $this->countRows('daily_records'));
     }
 
@@ -61,6 +68,9 @@ final class RecordEndpointGuardTest extends ControllerTestCase
 
         $this->assertSame(302, $response['status']);
         $this->assertStringContainsString('add-record.php', $response['headers']['location'] ?? '');
+        // ⚠️ 302 ไป add-record.php เป็นคำตอบของ "คำสั่งไม่ถูกต้อง" ด้วย — header Allow
+        // คือสิ่งเดียวที่แยกได้ว่ามันมาจากด่าน 405 จริง ๆ (ด่านตั้งไว้ก่อน redirect)
+        $this->assertSame('POST', $response['headers']['allow'] ?? '', 'ไม่ได้มาจากด่าน 405');
         $this->assertSame(0, $this->countRows('daily_records'));
     }
 

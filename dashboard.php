@@ -410,7 +410,8 @@ $currentPage = 'dashboard';
 
 require __DIR__ . '/includes/header.php';
 ?>
-<?php if ($showInactiveReminder): ?>
+<?php // แบนเนอร์เชิญชวน/เตือนต้องไม่ขึ้นคู่กับแถบแดง — สองข้อความขัดกันเอง ?>
+<?php if ($showInactiveReminder && !$dashboardFailed): ?>
     <div class="mb-6 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="min-w-0">
@@ -445,7 +446,11 @@ require __DIR__ . '/includes/header.php';
     <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>
             <h1 class="text-xl sm:text-2xl font-bold text-slate-100">แดชบอร์ด</h1>
-            <p class="mt-1 text-xs sm:text-sm text-slate-500">ช่วงข้อมูล: <?= e(formatThaiDate($rangeStart)) ?> - <?= e(formatThaiDate($rangeEnd)) ?></p>
+            <?php // ⚠️ โหลดไม่สำเร็จ = ไม่มีช่วงข้อมูลจริง — ค่าตั้งต้นคือ "ทั้งเดือนนี้"
+                  // ซึ่งเลยวันนี้ไปด้วย ขัดกับกฎของหน้าเองที่ห้ามนับวันอนาคต ?>
+            <?php if (!$dashboardFailed): ?>
+                <p class="mt-1 text-xs sm:text-sm text-slate-500">ช่วงข้อมูล: <?= e(formatThaiDate($rangeStart)) ?> - <?= e(formatThaiDate($rangeEnd)) ?></p>
+            <?php endif; ?>
         </div>
 
         <form id="dashboard-range-form" method="get" action="<?= e(app_url('/dashboard.php')) ?>" class="flex flex-wrap items-end gap-2 sm:gap-3">
@@ -860,7 +865,12 @@ require __DIR__ . '/includes/header.php';
         <canvas id="six-month-line-chart"></canvas>
     </div>
 </section>
+<?php endif; // $dashboardFailed ?>
 
+<?php // ⚠️ สคริปต์ต้องอยู่ "นอก" บล็อกข้างบน — ตัวเลือกช่วงเวลาอยู่ในส่วนหัวซึ่งแสดงเสมอ
+      // ถ้าสคริปต์หายไปพร้อมกับเนื้อหา ผู้ใช้จะเลือก "กำหนดเอง"/"เลือกเดือน" แล้วไม่มี
+      // ช่องวันที่โผล่มาให้กรอกเลย ทั้งที่นั่นคือทางเดียวที่จะออกจากหน้าที่โหลดไม่สำเร็จ
+      // (กราฟเช็ก canvas ก่อนวาดอยู่แล้ว ไม่มี canvas ก็ข้ามไปเงียบ ๆ) ?>
 <script>
     (function() {
         const rangeForm = document.getElementById('dashboard-range-form');
@@ -1129,5 +1139,4 @@ require __DIR__ . '/includes/header.php';
         }
     })();
 </script>
-<?php endif; // $dashboardFailed ?>
 <?php require __DIR__ . '/includes/footer.php'; ?>

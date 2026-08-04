@@ -267,10 +267,13 @@ require __DIR__ . '/includes/header.php';
             <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
         </form>
 
-        <a href="<?= e(app_url('/api/export-xlsx.php?year=' . rawurlencode((string)$selectedYear))) ?>"
-            data-loading-link="true" class="btn-teal px-4 py-2 text-sm">
-            📊 ดาวน์โหลดรายงานประจำปี (Excel)
-        </a>
+        <?php // ไม่มีข้อมูลให้ดาวน์โหลด = ไม่ต้องมีปุ่ม (กดไปก็ล้มด้วยเหตุผลเดียวกัน) ?>
+        <?php if ($annualError === null): ?>
+            <a href="<?= e(app_url('/api/export-xlsx.php?year=' . rawurlencode((string)$selectedYear))) ?>"
+                data-loading-link="true" class="btn-teal px-4 py-2 text-sm">
+                📊 ดาวน์โหลดรายงานประจำปี (Excel)
+            </a>
+        <?php endif; ?>
     </div>
 
     <?php if ($annualError !== null): ?>
