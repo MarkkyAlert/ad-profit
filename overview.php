@@ -88,6 +88,21 @@ $monthLabel = static function (array $row) use ($thaiMonths): string {
     return $thaiMonths[$monthNumber] ?? ('เดือน ' . $monthNumber);
 };
 
+// ⚠️ ตั้งค่าตั้งต้นของมุมมอง "รายปี" ไว้ก่อนเข้ากิ่ง — ตัวแปรพวกนี้ถูกกำหนดในกิ่ง
+// `$view === 'year'` แล้วถูกใช้ในกิ่งเดียวกันตอนเรนเดอร์ ซึ่งถูกต้อง *ในวันนี้*
+// แต่ความถูกต้องนั้นอาศัยว่าเงื่อนไขสองที่ตรงกันเป๊ะ ๆ ตลอดไป · ประกาศไว้ก่อน
+// ทำให้แก้เงื่อนไขผิดแล้วได้ค่าว่าง แทนที่จะเป็น warning กลางหน้า และทำให้
+// เครื่องมือตรวจโค้ดวิเคราะห์หน้านี้ได้ (เดิมหน้าเว็บทั้งชั้นอยู่นอกขอบเขต PHPStan)
+$yearlyDaysTotal = 0;
+$yearlyShareTotal = null;
+$yearlyBestMonth = null;
+$yearlyWorstMonth = null;
+$yearlyPrevYear = $selectedYear - 1;
+$yearlyPrevProfit = null;
+$yearlyYoyPercent = null;
+$yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
+$yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
+
 if ($view === 'day') {
     $overviewDailyService = new OverviewDailyService($recordRepository, $shopRepository);
     $dailyResult = $overviewDailyService->buildDailyOverview($userId, $selectedMonth);
