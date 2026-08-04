@@ -349,6 +349,12 @@ require __DIR__ . '/includes/header.php';
 
         if (fillButton && MISSING_DATES.length > 0) {
             fillButton.addEventListener('click', () => {
+                // ถามก่อนล้าง เหมือนตอนโหลดเดือนใหม่ — เดิมลบสิ่งที่พิมพ์ค้างไว้ทันทีโดยไม่ถาม
+                if (tableHasInput()
+                    && !window.confirm('เติมวันที่ขาดจะล้างตารางปัจจุบัน ข้อมูลที่ยังไม่บันทึกจะหาย?')) {
+                    return;
+                }
+
                 const dates = MISSING_DATES.slice(0, MAX_ROWS);
 
                 tbody.innerHTML = '';
@@ -435,6 +441,13 @@ require __DIR__ . '/includes/header.php';
         // ตัวคั่นทศนิยมอาจเป็นจุดหรือจุลภาค แล้วแต่ภาษาของ Excel ที่สร้างไฟล์
         // ⚠️ ต้องใช้กติกาเดียวกับ RecordService::cleanImportNumber() ฝั่ง PHP
         // ลบจุลภาคทิ้งเสมอทำให้ 1234,56 กลายเป็น 123456 (100 เท่า) แล้วบันทึกสำเร็จ
+        // เซลล์นี้อ่านเป็นตัวเลขได้ไหม — ใช้แยก "หัวตาราง" ออกจาก "ยอด" ตอนวางที่คอลัมน์ตัวเลข
+        const isNumericCell = (raw) => {
+            const cleaned = cleanAmountCell(raw);
+
+            return cleaned !== '' && !Number.isNaN(Number(cleaned));
+        };
+
         const cleanAmountCell = (raw) => {
             const value = String(raw).replace(/[฿\s\u00a0]/g, '').trim();
             const lastDot = value.lastIndexOf('.');
@@ -503,15 +516,22 @@ require __DIR__ . '/includes/header.php';
                 return;
             }
 
-            // ข้าม header — เช็กเฉพาะตอนวางเริ่มที่คอลัมน์วันที่ (กันตัดข้อมูลทิ้งผิด)
-            // ใช้ looksLikeDateCell ไม่ใช่ parseDateCell เพราะวันกำกวมคืน null แต่เป็นข้อมูล ไม่ใช่หัวตาราง
-            if (startCol === 0 && grid.length > 1 && !looksLikeDateCell(grid[0][0])) {
+            // ข้ามแถวหัวตาราง — เดิมเช็กเฉพาะตอนวางเริ่มที่คอลัมน์วันที่
+            // แต่ท่าที่ใช้จริงบ่อยคือ "กดเติมวันที่ขาด แล้ววางเฉพาะคอลัมน์ยอด" ซึ่งเริ่มที่
+            // คอลัมน์รายได้ หัวตารางจาก Excel จึงกินแถวแรกไป แล้วยอดทุกตัวเลื่อนไปผิดวัน
+            // → ถ้าเริ่มที่คอลัมน์ตัวเลข ให้ดูว่าแถวแรกเป็นตัวเลขไหม ไม่ใช่ก็คือหัวตาราง
+            const firstCellLooksLikeHeader = startCol === 0
+                ? !looksLikeDateCell(grid[0][0])
+                : (grid[0] || []).every((cell) => String(cell).trim() !== '' && !isNumericCell(cell));
+
+            if (grid.length > 1 && firstCellLooksLikeHeader) {
                 grid.shift();
             }
 
             let placedRows = 0;
             let truncatedRows = 0;
             let unreadableDates = 0;
+            let shiftedColumns = 0;
 
             grid.forEach((cells, rowOffset) => {
                 const rowIndex = startRow + rowOffset;
@@ -530,7 +550,11 @@ require __DIR__ . '/includes/header.php';
                 cells.forEach((cell, cellOffset) => {
                     const columnIndex = startCol + cellOffset;
                     if (columnIndex > 3) {
-                        return; // เกินคอลัมน์สุดท้าย (โน้ต)
+                        // เกินคอลัมน์สุดท้าย (โน้ต) — นับไว้เพื่อเตือน เดิมทิ้งเงียบ ๆ
+                        if (String(cell).trim() !== '') {
+                            shiftedColumns++;
+                        }
+                        return;
                     }
 
                     const input = row.querySelector('input[name="' + COLUMN_NAMES[columnIndex] + '"]');
@@ -560,6 +584,11 @@ require __DIR__ . '/includes/header.php';
                 if (truncatedRows > 0) {
                     messages.push('วางได้ ' + placedRows + ' แถว · ส่วนที่เกิน '
                         + MAX_ROWS + ' แถว (' + truncatedRows + ' แถว) ถูกตัด');
+                }
+
+                if (shiftedColumns > 0) {
+                    messages.push('ข้อมูลที่วางกว้างเกินตาราง ' + shiftedColumns + ' ช่องจึงตกหล่น — '
+                        + 'ตรวจสอบว่าเริ่มวางตรงคอลัมน์ที่ถูกต้องหรือไม่');
                 }
 
                 if (unreadableDates > 0) {
@@ -659,11 +688,21 @@ require __DIR__ . '/includes/header.php';
                         return;
                     }
 
+                    // ⚠️ เซิร์ฟเวอร์ปรับเดือนอนาคตกลับเป็นเดือนปัจจุบันเงียบ ๆ (resolve_calendar_month)
+                    // ถ้าไม่เช็ก ตารางจะเต็มไปด้วยข้อมูล "เดือนนี้" ขณะที่ช่องเลือกยังโชว์เดือนอนาคต
+                    // แล้วผู้ใช้แก้ตัวเลขทับเดือนนี้โดยไม่รู้ตัว
+                    const resolvedMonth = (payload.data && payload.data.month) ? payload.data.month : selectedMonth;
                     const days = (payload.data && payload.data.days) ? payload.data.days : [];
-                    populateFromDays(days);
-                    loadedMonth = selectedMonth;
 
-                    showBulkNotice(days.length === 0 ? 'เดือนนี้ยังไม่ถึงกำหนดกรอก' : '');
+                    populateFromDays(days);
+                    loadedMonth = resolvedMonth;
+                    monthInput.value = resolvedMonth;
+
+                    if (resolvedMonth !== selectedMonth) {
+                        showBulkNotice('ยังกรอกล่วงหน้าไม่ได้ — แสดงข้อมูลของเดือน ' + resolvedMonth + ' ให้แทน');
+                    } else {
+                        showBulkNotice(days.length === 0 ? 'เดือนนี้ยังไม่ถึงกำหนดกรอก' : '');
+                    }
                 } catch (error) {
                     showBulkNotice('โหลดข้อมูลเดือนนี้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
                 }
@@ -840,6 +879,8 @@ require __DIR__ . '/includes/header.php';
 
         const monthCache = new Map();          // 'YYYY-MM' → Map(วันที่ → ข้อมูล)
         let lastAppliedDate = dateInput.value; // ค่าที่เซิร์ฟเวอร์เติมมาให้ตอนโหลดหน้า
+        const HINT_DEFAULT_TEXT = hint.textContent;
+        let pendingRequestId = 0;              // กันผลลัพธ์เก่ามาทับผลลัพธ์ใหม่
 
         const loadMonth = async (month) => {
             if (monthCache.has(month)) {
@@ -869,6 +910,9 @@ require __DIR__ . '/includes/header.php';
                 revenueInput.value = day.revenue === null ? '' : String(day.revenue);
                 adCostInput.value = day.ad_cost === null ? '' : String(day.ad_cost);
                 noteInput.value = day.note || '';
+                // คืนข้อความปกติเสมอ — เดิมข้อความ error ค้างอยู่ตลอดอายุหน้า
+                // ทำให้การโหลดที่สำเร็จครั้งต่อ ๆ ไปยังขึ้นว่า "โหลดไม่สำเร็จ"
+                hint.textContent = HINT_DEFAULT_TEXT;
                 hint.classList.remove('hidden');
                 return;
             }
@@ -885,11 +929,24 @@ require __DIR__ . '/includes/header.php';
                 return;
             }
 
+            const requestId = ++pendingRequestId;
+
             try {
                 const byDate = await loadMonth(value.slice(0, 7));
+
+                // เปลี่ยนวันอีกครั้งระหว่างรอ → ทิ้งผลลัพธ์เก่า ไม่งั้นตัวเลขของวันก่อนหน้า
+                // จะถูกเติมลงในวันใหม่
+                if (requestId !== pendingRequestId) {
+                    return;
+                }
+
                 applyDay(byDate.get(value) || null);
                 lastAppliedDate = value;
             } catch (error) {
+                if (requestId !== pendingRequestId) {
+                    return;
+                }
+
                 // โหลดไม่ได้ → ล้างช่องแล้วเตือน ดีกว่าปล่อยค่าของวันก่อนหน้าค้างไว้
                 // แล้วผู้ใช้กดบันทึกทับวันใหม่ด้วยตัวเลขของวันเก่า
                 applyDay(null);
