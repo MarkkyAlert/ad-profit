@@ -83,9 +83,14 @@ class ExportService
             $note = (string)($record['note'] ?? '');
 
             // ค่าที่ไม่มี → เซลล์ว่าง (ให้ Excel มองเป็น blank ไม่ใช่ข้อความ '–')
+            //
+            // ⚠️ ห้ามใส่ตัวคั่นหลักพัน — คอลัมน์ตัวเลขอื่นทุกคอลัมน์ส่ง '' เป็น separator
+            // อยู่แล้ว เฉพาะช่องนี้ที่เคยใช้ค่า default (จุลภาค) ทำให้ค่าที่โตมาก ๆ ออกมา
+            // เป็น "+9,999,900.0%" ซึ่ง Excel อ่านเป็นสูตรที่ผิดไวยากรณ์เพราะมีจุลภาค
             $compareText = '';
             if ($comparePercent !== null) {
-                $compareText = ($comparePercent > 0 ? '+' : '') . number_format($comparePercent, 1) . '%';
+                $compareText = ($comparePercent > 0 ? '+' : '')
+                    . number_format($comparePercent, 1, '.', '') . '%';
             }
 
             $rows[] = [

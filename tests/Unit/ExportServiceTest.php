@@ -129,6 +129,47 @@ final class ExportServiceTest extends TestCase
         $this->assertSame('', $data['totals_row'][4]); // avg_roas null
     }
 
+    /**
+     * ⭐ คอลัมน์ "เทียบครั้งก่อน" ต้องไม่มีตัวคั่นหลักพัน
+     *
+     * คอลัมน์ตัวเลขอื่นส่ง '' เป็น separator อยู่แล้ว เฉพาะช่องนี้ที่เคยใช้ค่า default
+     * ทำให้ค่าที่โตมาก (รายได้กระโดดจาก 10 เป็นล้าน) ออกมาเป็น "+9,999,900.0%"
+     * ซึ่ง Excel อ่านเป็นสูตรที่ผิดไวยากรณ์ แทนที่จะเป็นตัวเลข
+     */
+    public function testLargeComparePercentHasNoThousandsSeparator(): void
+    {
+        $payload = $this->payloadForRecord([
+            'record_date' => '2024-01-10',
+            'revenue' => 1000000.0,
+            'ad_cost' => 1.0,
+            'profit' => 999999.0,
+            'roas' => 1000000.0,
+            'compare_revenue_percent' => 9999900.0,
+            'note' => '',
+        ]);
+
+        $this->assertSame('+9999900.0%', $payload['rows'][0][5]);
+        $this->assertStringNotContainsString(',', $payload['rows'][0][5]);
+    }
+
+    /** ค่าปกติยังอ่านง่ายเหมือนเดิม */
+    public function testOrdinaryComparePercentKeepsItsSign(): void
+    {
+        foreach ([[12.5, '+12.5%'], [-11.1, '-11.1%'], [0.0, '0.0%']] as [$percent, $expected]) {
+            $data = $this->payloadForRecord([
+                'record_date' => '2024-01-10',
+                'revenue' => 100.0,
+                'ad_cost' => 10.0,
+                'profit' => 90.0,
+                'roas' => 10.0,
+                'compare_revenue_percent' => $percent,
+                'note' => '',
+            ]);
+
+            $this->assertSame($expected, $data['rows'][0][5]);
+        }
+    }
+
     public function testSystemGeneratedNegativeValuesAreNotQuoted(): void
     {
         // ค่าติดลบมาจากระบบ ไม่ใช่ user input → ต้องออกดิบ ไม่มี ' นำหน้า

@@ -5,6 +5,14 @@ declare(strict_types=1);
 class LogCleanupRepository
 {
     /**
+     * ชื่อไฟล์นี้เป็นไฟล์ log ไหม — รับ `xxx.log` และไฟล์ที่หมุนแล้ว (`xxx.log.1`, `xxx.log.gz`)
+     */
+    private static function looksLikeLogFile(string $fileName): bool
+    {
+        return preg_match('/\.log(\.[A-Za-z0-9]+)?$/', $fileName) === 1;
+    }
+
+    /**
      * @return array{
      *   success: bool,
      *   directory: string,
@@ -52,6 +60,13 @@ class LogCleanupRepository
 
             $filePath = $directory . DIRECTORY_SEPARATOR . $entry;
             if (!is_file($filePath)) {
+                continue;
+            }
+
+            // ⚠️ ลบเฉพาะไฟล์ log — เดิมไม่กรองชื่อเลย จึงลบทุกไฟล์ในโฟลเดอร์
+            // ถ้าผู้ดูแลวาง .htaccess ไว้กันไม่ให้เข้าถึง log ผ่านเว็บ ไฟล์นั้นจะถูกลบทิ้ง
+            // แล้ว log กลับมาเปิดให้เข้าถึงได้อีกครั้งโดยไม่มีใครรู้
+            if (!self::looksLikeLogFile($entry)) {
                 continue;
             }
 
