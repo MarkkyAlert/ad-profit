@@ -91,10 +91,16 @@ final class AuthServiceRegisterTest extends IntegrationTestCase
         $this->pdo->exec('TRUNCATE TABLE auth_rate_limits');
         $invalid = $this->makeService()->register('free@example.com', 'ValidPass123', 'nomatch12345', self::IP);
 
+        // ⚠️ "ข้อความไม่ว่าง" พิสูจน์อะไรไม่ได้ — ทุกเคสที่ล้มก็คืนข้อความไทยที่ไม่ว่าง
+        // สิ่งที่ต้องพิสูจน์คือ อีเมลที่มีคนใช้แล้วต้องไม่บอกใบ้ว่ามีบัญชีนั้นอยู่จริง
         $this->assertFalse($taken['success']);
+        $this->assertFalse($invalid['success']);
         $this->assertStringNotContainsString('มีอยู่แล้ว', (string)$taken['error']);
+        $this->assertStringNotContainsString('ซ้ำ', (string)$taken['error']);
         $this->assertStringNotContainsString('taken@example.com', (string)$taken['error']);
-        $this->assertNotSame('', (string)$invalid['error']);
+
+        // และต้องไม่มีบัญชีใหม่เกิดขึ้นจากความพยายามทั้งสองครั้ง
+        $this->assertSame(1, $this->countRows('users'), 'สมัครซ้ำแล้วได้บัญชีเพิ่ม');
     }
 
     /** สมัครสำเร็จต้องได้ผู้ใช้ + ร้านเริ่มต้น 1 ร้าน */

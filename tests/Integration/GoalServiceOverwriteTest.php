@@ -109,6 +109,52 @@ final class GoalServiceOverwriteTest extends IntegrationTestCase
         $this->assertSame(0, $this->countRows('monthly_goals'));
     }
 
+    /**
+     * ⭐ เป้าติดลบต้องถูกปฏิเสธ — ตัวเลขติดลบไม่มีความหมายในฐานะเป้าหมาย
+     *
+     * ⚠️ ต้องเทสต์ที่ชั้น Service ด้วย ไม่ใช่แค่ endpoint — ผ่านหน้าเว็บ ตัวอ่านตัวเลข
+     * อาจกรองไปก่อน แต่กติกาธุรกิจเป็นของ Service และมีทางเรียกอื่นได้ในอนาคต
+     */
+    public function testANegativeTargetIsRejected(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        foreach ([[-1.0, null], [null, -0.01]] as [$revenue, $profit]) {
+            $result = $this->makeService()->upsertGoal($userId, $shopId, '2026-08', $revenue, $profit);
+
+            $this->assertFalse($result['success'], 'เป้าติดลบผ่านเข้าไปได้');
+            $this->assertStringContainsString('ติดลบ', (string)$result['error']);
+        }
+
+        $this->assertSame(0, $this->countRows('monthly_goals'));
+    }
+
+    /** ⭐ ตั้ง/ลบเป้าของร้านที่ไม่ใช่ของตัวเองไม่ได้ (ด่านสิทธิ์ในชั้น Service) */
+    public function testAForeignShopIsRejectedForBothUpsertAndDelete(): void
+    {
+        $userId = $this->createUser();
+        $strangerId = $this->createUser('stranger@example.com');
+        $strangerShop = $this->createShop($strangerId, 'ร้านของคนอื่น');
+        $this->createGoal($strangerShop, '2026-08', 50000.0, null);
+
+        $service = $this->makeService();
+
+        $upsert = $service->upsertGoal($userId, $strangerShop, '2026-08', 99999.0, null);
+        $this->assertFalse($upsert['success'], 'ตั้งเป้าลงร้านของคนอื่นได้');
+        $this->assertStringContainsString('ไม่มีสิทธิ์', (string)$upsert['error']);
+
+        $delete = $service->deleteGoal($userId, $strangerShop, '2026-08');
+        $this->assertFalse($delete['success'], 'ลบเป้าของร้านคนอื่นได้');
+        $this->assertStringContainsString('ไม่มีสิทธิ์', (string)$delete['error']);
+
+        $this->assertSame(
+            ['revenue' => 50000.0, 'profit' => null],
+            $this->storedGoal($strangerShop),
+            'เป้าของคนอื่นถูกแก้หรือถูกลบ'
+        );
+    }
+
     /** ไม่กรอกเลยทั้งสองช่องตอนที่ยังไม่มีเป้า ยังต้องถูกปฏิเสธเหมือนเดิม */
     public function testSubmittingNothingOnAMonthWithoutAGoalIsStillRejected(): void
     {

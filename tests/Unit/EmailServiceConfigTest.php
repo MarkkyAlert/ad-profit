@@ -32,16 +32,26 @@ final class EmailServiceConfigTest extends TestCase
      */
     public function testEnabledRequiresEveryCredentialIncludingFromAddress(): void
     {
-        // ตรวจจากโค้ดจริง เพราะ constructor อ่าน constant โดยตรง จึงสลับค่าในเทสต์ไม่ได้
-        $source = (string)file_get_contents(dirname(__DIR__, 2) . '/app/Services/EmailService.php');
-        $method = substr($source, (int)strpos($source, 'public function isEnabled'));
-        $method = substr($method, 0, (int)strpos($method, '}') + 1);
+        $complete = ['user@example.com', 'secret', 'noreply@example.com'];
 
-        foreach (['enabled', 'username', 'password', 'fromAddress'] as $property) {
-            $this->assertStringContainsString(
-                '$this->' . $property,
-                $method,
-                "isEnabled() ไม่ได้ตรวจ {$property}"
+        $this->assertTrue(
+            (new EmailService(true, 'smtp.example.com', 587, ...$complete))->isEnabled(),
+            'ตั้งค่าครบแล้วยังบอกว่าส่งไม่ได้'
+        );
+
+        // ขาดอะไรไปสักอย่าง = ยังส่งไม่ได้ · ถ้าปล่อยผ่านจะไปล้มตอนส่งจริงแบบเงียบ ๆ
+        // ผู้ใช้กด "ลืมรหัสผ่าน" แล้วไม่มีอีเมลมา โดยที่หน้าจอบอกว่าส่งแล้ว
+        $missing = [
+            'ปิดสวิตช์' => [false, 'smtp.example.com', 587, 'user@example.com', 'secret', 'noreply@example.com'],
+            'ไม่มีชื่อผู้ใช้' => [true, 'smtp.example.com', 587, '', 'secret', 'noreply@example.com'],
+            'ไม่มีรหัสผ่าน' => [true, 'smtp.example.com', 587, 'user@example.com', '', 'noreply@example.com'],
+            'ไม่มีอีเมลผู้ส่ง' => [true, 'smtp.example.com', 587, 'user@example.com', 'secret', ''],
+        ];
+
+        foreach ($missing as $label => $arguments) {
+            $this->assertFalse(
+                (new EmailService(...$arguments))->isEnabled(),
+                $label . ': บอกว่าพร้อมส่งทั้งที่ตั้งค่าไม่ครบ'
             );
         }
     }

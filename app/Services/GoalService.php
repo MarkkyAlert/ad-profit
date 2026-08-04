@@ -132,7 +132,20 @@ class GoalService
                 if ($canLockRows) {
                     // จองแถวร้านก่อนแตะแถวเป้าหมาย — ลำดับเดียวกับตอนลบร้าน
                     // (ร้าน → ข้อมูลในร้าน) ไม่งั้นสองคำขอจะวนรอกันจนถูกตัดทิ้ง
-                    $this->shopRepository->lockForWrite($shopId, $userId);
+                    //
+                    // จองไม่ได้ = ร้านหายไประหว่างที่หน้านี้เปิดค้างอยู่ · ถ้าปล่อยผ่าน
+                    // จะไปตายที่ foreign key แล้วผู้ใช้เห็นแค่ "ไม่สามารถบันทึกเป้าหมายได้"
+                    // ⚠️ ยกเลิกได้เฉพาะทรานแซกชันที่เมธอดนี้เปิดเอง
+                    if (!$this->shopRepository->lockForWrite($shopId, $userId)) {
+                        if ($startedTransaction && $this->db->inTransaction()) {
+                            $this->db->rollBack();
+                        }
+
+                        return [
+                            'success' => false,
+                            'error' => 'ร้านนี้ถูกลบไปแล้ว กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
+                        ];
+                    }
                 }
             }
 
@@ -168,7 +181,7 @@ class GoalService
             error_log('[goal] upsertGoal failed: ' . $exception->getMessage());
             return [
                 'success' => false,
-                'error' => 'ไม่สามารถบันทึกเป้าหมายได้',
+                'error' => write_failure_message($exception, 'ไม่สามารถบันทึกเป้าหมายได้'),
             ];
         }
 

@@ -98,10 +98,23 @@ final class ShopServiceLimitLockTest extends TestCase
         $this->assertSame(99, $result['shop_id']);
     }
 
-    /** ถึงเพดานตั้งแต่ก่อนเข้าล็อก → ตอบเลยไม่ต้องเปิดทรานแซกชัน */
-    public function testRejectsImmediatelyWhenAlreadyAtTheLimit(): void
+    /**
+     * ⭐ ไม่มีทรานแซกชัน (เช่นถูกเรียกจากสคริปต์) → ต้องยังกันโควตาได้ และต้องไม่ไป
+     * เรียกเมธอดที่ต้องใช้ล็อก
+     *
+     * ⚠️ เดิมเทสต์นี้เขียน `inTransaction()` เป็น true ไว้ในตัว mock จึงเดินเข้า
+     * ทางที่มีล็อกเสมอ — ชื่อเทสต์บอกอย่าง แต่โค้ดที่ถูกรันเป็นอีกอย่าง และซ้ำกับ
+     * `testABrandNewNameIsStillRejectedAtTheLimit` ทุกประการ
+     */
+    public function testTheQuotaStillHoldsWithoutATransaction(): void
     {
-        $result = $this->makeService(ShopService::MAX_SHOPS_PER_USER, ShopService::MAX_SHOPS_PER_USER)
+        $shopRepository = $this->createMock(ShopRepository::class);
+        $shopRepository->method('findByNameAndUserId')->willReturn(null);
+        $shopRepository->method('countByUserId')->willReturn(ShopService::MAX_SHOPS_PER_USER);
+        $shopRepository->expects($this->never())->method('countByUserIdForUpdate');
+        $shopRepository->expects($this->never())->method('create');
+
+        $result = (new ShopService($shopRepository, $this->createStub(UserRepository::class), null))
             ->createShop(1, 'ร้านใหม่');
 
         $this->assertFalse($result['success']);

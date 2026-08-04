@@ -132,20 +132,25 @@ final class RecordServiceBulkTest extends TestCase
         $this->assertStringContainsString((string)RecordService::BULK_MAX_ROWS, $result['error']);
     }
 
-    public function testDefaultCapIsBulkMaxRows(): void
+    /**
+     * ⭐ เพดานอยู่ตรงไหนแน่: พอดี = ผ่าน · เกิน 1 = ไม่ผ่าน
+     *
+     * ⚠️ เดิมเทสต์นี้ส่ง `BULK_MAX_ROWS + 1` เหมือนเทสต์ข้างบนทุกอย่าง ต่างแค่คอมเมนต์
+     * จึงเป็นเคสเดียวกันสองชื่อ และไม่มีอะไรพิสูจน์ว่าค่าปริยายอยู่ที่เลขไหน
+     */
+    public function testTheDefaultCapAllowsExactlyBulkMaxRows(): void
     {
-        $service = $this->makeService();
-
         $rows = [];
-        for ($day = 1; $day <= RecordService::BULK_MAX_ROWS + 1; $day++) {
-            $rows[] = $this->row(sprintf('2024-%02d-01', $day), 100, 10);
+        for ($day = 1; $day <= RecordService::BULK_MAX_ROWS; $day++) {
+            $rows[] = $this->row(sprintf('2024-01-%02d', $day), 100, 10);
         }
 
-        // ไม่ส่ง maxRows → ต้องใช้ 31 เหมือนเดิม
-        $result = $service->upsertManyRecords(1, 1, $rows);
+        $atTheCap = $this->makeService()->upsertManyRecords(1, 1, $rows);
+        $this->assertTrue($atTheCap['success'], 'จำนวนแถวพอดีเพดานกลับถูกปฏิเสธ: ' . ($atTheCap['error'] ?? ''));
 
-        $this->assertFalse($result['success']);
-        $this->assertStringContainsString((string)RecordService::BULK_MAX_ROWS, $result['error']);
+        $rows[] = $this->row('2024-02-01', 100, 10);
+        $overTheCap = $this->makeService()->upsertManyRecords(1, 1, $rows);
+        $this->assertFalse($overTheCap['success'], 'เกินเพดานไป 1 แถวแล้วยังผ่าน');
     }
 
     public function testHigherCapAllowsMoreThanBulkMaxRows(): void

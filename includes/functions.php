@@ -988,3 +988,23 @@ function annual_month_outcome_counts(array $summary): array
         'break_even' => max(0, $withData - $profit - $loss),
     ];
 }
+
+/**
+ * ข้อความสำหรับความล้มเหลวตอนเขียนข้อมูล — แยก "ชนกับอีกคำขอ" ออกจาก "ระบบพัง"
+ *
+ * ⚠️ สองกรณีนี้ผู้ใช้ต้องทำคนละอย่าง: อย่างแรก "กดใหม่อีกครั้ง" แล้วจบ ส่วนอย่างหลัง
+ * กดกี่ครั้งก็เหมือนเดิม · เดิมตอบข้อความเดียวกันหมด ("ไม่สามารถบันทึกข้อมูลได้")
+ * คนที่แค่บันทึกพร้อมกันสองเครื่องจึงเจอทางตัน ทั้งที่กดซ้ำก็ผ่านแล้ว
+ *
+ * MySQL 1205 = รอคิวนานเกินไป · 1213 = ถูกตัดออกจากวงรอ — ทั้งคู่แก้ด้วยการลองใหม่
+ */
+function write_failure_message(Throwable $exception, string $fallback): string
+{
+    $code = $exception instanceof PDOException ? (string)($exception->errorInfo[1] ?? '') : '';
+
+    if ($code === '1205' || $code === '1213') {
+        return 'มีการบันทึกจากอีกหน้าจอในเวลาเดียวกัน กรุณากดบันทึกอีกครั้ง';
+    }
+
+    return $fallback;
+}

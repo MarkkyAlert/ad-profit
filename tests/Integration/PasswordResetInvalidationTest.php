@@ -115,8 +115,13 @@ final class PasswordResetInvalidationTest extends IntegrationTestCase
         $userId = $this->createUser('owner@example.com', 'OldPass123');
         $this->issueToken($userId);
 
-        $this->makeProfileService()->updateProfile($userId, 'ชื่อใหม่');
+        $result = $this->makeProfileService()->updateProfile($userId, 'ชื่อใหม่');
 
+        // ⚠️ ถ้า updateProfile ล้มเงียบ ๆ จำนวน token ก็ยังเป็น 1 อยู่ดี — ต้องพิสูจน์ว่า
+        // "เปลี่ยนชื่อสำเร็จจริง" ก่อน ไม่งั้นเทสต์นี้ผ่านด้วยเหตุผลที่ตรงข้ามกับชื่อของมัน
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertSame('ชื่อใหม่', (string)$this->pdo
+            ->query("SELECT display_name FROM users WHERE id = {$userId}")->fetchColumn());
         $this->assertSame(1, $this->countRows('password_reset_tokens'));
     }
 

@@ -101,15 +101,20 @@ final class RecordEndpointGuardTest extends ControllerTestCase
         $shopId = $this->createShop($userId);
         $session = $this->startSession($userId, $shopId);
 
-        $response = $this->post('/api/records.php', [
+        $fields = [
             'action' => 'upsert',
             'shop_context_id' => (string)$shopId,
             'record_date' => '2026-08-01',
             'revenue' => '1000',
             'ad_cost' => '100',
-        ], $session);
+        ];
 
-        $this->assertNotSame(200, $response['status']);
+        // ⚠️ โหมดฟอร์มตอบ 302 ทั้งตอนสำเร็จและตอนถูกปฏิเสธ — `assertNotSame(200, …)`
+        // จึงผ่านแม้บันทึกสำเร็จ · รหัสสถานะจริงดูได้ในโหมด JSON เท่านั้น
+        $this->assertSame(403, $this->postJson('/api/records.php', $fields, $session)['status']);
+
+        $response = $this->post('/api/records.php', $fields, $session);
+        $this->assertSame(302, $response['status']);
         $this->assertSame(0, $this->countRows('daily_records'), 'เขียนข้อมูลผ่านทั้งที่ไม่มี CSRF token');
     }
 

@@ -427,7 +427,9 @@ require __DIR__ . '/includes/header.php';
             </a>
         </div>
     </div>
-<?php elseif ($showFirstRecordInvite): ?>
+<?php // ⚠️ กิ่งนี้ก็ต้องปิดด้วย — มันมาจากคนละ service call กับการ์ดสรุป
+      // ถ้าอันหนึ่งสำเร็จอีกอันล้ม หน้าจะขึ้น "ร้านนี้ยังไม่มีข้อมูล" คู่กับแถบแดง ?>
+<?php elseif ($showFirstRecordInvite && !$dashboardFailed): ?>
     <div class="mb-6 rounded-xl border border-indigo-500/25 bg-indigo-500/10 px-4 py-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="min-w-0">

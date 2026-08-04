@@ -428,16 +428,16 @@ class ShopService
         return $this->shopRepository->countByUserId($userId) > 1;
     }
 
+    /**
+     * ⚠️ เดิมเมธอดนี้เขียน SQL เองซ้ำกับ `ShopRepository::lockForWrite()` ทุกตัวอักษร
+     * ซึ่งผิดกฎ "Repository = SQL ล้วน" และทำให้แก้ที่เดียวไม่ครบ
+     */
     private function lockShopRowForUpdate(int $shopId, int $userId): void
     {
         if (!$this->db instanceof PDO || $shopId <= 0 || $userId <= 0) {
             return;
         }
 
-        $stmt = $this->db->prepare('SELECT id FROM shops WHERE id = :id AND user_id = :user_id LIMIT 1 FOR UPDATE');
-        $stmt->execute([
-            ':id' => $shopId,
-            ':user_id' => $userId,
-        ]);
+        $this->shopRepository->lockForWrite($shopId, $userId);
     }
 }

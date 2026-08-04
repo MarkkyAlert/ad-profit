@@ -74,6 +74,66 @@ final class ShopEndpointTest extends ControllerTestCase
         $this->assertSame($target, $this->sessionShopId($session), 'ไม่ได้สลับไปร้านที่ชื่อตรงกัน');
     }
 
+    /**
+     * ⭐ ครบ 20 ร้านแล้วสร้างชื่อใหม่ไม่ได้ — พิสูจน์กับฐานข้อมูลจริง
+     *
+     * ⚠️ เทสต์เดิมของโควตาทั้งหมดใช้ mock นับจำนวนให้ ไม่มีตัวไหนพิสูจน์ว่าเลข 20
+     * ที่นับจาก DB จริงทำงานตรงกัน
+     */
+    public function testTheTwentyShopQuotaHoldsAgainstTheRealDatabase(): void
+    {
+        $userId = $this->createUser();
+        $firstShop = $this->createShop($userId, 'ร้านที่ 1');
+        for ($index = 2; $index <= 20; $index++) {
+            $this->createShop($userId, 'ร้านที่ ' . $index);
+        }
+        $this->assertSame(20, $this->countRows('shops'));
+
+        $session = $this->startSession($userId, $firstShop);
+        $response = $this->submit($session, ['action' => 'create', 'name' => 'ร้านที่ 21']);
+
+        $this->assertSame(422, $response['status'], (string)$response['body']);
+        $this->assertStringContainsString('20', $response['body']);
+        $this->assertSame(20, $this->countRows('shops'), 'สร้างร้านที่ 21 ได้');
+    }
+
+    /** ⭐ เปลี่ยนชื่อร้านไปชนกับชื่อที่มีอยู่แล้วไม่ได้ */
+    public function testRenamingToAnExistingNameIsRejected(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId, 'ร้านแรก');
+        $this->createShop($userId, 'ร้านที่สอง');
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->submit($session, [
+            'action' => 'rename',
+            'shop_id' => (string)$shopId,
+            'name' => 'ร้านที่สอง',
+        ]);
+
+        $this->assertNotSame(200, $response['status']);
+        $this->assertSame('ร้านแรก', (string)$this->pdo
+            ->query("SELECT name FROM shops WHERE id = {$shopId}")->fetchColumn());
+    }
+
+    /** ⭐ ลบร้านที่ "ไม่ได้เปิดอยู่" → session ต้องอยู่ที่ร้านเดิม ไม่ใช่ถูกย้าย */
+    public function testDeletingANonCurrentShopLeavesTheSessionAlone(): void
+    {
+        $userId = $this->createUser();
+        $current = $this->createShop($userId, 'ร้านที่กำลังดู');
+        $other = $this->createShop($userId, 'ร้านที่จะลบ');
+        $session = $this->startSession($userId, $current);
+
+        $response = $this->submit($session, [
+            'action' => 'delete',
+            'shop_id' => (string)$other,
+            'confirm_shop_name' => 'ร้านที่จะลบ',
+        ]);
+
+        $this->assertSame(200, $response['status'], (string)$response['body']);
+        $this->assertSame($current, $this->sessionShopId($session), 'ถูกย้ายออกจากร้านที่กำลังดูอยู่');
+    }
+
     /** ⭐ สลับไปร้านของคนอื่นไม่ได้ และ session ต้องไม่ขยับ */
     public function testSwitchingToAnotherUsersShopIsRejected(): void
     {
@@ -85,7 +145,9 @@ final class ShopEndpointTest extends ControllerTestCase
         $session = $this->startSession($userId, $ownShop);
         $response = $this->submit($session, ['action' => 'switch', 'shop_id' => (string)$strangerShop]);
 
-        $this->assertNotSame(200, $response['status']);
+        // ⚠️ ยืนยันรหัสจริง — `assertNotSame(200, …)` ผ่านได้ทั้ง 404/415/500
+        // ซึ่งแปลว่าไปล้มด้วยเหตุอื่นก่อนถึงด่านสิทธิ์
+        $this->assertSame(403, $response['status'], (string)$response['body']);
         $this->assertSame($ownShop, $this->sessionShopId($session), 'session ถูกย้ายไปร้านของคนอื่น');
     }
 
@@ -123,7 +185,7 @@ final class ShopEndpointTest extends ControllerTestCase
             'confirm_shop_name' => 'พิมพ์ผิด',
         ]);
 
-        $this->assertNotSame(200, $response['status']);
+        $this->assertSame(422, $response['status'], (string)$response['body']);
         $this->assertSame(2, $this->countRows('shops'), 'ลบร้านทั้งที่ยืนยันไม่ตรง');
         $this->assertSame(1, $this->countRows('daily_records'), 'ข้อมูลในร้านหายไปด้วย');
     }
@@ -141,7 +203,7 @@ final class ShopEndpointTest extends ControllerTestCase
             'confirm_shop_name' => 'ร้านเดียว',
         ]);
 
-        $this->assertNotSame(200, $response['status']);
+        $this->assertSame(422, $response['status'], (string)$response['body']);
         $this->assertSame(1, $this->countRows('shops'));
     }
 
@@ -187,7 +249,9 @@ final class ShopEndpointTest extends ControllerTestCase
             'confirm_shop_name' => 'ร้านของคนอื่น',
         ]);
 
-        $this->assertNotSame(200, $response['status']);
+        // 422 ไม่ใช่ 403 โดยตั้งใจ — ตอบเหมือนกับ "ร้านนี้ถูกลบไปแล้ว" ทุกไบต์
+        // เพื่อไม่ให้เดาได้ว่ามีร้าน id นี้อยู่จริงหรือไม่
+        $this->assertSame(422, $response['status'], (string)$response['body']);
         $this->assertSame(
             1,
             (int)$this->pdo->query("SELECT COUNT(*) FROM shops WHERE id = {$strangerShop}")->fetchColumn(),

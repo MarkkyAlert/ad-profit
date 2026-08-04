@@ -15,15 +15,29 @@ class EmailService
     private string $fromAddress;
     private string $fromName;
 
-    public function __construct()
-    {
-        $this->enabled = MAIL_ENABLED;
-        $this->host = MAIL_HOST;
-        $this->port = MAIL_PORT;
-        $this->username = MAIL_USERNAME;
-        $this->password = MAIL_PASSWORD;
-        $this->fromAddress = MAIL_FROM_ADDRESS;
-        $this->fromName = MAIL_FROM_NAME;
+    /**
+     * ค่าปริยายมาจาก constant ของแอป — พารามิเตอร์มีไว้ให้เทสต์สลับค่าได้เท่านั้น
+     *
+     * ⚠️ เดิม constructor อ่าน constant ตรง ๆ กฎ "พร้อมส่งจริงหรือยัง" จึงทดสอบ
+     * พฤติกรรมไม่ได้เลย เทสต์ต้องไปอ่าน *ซอร์สโค้ด* แล้วหาสตริง ซึ่งบรรทัดที่ถูก
+     * คอมเมนต์ทิ้งไว้ก็ทำให้ผ่านได้ และการเขียนใหม่ที่ถูกต้องกลับทำให้แดง
+     */
+    public function __construct(
+        ?bool $enabled = null,
+        ?string $host = null,
+        ?int $port = null,
+        ?string $username = null,
+        ?string $password = null,
+        ?string $fromAddress = null,
+        ?string $fromName = null
+    ) {
+        $this->enabled = $enabled ?? MAIL_ENABLED;
+        $this->host = $host ?? MAIL_HOST;
+        $this->port = $port ?? MAIL_PORT;
+        $this->username = $username ?? MAIL_USERNAME;
+        $this->password = $password ?? MAIL_PASSWORD;
+        $this->fromAddress = $fromAddress ?? MAIL_FROM_ADDRESS;
+        $this->fromName = $fromName ?? MAIL_FROM_NAME;
     }
 
     /**

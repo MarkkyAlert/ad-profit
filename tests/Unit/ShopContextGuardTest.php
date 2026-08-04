@@ -48,20 +48,38 @@ final class ShopContextGuardTest extends TestCase
         );
     }
 
-    /** ทุกฟอร์มที่เขียนข้อมูลต้องพก shop_context_field ไปด้วย */
+    /**
+     * ⭐ ทุกฟอร์มที่ยิงไปที่ `/api/` ต้องพก **ทั้ง** csrf_field และ shop_context_field
+     *
+     * ⚠️ เดิมเทสต์นี้แค่นับจำนวนสองอย่างให้เท่ากันทั้งไฟล์ — ฟอร์ม A ใส่สองอัน
+     * ฟอร์ม B ไม่ใส่เลย ก็ได้ผลรวมเท่ากันและผ่านฉลุย · ตอนนี้แยกดูทีละฟอร์มจริง ๆ
+     */
     public function testEveryWriteFormCarriesTheShopContextField(): void
     {
         $root = dirname(__DIR__, 2);
 
-        foreach (['add-record.php' => 3, 'history.php' => 2, 'dashboard.php' => 2] as $page => $expected) {
+        foreach (['add-record.php', 'history.php', 'dashboard.php'] as $page) {
             $source = (string)file_get_contents($root . '/' . $page);
 
-            $this->assertSame(
-                substr_count($source, 'csrf_field()'),
-                substr_count($source, 'shop_context_field('),
-                $page . ': จำนวนฟอร์มกับจำนวน shop_context_field ไม่เท่ากัน'
-            );
-            $this->assertSame($expected, substr_count($source, 'shop_context_field('), $page);
+            // ตัดออกมาทีละ <form ... </form> แล้วดูเฉพาะอันที่ส่งไป /api/
+            preg_match_all('#<form\b.*?</form>#s', $source, $forms);
+            $writeForms = array_values(array_filter(
+                $forms[0],
+                static fn(string $form): bool => str_contains($form, '/api/')
+            ));
+
+            $this->assertNotSame([], $writeForms, $page . ': หาฟอร์มที่เขียนข้อมูลไม่เจอเลย');
+
+            foreach ($writeForms as $index => $form) {
+                $where = sprintf('%s ฟอร์มที่ %d', $page, $index + 1);
+
+                $this->assertStringContainsString('csrf_field()', $form, $where . ': ไม่มี csrf_field');
+                $this->assertStringContainsString(
+                    'shop_context_field(',
+                    $form,
+                    $where . ': ไม่มี shop_context_field — กดบันทึกตอนสลับร้านแล้วข้อมูลจะลงผิดร้าน'
+                );
+            }
         }
     }
 }

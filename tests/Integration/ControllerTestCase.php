@@ -112,8 +112,17 @@ abstract class ControllerTestCase extends IntegrationTestCase
      * ⚠️ เขียนไฟล์ตรง ๆ แทนการล็อกอินผ่านฟอร์ม เพื่อไม่ให้เทสต์ต้องรู้จักรหัสผ่าน
      * และไม่ให้ rate limit ของหน้า login มายุ่งกับเทสต์เรื่องอื่น
      */
-    protected function startSession(int $userId, int $shopId, int $sessionVersion = 1): string
-    {
+    /**
+     * @param int $startedSecondsAgo อายุของ session (ใช้ทดสอบด่านหมดเวลา)
+     * @param int $idleSecondsAgo    เวลาที่ไม่มีการใช้งานล่าสุด
+     */
+    protected function startSession(
+        int $userId,
+        int $shopId,
+        int $sessionVersion = 1,
+        int $startedSecondsAgo = 0,
+        int $idleSecondsAgo = 0
+    ): string {
         $sessionId = 'ctrl' . bin2hex(random_bytes(12));
         $now = time();
 
@@ -125,8 +134,8 @@ abstract class ControllerTestCase extends IntegrationTestCase
             'user_id' => $userId,
             'email' => 'owner@example.com',
             'session_version' => $sessionVersion,
-            'auth_started_at' => $now,
-            'last_activity_at' => $now,
+            'auth_started_at' => $now - $startedSecondsAgo,
+            'last_activity_at' => $now - $idleSecondsAgo,
             'current_shop_id' => $shopId,
             'current_shop_name' => 'ร้านทดสอบ',
         ];
@@ -189,6 +198,49 @@ abstract class ControllerTestCase extends IntegrationTestCase
     protected function getJson(string $path, ?string $sessionId = null): array
     {
         return $this->request('GET', $path, [], $sessionId, ['Accept' => 'application/json']);
+    }
+
+    /**
+     * ส่งฟอร์มพร้อมไฟล์แนบ (multipart/form-data) — ทางเดียวที่จะทดสอบการนำเข้า CSV
+     *
+     * ⚠️ `http_build_query` ส่งไฟล์ไม่ได้ ด่านตรวจการอัปโหลดทั้ง 6 ด่านใน
+     * `api/records.php` จึงเคยไม่มีใครแตะเลย
+     *
+     * @param array<string,string> $fields
+     * @return array{status:int,headers:array<string,string>,body:string}
+     */
+    protected function postFile(
+        string $path,
+        array $fields,
+        string $fileField,
+        string $fileName,
+        string $fileContent,
+        ?string $sessionId = null,
+        string $fileMimeType = 'text/csv'
+    ): array {
+        $boundary = '----adprofit' . bin2hex(random_bytes(8));
+        $body = '';
+
+        foreach ($fields as $name => $value) {
+            $body .= '--' . $boundary . "\r\n"
+                . 'Content-Disposition: form-data; name="' . $name . '"' . "\r\n\r\n"
+                . $value . "\r\n";
+        }
+
+        $body .= '--' . $boundary . "\r\n"
+            . 'Content-Disposition: form-data; name="' . $fileField . '"; filename="' . $fileName . '"' . "\r\n"
+            . 'Content-Type: ' . $fileMimeType . "\r\n\r\n"
+            . $fileContent . "\r\n"
+            . '--' . $boundary . "--\r\n";
+
+        return $this->request(
+            'POST',
+            $path,
+            [],
+            $sessionId,
+            ['Content-Type' => 'multipart/form-data; boundary=' . $boundary],
+            $body
+        );
     }
 
     /**

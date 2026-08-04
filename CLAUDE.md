@@ -163,11 +163,13 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 | Auth (login/logout/reset password/session guard) | ครอบแล้ว (integration) |
 | ShopService / GoalService / ProfileService / RecordService เขียน-ลบ | ครอบแล้ว |
 | ชั้น controller (`api/*.php`) — ด่านตรวจ (auth/405/415/CSRF/409) | ครอบแล้ว (`EndpointGuardChainTest`, `RecordEndpointGuardTest`) |
-| ชั้น controller — ตรรกะเฉพาะของแต่ละ action | ครอบแล้ว: `records.php` (`RecordEndpointGuardTest`) · `shops.php` (`ShopEndpointTest`) · `goals.php`/`profile.php` (`GoalAndProfileEndpointTest`) |
+| ชั้น controller — ตรรกะเฉพาะของแต่ละ action | ครอบแล้ว: `records.php` ทุกคำสั่งรวมนำเข้า CSV (`RecordActionEndpointTest`) · `shops.php` (`ShopEndpointTest`) · `goals.php`/`profile.php` (`GoalAndProfileEndpointTest`) · `auth.php` (`AuthEndpointTest`) |
+| Session หมดอายุ / เตะเครื่องอื่นออก | ครอบแล้ว (`SessionLifetimeTest`) |
+| ไฟล์ที่ดาวน์โหลดจริง (CSV กันสูตร Excel, BOM, xlsx) | ครอบแล้ว (`ExportEndpointTest`) |
 | ชั้นเพจ — เปิดขึ้นจริง, กันคนไม่ล็อกอิน, ไม่โกหก ฿0, หดช่วงอนาคต | ครอบแล้ว (`PageRenderTest`) |
 | JS ที่ต้องตรงกับ PHP (อ่านจำนวนเงิน / วันที่กำกวม / แยกหัวตาราง) | ครอบแล้ว (`BrowserScriptParityTest` — ดึงฟังก์ชันจาก `add-record.php` ไปรันด้วย node แล้วเทียบกับ PHP) |
 | **JS ส่วนที่เหลือ** (เติมค่าเมื่อเปลี่ยนวัน, month-grid, typed-confirm, วางจาก Excel ทั้งกระบวนการ) | **0** — ไม่มี JS test runner |
-| **EmailService การส่งจริง** | ตรวจได้แค่คอนฟิก — การส่งถึงจริง **ต้อง verify มือ** |
+| **EmailService การส่งจริง** | กฎ "ตั้งค่าครบไหม" ครอบด้วยพฤติกรรมแล้ว (constructor รับค่าแทนที่ได้) — **การส่งถึงกล่องจดหมายจริงยังต้อง verify มือ** |
 
 **JS ส่วนที่เหลือยังไม่มีตาข่าย** — logic ที่อยู่ตรงนั้นให้ย้ายลง service/helper ก่อนแก้
 (มีตัวอย่างในหัวข้อด้านบน) หรือถ้าย้ายไม่ได้ ให้ verify ด้วยเบราว์เซอร์จริง

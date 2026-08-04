@@ -134,7 +134,12 @@ class RecordService
                     if (!$this->shopRepository->lockForWrite($shopId, $userId)) {
                         // ร้านถูกลบจากอีกอุปกรณ์ระหว่างที่หน้านี้เปิดค้างไว้ — ถ้าปล่อยผ่าน
                         // จะไปตายที่ foreign key แล้วผู้ใช้เห็นแค่ "ไม่สามารถบันทึกข้อมูลได้"
-                        $this->db->rollBack();
+                        //
+                        // ⚠️ ยกเลิกได้เฉพาะทรานแซกชันที่เมธอดนี้เปิดเอง — ถ้าผู้เรียกเปิดมาให้
+                        // การ rollBack ตรงนี้จะล้างงานของเขาทิ้งโดยที่เขาไม่รู้ตัว
+                        if ($startedTransaction && $this->db->inTransaction()) {
+                            $this->db->rollBack();
+                        }
 
                         return self::shopVanishedResult();
                     }
@@ -160,7 +165,7 @@ class RecordService
             error_log('[record] upsertRecord failed: ' . $exception->getMessage());
             return [
                 'success' => false,
-                'error' => 'ไม่สามารถบันทึกข้อมูลได้',
+                'error' => write_failure_message($exception, 'ไม่สามารถบันทึกข้อมูลได้'),
             ];
         }
 
@@ -605,7 +610,10 @@ class RecordService
                 if ($canLockRows) {
                     // จองแถวร้านครั้งเดียวก่อนเขียนทั้งชุด — ลำดับเดียวกับตอนลบร้าน
                     if (!$this->shopRepository->lockForWrite($shopId, $userId)) {
-                        $this->db->rollBack();
+                        // ⚠️ เช่นเดียวกับ upsertRecord: ยกเลิกได้เฉพาะทรานแซกชันของตัวเอง
+                        if ($startedTransaction && $this->db->inTransaction()) {
+                            $this->db->rollBack();
+                        }
 
                         return self::shopVanishedResult();
                     }
@@ -659,7 +667,7 @@ class RecordService
             error_log('[record] upsertManyRecords failed: ' . $exception->getMessage());
             return [
                 'success' => false,
-                'error' => 'ไม่สามารถบันทึกข้อมูลได้',
+                'error' => write_failure_message($exception, 'ไม่สามารถบันทึกข้อมูลได้'),
             ];
         }
 
@@ -713,7 +721,13 @@ class RecordService
                 // ⚠️ ต้องจองก่อนเหมือนทางเขียนอื่น ๆ — เมธอดนี้ยังจองแถว "วัน" ที่จะย้ายไป
                 // ด้วย FOR UPDATE (เช็กว่าวันนั้นมีข้อมูลอยู่แล้วไหม) ซึ่งกลายเป็น gap lock
                 // เมื่อวันนั้นยังว่าง สองแท็บที่ย้ายรายการไปคนละวันว่างจึงเคยชนกันได้
-                $this->shopRepository->lockForWrite($shopId, $userId);
+                if (!$this->shopRepository->lockForWrite($shopId, $userId)) {
+                    if ($startedTransaction && $this->db->inTransaction()) {
+                        $this->db->rollBack();
+                    }
+
+                    return self::shopVanishedResult();
+                }
             }
 
             $existingRecord = $this->recordRepository->findByIdAndShopIdForUpdate($recordId, $shopId);
@@ -1714,7 +1728,18 @@ class RecordService
                 $canLockRows = $this->db->inTransaction();
                 if ($canLockRows) {
                     // จองแถวร้านก่อนแตะข้อมูลข้างใน — ลำดับเดียวกับทุกทางที่เขียน
-                    $this->shopRepository->lockForWrite($shopId, $userId);
+                    // ร้านหายไปแล้ว = รายการข้างในหายตามไปด้วย (cascade) → ผลตรงกับที่ขอ
+                    // จึงไม่ต้องแจ้ง error แต่ต้องไม่เดินต่อไปแตะแถวที่ไม่มีอยู่แล้ว
+                    if (!$this->shopRepository->lockForWrite($shopId, $userId)) {
+                        if ($startedTransaction && $this->db->inTransaction()) {
+                            $this->db->commit();
+                        }
+
+                        return [
+                            'success' => true,
+                            'message' => 'ลบรายการเรียบร้อยแล้ว',
+                        ];
+                    }
                 }
             }
 
