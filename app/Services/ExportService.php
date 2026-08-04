@@ -4,6 +4,18 @@ declare(strict_types=1);
 
 class ExportService
 {
+    /**
+     * ตำแหน่งคอลัมน์ "โน้ต" ในแต่ละรูปแบบไฟล์ — ⚠️ คนละฐานเลขกัน
+     *
+     * CSV : 0-based เพราะ controller ใช้กับ index ของ array แถว (ตาราง 7 คอลัมน์)
+     * xlsx: 1-based เพราะ PhpSpreadsheet นับ A = 1 (ตาราง 6 คอลัมน์)
+     *
+     * ตอนนี้ค่าบังเอิญเท่ากัน (6) ทั้งคู่ ถ้าเพิ่ม/ลบคอลัมน์ในตารางใดตารางหนึ่ง
+     * ต้องแก้เฉพาะค่าของฝั่งนั้น อย่าสมมติว่าต้องเท่ากันเสมอ
+     */
+    private const CSV_NOTE_COLUMN_INDEX = 6;
+    private const XLSX_NOTE_COLUMN_INDEX = 6;
+
     private RecordService $recordService;
     private ShopRepository $shopRepository;
 
@@ -107,7 +119,8 @@ class ExportService
                 'rows' => $rows,
                 'totals_row' => $totalsRow,
                 // คอลัมน์เดียวที่มาจากผู้ใช้ → controller sanitize เฉพาะช่องนี้
-                'note_column_index' => 6,
+                // ⚠️ 0-based (ใช้กับ index ของ array แถว) ต่างจาก payload ของ xlsx ที่เป็น 1-based
+                'note_column_index' => self::CSV_NOTE_COLUMN_INDEX,
                 // ให้ controller เว้น 1 บรรทัดก่อนแถวรวม เพื่อให้ Excel ตัดขอบตารางตรงนั้น
                 'blank_row_before_totals' => true,
             ],
@@ -160,7 +173,7 @@ class ExportService
                     'shop_name' => (string)($shop['name'] ?? 'ร้านค้า'),
                     'rows' => [],
                     'totals' => ['revenue' => 0.0, 'ad_cost' => 0.0, 'profit' => 0.0, 'roas' => null],
-                    'note_column_index' => 6,
+                    'note_column_index' => self::XLSX_NOTE_COLUMN_INDEX,
                 ],
             ];
         }
@@ -225,9 +238,9 @@ class ExportService
                     'profit' => $totalRevenue - $totalAdCost,
                     'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
                 ],
-                // ตำแหน่งคอลัมน์โน้ต (1-based) — controller กัน formula injection เฉพาะช่องนี้
-                // (ช่องอื่นระบบสร้างเอง ปล่อยดิบเพื่อให้ Excel อ่านเป็นวันที่/ตัวเลข)
-                'note_column_index' => 6,
+                // ตำแหน่งคอลัมน์โน้ต — 1-based เพราะ PhpSpreadsheet ใช้เลขคอลัมน์แบบ 1 = A
+                // ⚠️ ฐานเลขต่างจาก payload ของ CSV ที่เป็น 0-based ทั้งที่ชื่อคีย์เหมือนกัน
+                'note_column_index' => self::XLSX_NOTE_COLUMN_INDEX,
             ],
         ];
     }

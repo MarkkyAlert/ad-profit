@@ -46,6 +46,23 @@ if (!defined('EXPOSE_DEV_RESET_LINK')) {
     define('EXPOSE_DEV_RESET_LINK', false);
 }
 
+// MAIL_* ปิดไว้ตาม default ของ config.php — เทสต์ต้องไม่ส่งอีเมลจริงไม่ว่ากรณีใด
+foreach ([
+    'MAIL_ENABLED' => false,
+    'MAIL_HOST' => 'smtp.example.invalid',
+    'MAIL_PORT' => 587,
+    'MAIL_TIMEOUT_SECONDS' => 15,
+    'MAIL_RETRY_ATTEMPTS' => 1,
+    'MAIL_USERNAME' => '',
+    'MAIL_PASSWORD' => '',
+    'MAIL_FROM_ADDRESS' => '',
+    'MAIL_FROM_NAME' => 'Ad Profit Test',
+] as $mailConstant => $mailValue) {
+    if (!defined($mailConstant)) {
+        define($mailConstant, $mailValue);
+    }
+}
+
 date_default_timezone_set(APP_TIMEZONE);
 
 // include เฉพาะ helper + auth guard (ห้าม include includes/bootstrap.php เต็ม)

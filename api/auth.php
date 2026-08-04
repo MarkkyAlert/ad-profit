@@ -13,6 +13,7 @@ $wantsJson = wants_json_response();
 // (เดิมตรวจอยู่ในแต่ละ branch ซึ่งไม่มีวันทำงาน เพราะ $action อ่านจาก $_POST ที่ว่างเปล่า
 //  เมื่อเป็น GET หรือ JSON → ตกไป "Invalid action" 404 แทนที่จะเป็น 405/415)
 ensure_post_request_or_respond($wantsJson, '/login.php');
+ensure_post_body_not_truncated_or_respond($wantsJson, '/login.php');
 ensure_form_content_type_or_respond($wantsJson, '/login.php');
 
 $userRepository = new UserRepository($pdo);

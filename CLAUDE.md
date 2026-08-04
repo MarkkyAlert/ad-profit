@@ -65,17 +65,22 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 - **Schema Guard ใน `includes/bootstrap.php`:** ถ้า schema ไม่ตรง (ตาราง/คอลัมน์/index ที่กำหนด) ระบบตอบ 503 / CLI exit(1) ควบคุมด้วย flag `SCHEMA_GUARD_ENABLED` — **เวลาแก้ schema ต้องอัปเดต guard ด้วย**
 - **`database/schema.sql` เป็น DROP + CREATE** — ห้ามรันทับ database จริง; ถ้าจะแก้โครงบน DB ที่มีข้อมูล ใช้ `ALTER` แยกต่างหาก ⚠️ ไฟล์**ขึ้นต้นด้วย `CREATE DATABASE ad_profit; USE ad_profit;` (hardcode ชื่อ DB จริง)** → `mysql < schema.sql` บนเซิร์ฟเวอร์ = **DROP ตารางใน `ad_profit` จริงทันที**; integration test loader (`tests/Integration/IntegrationTestCase.php`) จึง**ตัด 2 บรรทัดนี้ทิ้ง** ให้ DDL ลงเฉพาะ DB ที่ต่ออยู่
 - **Auth/Session:** idle timeout 14400s, absolute 86400s; `requireAuth`/`requireGuest` เป็น guard; `isSessionVersionValid()` เช็ก DB **ทุก request**
-- **Rate limiting:** auth ใช้ตาราง `auth_rate_limits` (DB) + fallback session; profile (email/password) ใช้ session-based ตอบ 429
+- **Rate limiting:** auth ใช้ตาราง `auth_rate_limits` (DB) + fallback session; profile (email/password) ใช้ session-based ตอบ 429 · login มี **2 bucket**: ต่อ (IP + อีเมล) และต่อ IP ล้วน (`login_ip`) กัน password spraying — bucket ต่อ IP ไม่ถูกล้างตอนล็อกอินสำเร็จโดยตั้งใจ
+⚠️ **ห้ามใช้ชื่อ placeholder ซ้ำในคำสั่ง SQL เดียว** — `EMULATE_PREPARES=false` ทำให้ MySQL ตอบ `HY093` แล้ว query ล้มเงียบ (เคยทำให้ rate limit ตายทั้งระบบ)
 - **Security extra:** CSV export กัน formula injection (เติม `'` หน้า cell ที่ขึ้นต้น `= + - @ \t \r`) — **guard นี้อยู่ใน controller `api/export.php` (closure `$sanitizeCsvCell`) ไม่ใช่ `ExportService` → unit-test ที่ระดับ service ไม่ได้ ต้องเทสต์ผ่าน integration ที่ยิง endpoint จริง**; ⚠️ **guard ทำเฉพาะคอลัมน์โน้ต** (ช่องเดียวที่ผู้ใช้พิมพ์ — ตำแหน่งมาจาก `note_column_index` ใน payload) เซลล์ที่ระบบสร้าง (วันที่ ISO/ตัวเลข/%) ออกดิบ เพื่อให้ Excel อ่านเป็นตัวเลข/วันที่ ไม่ใช่ข้อความ; reset token เก็บเป็น hash + TTL, security headers เซ็ตใน bootstrap
 
 ## Logic ที่อยู่ที่ controller/view (ไม่ใช่ service)
 
 > จุดที่ business logic หลุดออกจาก Service มาอยู่ที่ controller/page — ต้องรู้ก่อนแก้ (verified จากโค้ดจริง)
 
-- **ปี (พ.ศ. + clamp):** controller (`annual.php:19-26`, `overview.php:31-38`, `api/annual-data.php:26-33`) แปลง พ.ศ. −543 (ช่วง 2400–2700) แล้ว clamp 2000–2100 (นอกช่วง → ปีปัจจุบัน) — **ตรรกะซ้ำ 3 ที่**; `AnnualService`/`OverviewAnnualService` `isValidYear` แค่ reject (2000–2100) **ไม่แปลง/ไม่ clamp**
-- **Rate-limit ของ profile:** อยู่ใน `api/profile.php:31-91` เป็น closure session-based (5 ครั้ง/60s → 429) **ไม่ได้อยู่ใน `ProfileService`** — ต่างจาก `AuthService` ที่ rate-limit อยู่ใน service (ระวังตอนแก้/เพิ่ม rate-limit อย่าถือว่าเป็น pattern เดียวกัน)
-- **Shop delete:** `api/shops.php:152-160` เรียก `ShopRepository->findByIdAndUserId` **ตรง** + ตัดชื่อร้าน 20 ตัวแรก (`mb_substr`) เทียบ `confirm_shop_name` เอง — เป็นจุดเดียวใน `api/` ที่ controller แตะ repo ตรงเพื่อ logic; typed-confirm rule อยู่ที่ controller **ไม่ใช่ `ShopService`**
-- **สูตร profit/ROAS ซ้ำใน view:** `RecordService->getRecentRecords()` คืน row ดิบ → `add-record.php:138-141` คำนวณ profit/ROAS เองในเพจ ⚠️ **แก้สูตร profit/ROAS ต้องตามไปอัปเดต view นี้ด้วย ไม่ใช่แค่ service** (`AnnualService` summary มี `profit_margin` ให้แล้วเหมือน `OverviewAnnualService` — `annual.php` อ่านจาก service ไม่คำนวณเองแล้ว)
+- **Rate-limit ของ profile:** อยู่ใน `api/profile.php` เป็น closure session-based (5 ครั้ง/60s → 429) **ไม่ได้อยู่ใน `ProfileService`** — ต่างจาก `AuthService` ที่ rate-limit อยู่ใน service (ระวังตอนแก้/เพิ่ม rate-limit อย่าถือว่าเป็น pattern เดียวกัน) · นับเฉพาะเคสที่รหัสผ่านปัจจุบันผิด (service ทำเครื่องหมาย `credential_failure`) ไม่ใช่ทุก validation error
+- **สูตร profit/ROAS ซ้ำใน view:** `RecordService->getRecentRecords()` คืน row ดิบ → `add-record.php` (ตาราง "รายการล่าสุด") คำนวณ profit/ROAS เองในเพจ ⚠️ **แก้สูตร profit/ROAS ต้องตามไปอัปเดต view นี้ด้วย ไม่ใช่แค่ service**
+- **`$today` seam:** service ที่ผลลัพธ์ขึ้นกับวันที่ (`RecordService`, `AnnualService`, `OverviewAnnualService`, `ExportService`, `DashboardService`) รับ `?string $today = null` ท้าย param ไว้ให้เทสต์ล็อกวันได้ — **ถ้าเพิ่ม logic ที่อ่านวันที่ ต้องรับ seam ต่อไปด้วย** ไม่งั้นบางส่วนอ้างวันนี้จริงขณะที่ส่วนอื่นใช้ค่าที่ส่งเข้ามา (เคยเป็นบั๊กใน `DashboardService::resolveRange`)
+
+> ตรรกะที่เคยอยู่ที่ controller และถูกย้ายลง service/helper แล้ว — อย่าย้ายกลับ:
+> แปลงปี พ.ศ. → `resolve_calendar_year()` · cutoff เดือนอนาคต → `resolve_calendar_month()` ·
+> typed-confirm ตอนลบร้าน → `ShopService::confirmationNameFor()` + `deleteShop()` ·
+> ตรวจรูปแบบเดือนของเป้าหมาย → `GoalService` (controller ส่งค่าดิบ ห้ามใช้ `normalize_month_input` กับข้อมูล)
 
 ---
 
@@ -92,12 +97,14 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 |---|---|
 | Annual / Overview / Xlsx / Dashboard / Export (อ่าน) | ครอบแน่น |
 | RecordService ฝั่งอ่าน (grid, weekday, days-since, unfilled) | ครอบแน่น |
-| **ShopService / GoalService / ProfileService / AuthService** | **รวมกันไม่ถึง 10 เคส** |
-| **`RecordService::updateRecord` / `deleteRecord` / `getMonthlyRecords`** | **0** |
-| **ทุกสาขา transaction/lock/rollback** | **0** (unit test ส่ง `$db = null` จึงข้ามหมด) |
-| **ชั้น controller (`api/*.php`) ทั้งชั้น** | **0** — `grep "api/\|\$_POST\|csrf" tests/` ว่างเปล่า |
+| Auth (login/logout/reset password/session guard) | ครอบแล้ว (integration) |
+| ShopService / GoalService / ProfileService / RecordService เขียน-ลบ | ครอบแล้ว |
+| **ชั้น controller (`api/*.php`) ทั้งชั้น** | **0** — `grep "api/\|\$_POST\|csrf" tests/` ยังว่างเปล่า |
+| **JavaScript ทั้งหมด** (paste TSV, month-grid, typed-confirm) | **0** — ไม่มี JS test runner |
+| **EmailService การส่งจริง** | ตรวจได้แค่คอนฟิก — การส่งถึงจริง **ต้อง verify มือ** |
 
-**ก่อนแก้โค้ดในพื้นที่ที่เขียน 0 ไว้ ให้เขียนเทสต์ที่ครอบพฤติกรรมเดิมก่อนเสมอ** — ไม่มีตาข่ายรองรับอยู่
+**ชั้น controller และ JS ยังไม่มีตาข่าย** — logic ที่อยู่ตรงนั้นให้ย้ายลง service/helper
+ก่อนแก้ (มีตัวอย่างในหัวข้อด้านบน) หรือถ้าย้ายไม่ได้ ให้ verify ด้วย curl/เบราว์เซอร์จริง
 
 ### Framework
 - **PHPUnit** เป็น dev dependency, รันด้วย `composer test`

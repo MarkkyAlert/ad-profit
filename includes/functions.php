@@ -278,6 +278,39 @@ function ensure_post_request_or_respond(bool $wantsJson, string $redirectUrl): v
     }
 }
 
+/**
+ * ตรวจว่า body ใหญ่เกิน post_max_size จน PHP ทิ้ง $_POST/$_FILES ทั้งก้อนหรือไม่
+ *
+ * เมื่อเกิดเคสนี้ $_POST จะว่างเปล่าทั้งที่ Content-Length มีค่า → ทุก endpoint อ่าน
+ * $action ไม่เจอแล้วตกไปตอบ "Invalid action" (404) ซึ่งไม่มีทางเดาได้ว่าเกิดอะไรขึ้น
+ * เดิมเป็นปัญหาชัดที่สุดตอนอัปโหลด CSV ใหญ่ (ผู้ใช้เห็น 404 แทน "ไฟล์ใหญ่เกิน")
+ */
+function ensure_post_body_not_truncated_or_respond(bool $wantsJson, string $redirectUrl): void
+{
+    if (!is_post_request() || $_POST !== [] || $_FILES !== []) {
+        return;
+    }
+
+    $contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($contentLength <= 0) {
+        return;
+    }
+
+    $limit = trim((string)ini_get('post_max_size'));
+    error_log(sprintf(
+        '[request] POST body dropped by PHP: content_length=%d post_max_size=%s',
+        $contentLength,
+        $limit
+    ));
+
+    api_respond([
+        'success' => false,
+        'error' => 'ข้อมูลที่ส่งมาใหญ่เกินกว่าที่เซิร์ฟเวอร์รับได้'
+            . ($limit !== '' ? ' (จำกัด ' . $limit . ')' : '')
+            . ' กรุณาลดขนาดไฟล์แล้วลองใหม่',
+    ], 413, $redirectUrl, $wantsJson);
+}
+
 function ensure_form_content_type_or_respond(bool $wantsJson, string $redirectUrl): void
 {
     if (!is_post_request()) {
