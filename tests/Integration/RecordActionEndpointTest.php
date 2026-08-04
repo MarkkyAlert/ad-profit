@@ -263,10 +263,16 @@ final class RecordActionEndpointTest extends ControllerTestCase
         $shopId = $this->createShop($userId);
         $session = $this->startSession($userId, $shopId);
 
-        $bigCsv = "date,revenue,ad_cost\n" . str_repeat("2026-08-01,5000,1200\n", 120000);
-        $this->assertGreaterThan(2 * 1024 * 1024, strlen($bigCsv));
+        // ⚠️ ต้องใหญ่เกิน 2MB แต่มีจำนวนแถวน้อย ๆ ไม่งั้นจะไปติดด่าน "แถวต่อครั้ง"
+        // ก่อน แล้วเทสต์จะผ่านด้วยเหตุผลคนละเรื่องกับชื่อของมัน
+        $padding = str_repeat('x', 300000);
+        $bigCsv = "date,revenue,ad_cost,note\n";
+        for ($row = 1; $row <= 10; $row++) {
+            $bigCsv .= sprintf("2026-08-%02d,5000,1200,%s\n", $row, $padding);
+        }
+        $this->assertGreaterThan(2 * 1024 * 1024, strlen($bigCsv), 'ไฟล์ทดสอบยังไม่เกิน 2MB');
 
-        $this->postFile(
+        $response = $this->postFile(
             '/api/records.php',
             [
                 'action' => 'import_csv',
@@ -279,6 +285,12 @@ final class RecordActionEndpointTest extends ControllerTestCase
             $session
         );
 
+        $this->assertSame(302, $response['status']);
+        $this->assertStringContainsString(
+            'ไฟล์ใหญ่เกิน 2MB',
+            $this->flashMessages($session),
+            'ไม่ได้มาจากด่านของแอป — อาจไปติดเพดานของ PHP หรือด่านจำนวนแถวก่อน'
+        );
         $this->assertSame(0, $this->countRows('daily_records'), 'ไฟล์ใหญ่เกินกำหนดถูกนำเข้าได้');
     }
 

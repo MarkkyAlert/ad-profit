@@ -99,14 +99,14 @@ final class GoalAndProfileEndpointTest extends ControllerTestCase
     }
 
     /**
-     * ⭐ ตั้งเป้าให้ร้านของคนอื่นไม่ได้
+     * ⭐ ฟอร์มที่ชี้ไปร้านของคนอื่น ต้องไม่เขียนอะไรเลย
      *
-     * ⚠️ ต้องให้ **session ชี้ไปที่ร้านของคนอื่น** ถึงจะไปถึงด่านตรวจสิทธิ์จริง —
-     * `api/goals.php` อ่านร้านจาก `$_SESSION['current_shop_id']` เท่านั้น ไม่เคยอ่าน
-     * `$_POST['shop_id']` เลย · เทสต์เวอร์ชันแรกส่ง shop_id มาทางฟอร์มแล้วนับแถว
-     * ของร้านคนอื่น ซึ่งเป็น 0 อยู่แล้วโดยโครงสร้าง ถอดด่านตรวจสิทธิ์ออกก็ยังเขียว
+     * ⚠️ ชื่อเทสต์ไม่ได้พูดถึง "ด่านตรวจสิทธิ์" โดยตั้งใจ — ในทางปฏิบัติคำขอนี้ถูก
+     * ปฏิเสธที่ **ด่าน 409 (ฟอร์มเป็นของอีกร้าน)** ก่อน เพราะการเปิดหน้าเว็บเรียก
+     * `resolve_current_shop_id()` ซึ่งซ่อม session กลับไปร้านของเจ้าตัวแล้ว
+     * · ด่านตรวจสิทธิ์ในชั้น Service ครอบไว้ที่ `GoalServiceOverwriteTest` แทน
      */
-    public function testGoalsCannotBeSetOnAnotherUsersShop(): void
+    public function testAFormPointingAtAnotherUsersShopWritesNothing(): void
     {
         $userId = $this->createUser();
         $this->createShop($userId);
@@ -148,8 +148,8 @@ final class GoalAndProfileEndpointTest extends ControllerTestCase
         $this->assertSame(0, $this->countRows('monthly_goals'));
     }
 
-    /** ⭐ ลบเป้าของร้านคนอื่นไม่ได้ */
-    public function testGoalsOfAnotherUsersShopCannotBeDeleted(): void
+    /** ⭐ ฟอร์มลบที่ชี้ไปร้านของคนอื่น ต้องไม่ลบอะไรเลย (ดูหมายเหตุด้านบน) */
+    public function testAFormPointingAtAnotherUsersShopDeletesNothing(): void
     {
         $userId = $this->createUser();
         $this->createShop($userId);

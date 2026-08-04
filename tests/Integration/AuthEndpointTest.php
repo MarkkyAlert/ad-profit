@@ -123,6 +123,96 @@ final class AuthEndpointTest extends ControllerTestCase
         $this->assertSame(1, $this->countRows('shops'), 'สมัครแล้วไม่มีร้านให้เริ่มใช้งาน');
     }
 
+    /** ⭐ ขอลิงก์รีเซ็ตต้องผ่าน CSRF ด้วย ไม่งั้นเว็บอื่นสั่งส่งอีเมลรัว ๆ ได้ */
+    public function testForgotPasswordRequiresCsrf(): void
+    {
+        $this->createUser('owner@example.com', 'OldPass123');
+
+        $response = $this->postJson('/api/auth.php', [
+            'action' => 'forgot_password',
+            'email' => 'owner@example.com',
+        ]);
+
+        $this->assertSame(403, $response['status']);
+        $this->assertSame(0, $this->countRows('password_reset_tokens'), 'สร้างลิงก์ได้โดยไม่มี CSRF token');
+    }
+
+    /** ⭐ ขอลิงก์รีเซ็ตของบัญชีที่มีจริง → ต้องได้ token เก็บไว้ในระบบ */
+    public function testForgotPasswordCreatesATokenForAKnownAccount(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $guest = $this->startSession(0, 0);
+
+        $response = $this->post('/api/auth.php', [
+            'action' => 'forgot_password',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'owner@example.com',
+        ], $guest);
+
+        $this->assertSame(302, $response['status']);
+        $this->assertSame(1, $this->countRows('password_reset_tokens'));
+        $this->assertSame(
+            $userId,
+            (int)$this->pdo->query('SELECT user_id FROM password_reset_tokens LIMIT 1')->fetchColumn()
+        );
+    }
+
+    /**
+     * ⭐ อีเมลที่ไม่มีในระบบต้องตอบเหมือนกันเป๊ะ — ไม่บอกใบ้ว่ามีบัญชีนี้หรือไม่
+     *
+     * ถ้าตอบต่างกัน คนที่ไล่เดาจะรู้ได้ทันทีว่าอีเมลไหนสมัครไว้แล้ว
+     */
+    public function testForgotPasswordDoesNotRevealWhetherTheAccountExists(): void
+    {
+        $this->createUser('owner@example.com', 'OldPass123');
+        $guest = $this->startSession(0, 0);
+
+        $known = $this->post('/api/auth.php', [
+            'action' => 'forgot_password',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'owner@example.com',
+        ], $guest);
+
+        $this->pdo->exec('TRUNCATE TABLE auth_rate_limits');
+
+        $unknown = $this->post('/api/auth.php', [
+            'action' => 'forgot_password',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'never-signed-up@example.com',
+        ], $guest);
+
+        $this->assertSame($known['status'], $unknown['status'], 'ตอบคนละรหัสสถานะ = บอกใบ้ว่ามีบัญชีอยู่จริง');
+        $this->assertSame(
+            $known['headers']['location'] ?? '',
+            $unknown['headers']['location'] ?? '',
+            'พาไปคนละหน้า = บอกใบ้ว่ามีบัญชีอยู่จริง'
+        );
+        $this->assertSame(1, $this->countRows('password_reset_tokens'), 'สร้าง token ให้อีเมลที่ไม่มีในระบบ');
+    }
+
+    /**
+     * ⭐ ลิงก์รีเซ็ตต้องไม่หลุดออกมาในคำตอบ เว้นแต่เปิดสวิตช์ dev ไว้ชัดเจน
+     *
+     * เซิร์ฟเวอร์ทดสอบรันด้วย APP_ENV=development แต่ `EXPOSE_DEV_RESET_LINK`
+     * เป็น false ตามค่าปริยาย — ถ้าเงื่อนไขนี้พังขึ้นมา ลิงก์รีเซ็ตจะโผล่ให้ใครก็ได้
+     * ที่ยิง endpoint นี้เห็น
+     */
+    public function testTheResetLinkIsNotLeakedInTheResponse(): void
+    {
+        $this->createUser('owner@example.com', 'OldPass123');
+        $guest = $this->startSession(0, 0);
+
+        $response = $this->postJson('/api/auth.php', [
+            'action' => 'forgot_password',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'owner@example.com',
+        ], $guest);
+
+        $this->assertStringNotContainsString('reset_link', $response['body']);
+        $this->assertStringNotContainsString('reset-password.php?token=', $response['body']);
+        $this->assertStringNotContainsString('reset-password.php?token=', $this->flashMessages($guest));
+    }
+
     /**
      * ⭐ ตั้งรหัสใหม่ไม่ผ่าน → ต้องพา token กลับมาให้กรอกใหม่ได้
      *
@@ -227,7 +317,13 @@ final class AuthEndpointTest extends ControllerTestCase
         $this->assertStringContainsString('forgot-password.php', $response['headers']['location'] ?? '');
     }
 
-    /** ⭐ เปิดลิงก์ของบัญชีอื่นขณะล็อกอินอยู่ → ต้องเตือนว่าคนละบัญชีกัน */
+    /**
+     * ⭐ เปิดลิงก์ของบัญชีอื่นขณะล็อกอินอยู่ → ต้องเตือนว่าคนละบัญชีกัน
+     *
+     * ⚠️ ห้ามยืนยันด้วย "อีเมลของลิงก์ปรากฏบนหน้า" อย่างเดียว — กล่องนั้นแสดงเสมอ
+     * ทุกกรณีอยู่แล้ว การเตือนจริง ๆ คือกล่องสีเหลืองที่บอก **อีเมลที่ล็อกอินอยู่**
+     * และคำว่า "ไม่ใช่บัญชีเดียวกับลิงก์นี้" ซึ่งเป็นสิ่งเดียวที่ทำให้เหยื่อรู้ตัว
+     */
     public function testTheResetPageWarnsWhenTheLinkBelongsToAnotherAccount(): void
     {
         $victimId = $this->createUser('victim@example.com', 'OldPass123');
@@ -237,8 +333,50 @@ final class AuthEndpointTest extends ControllerTestCase
 
         $session = $this->startSession($victimId, $shopId);
         $response = $this->get('/reset-password.php?token=' . rawurlencode($token), $session);
+        $body = $response['body'];
 
         $this->assertSame(200, $response['status']);
-        $this->assertStringContainsString('attacker@example.com', $response['body'], 'ไม่บอกว่าลิงก์เป็นของใคร');
+        $this->assertStringContainsString('attacker@example.com', $body, 'ไม่บอกว่าลิงก์เป็นของใคร');
+        $this->assertStringContainsString(
+            'ไม่ใช่บัญชีเดียวกับลิงก์นี้',
+            $body,
+            'ไม่มีคำเตือนว่ากำลังจะตั้งรหัสให้บัญชีของคนอื่น'
+        );
+        $this->assertStringContainsString(
+            'victim@example.com',
+            $body,
+            'ไม่ได้บอกว่าตอนนี้ล็อกอินด้วยบัญชีไหน — เหยื่อไม่มีทางเทียบได้'
+        );
+        $this->assertStringContainsString('อย่ากรอกรหัสผ่านของคุณลงไป', $body);
+    }
+
+    /** ⭐ ลิงก์ของบัญชีตัวเอง → ต้องไม่มีคำเตือน (ไม่งั้นเตือนจนคนไม่กล้าใช้ของตัวเอง) */
+    public function testTheResetPageDoesNotWarnForYourOwnLink(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $shopId = $this->createShop($userId);
+        $token = $this->issueResetToken($userId);
+
+        $session = $this->startSession($userId, $shopId);
+        $body = $this->get('/reset-password.php?token=' . rawurlencode($token), $session)['body'];
+
+        $this->assertStringContainsString('owner@example.com', $body);
+        $this->assertStringNotContainsString(
+            'ไม่ใช่บัญชีเดียวกับลิงก์นี้',
+            $body,
+            'เตือนทั้งที่เป็นลิงก์ของบัญชีตัวเอง'
+        );
+    }
+
+    /** ⭐ ยังไม่ได้ล็อกอินแล้วเปิดลิงก์ → ไม่ต้องเตือน แต่ต้องบอกว่าลิงก์เป็นของบัญชีไหน */
+    public function testAnAnonymousVisitorSeesTheOwnerButNoWarning(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $token = $this->issueResetToken($userId);
+
+        $body = $this->get('/reset-password.php?token=' . rawurlencode($token))['body'];
+
+        $this->assertStringContainsString('owner@example.com', $body);
+        $this->assertStringNotContainsString('ไม่ใช่บัญชีเดียวกับลิงก์นี้', $body);
     }
 }

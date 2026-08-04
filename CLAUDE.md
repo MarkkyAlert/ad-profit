@@ -163,7 +163,7 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 | Auth (login/logout/reset password/session guard) | ครอบแล้ว (integration) |
 | ShopService / GoalService / ProfileService / RecordService เขียน-ลบ | ครอบแล้ว |
 | ชั้น controller (`api/*.php`) — ด่านตรวจ (auth/405/415/CSRF/409) | ครอบแล้ว (`EndpointGuardChainTest`, `RecordEndpointGuardTest`) |
-| ชั้น controller — ตรรกะเฉพาะของแต่ละ action | ครอบแล้ว: `records.php` ทุกคำสั่งรวมนำเข้า CSV (`RecordActionEndpointTest`) · `shops.php` (`ShopEndpointTest`) · `goals.php`/`profile.php` (`GoalAndProfileEndpointTest`) · `auth.php` (`AuthEndpointTest`) |
+| ชั้น controller — ตรรกะเฉพาะของแต่ละ action | ครอบแล้วทุกไฟล์: `records.php` ทุกคำสั่งรวมนำเข้า CSV (`RecordActionEndpointTest`) · `shops.php` (`ShopEndpointTest`) · `goals.php`/`profile.php` (`GoalAndProfileEndpointTest`) · `auth.php` รวม forgot/reset (`AuthEndpointTest`) · `*-data.php` (`DataEndpointParityTest`) |
 | Session หมดอายุ / เตะเครื่องอื่นออก | ครอบแล้ว (`SessionLifetimeTest`) |
 | ไฟล์ที่ดาวน์โหลดจริง (CSV กันสูตร Excel, BOM, xlsx) | ครอบแล้ว (`ExportEndpointTest`) |
 | ชั้นเพจ — เปิดขึ้นจริง, กันคนไม่ล็อกอิน, ไม่โกหก ฿0, หดช่วงอนาคต | ครอบแล้ว (`PageRenderTest`) |
@@ -182,6 +182,11 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
   · **หา `"Warning:"` ในหน้า HTML** → PHP ห่อเป็น `<b>Warning</b>:` ต้อง `strip_tags()` ก่อน · และเซิร์ฟเวอร์ทดสอบต้องรันด้วย `APP_ENV=development` ไม่งั้น `display_errors` ปิดอยู่ ไม่มีอะไรให้ตรวจตั้งแต่แรก
   · **`markTestSkipped` ตอนยกเซิร์ฟเวอร์ไม่ขึ้น** → เทสต์ทั้งชั้นหายไปโดย CI ยังเขียว (ต้อง `fail()` เมื่อ DB พร้อมแล้วแต่เซิร์ฟเวอร์ไม่ขึ้น)
   · **สถานะ 0 จากคำขอที่ไปไม่ถึงเซิร์ฟเวอร์** → ผ่านทุก assert ที่เขียนว่า "ไม่ใช่ 200"
+
+- ⚠️ **เทสต์ต้องเรียก "กติกาตัวจริง" ไม่ใช่เขียนกติกาซ้ำไว้ในเทสต์** — `BrowserScriptParityTest` ดึงฟังก์ชัน JS จาก `add-record.php` และเรียก `RecordService::parseImportDate()` + `isAmbiguousSlashDate()` ผ่าน Reflection (สองตัวรวมกัน เพราะ `parseImportCsv()` ก็ทำแบบนั้น) · เคยเขียนกติกาซ้ำไว้ในเทสต์แล้วกลายเป็นสำเนาที่ 3 ให้เพี้ยน และเคยใช้ตัวเดียวจนเทสต์ **ผ่านแม้ทำให้ JS คืน null ทุกกรณี**
+- ⚠️ **เทสต์อัปโหลดไฟล์ต้องรันเซิร์ฟเวอร์ด้วย `upload_max_filesize` ที่สูงกว่าเพดานของแอป** — เพดานของแอปคือ 2MB (`api/records.php`) ถ้า php.ini ตั้งไว้ 2M พอดี PHP จะปฏิเสธก่อน ด่านของแอปไม่มีวันทำงาน แล้วเทสต์ที่ตั้งชื่อว่าตรวจด่านนั้นจะผ่านด้วยข้อความคนละอัน (เซิร์ฟเวอร์จริงตั้งไว้สูงกว่า ด่านของแอปจึงเป็นตัวจริงบน production)
+- ⚠️ **ด่านตรวจสิทธิ์ของ `ExportService` (CSV) เทสต์ที่ endpoint ไม่ได้** — `api/export.php` เรียก `resolve_current_shop_id()` ซึ่งซ่อม session กลับไปร้านของเจ้าตัวก่อนเสมอ คำขอจึงไม่มีวันเดินมาถึง · ต้องเทสต์ที่ชั้น Service (stub `findByIdAndUserId` → null) เหมือน `ExportServiceXlsxTest`
+- ⚠️ **`startSession()` ในเทสต์อ่านอีเมลจริงของผู้ใช้จาก DB** — ไม่ใช่ค่าคงที่ เพราะบางหน้าเทียบอีเมลใน session กับข้อมูลอื่น (หน้าตั้งรหัสใหม่เตือนเมื่อลิงก์เป็นของคนละบัญชี) ค่าคงที่ทำให้เทสต์เรื่องนั้นเขียนไม่ได้เลย
 
 ### เทสต์ชั้นหน้าเว็บ (controller + page) — `ControllerTestCase`
 

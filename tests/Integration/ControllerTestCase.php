@@ -55,8 +55,14 @@ abstract class ControllerTestCase extends IntegrationTestCase
             return;
         }
 
+        // ⚠️ ต้องยอมให้อัปโหลดใหญ่กว่าเพดานของแอป (2MB) — ไม่งั้น PHP ปฏิเสธก่อน
+        // ด่านของแอปจะไม่มีวันทำงาน และเทสต์ที่ตั้งชื่อว่าตรวจด่านนั้นก็ตรวจอะไรไม่ได้
+        // เซิร์ฟเวอร์จริง (Hostinger) ตั้ง upload_max_filesize ไว้สูงกว่า 2MB อยู่แล้ว
+        // ด่านของแอปจึงเป็นตัวจริงที่ทำงานบน production
         $command = sprintf(
-            'php -d session.save_path=%s -d error_reporting=E_ALL -S 127.0.0.1:%d -t %s',
+            'php -d session.save_path=%s -d error_reporting=E_ALL'
+                . ' -d upload_max_filesize=16M -d post_max_size=20M'
+                . ' -S 127.0.0.1:%d -t %s',
             escapeshellarg($sessionDir),
             $port,
             escapeshellarg($projectRoot)
@@ -130,9 +136,15 @@ abstract class ControllerTestCase extends IntegrationTestCase
         // เดิมเขียนคีย์ที่แอปไม่ได้อ่าน (user_email/last_activity/created_at) แล้วขาด
         // คีย์ที่แอปอ่านจริง — `isAuthSessionAlive()` เติมให้เองเงียบ ๆ เทสต์จึงผ่าน
         // แต่ด่านหมดเวลา (idle/absolute) กลายเป็นสิ่งที่เทสต์ผ่านชั้นนี้ไม่ได้เลย
+        // ⚠️ ต้องเป็นอีเมลจริงของผู้ใช้คนนั้น ไม่ใช่ค่าคงที่ — หน้าเว็บบางหน้าเทียบอีเมล
+        // ใน session กับข้อมูลอื่น (เช่นหน้าตั้งรหัสใหม่เตือนเมื่อลิงก์เป็นของคนละบัญชี)
+        // ค่าคงที่ทำให้เทสต์เรื่องนั้นเขียนไม่ได้เลย
+        $email = (string)($this->pdo
+            ->query('SELECT email FROM users WHERE id = ' . $userId)->fetchColumn() ?: 'owner@example.com');
+
         $values = [
             'user_id' => $userId,
-            'email' => 'owner@example.com',
+            'email' => $email,
             'session_version' => $sessionVersion,
             'auth_started_at' => $now - $startedSecondsAgo,
             'last_activity_at' => $now - $idleSecondsAgo,

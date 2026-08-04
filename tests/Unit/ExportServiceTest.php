@@ -11,6 +11,32 @@ use ShopRepository;
 
 final class ExportServiceTest extends TestCase
 {
+    /**
+     * ⭐ ขอไฟล์ CSV ของร้านที่ไม่ใช่ของตัวเอง ต้องไม่ได้ข้อมูล
+     *
+     * ⚠️ ด่านนี้เทสต์ที่ระดับ endpoint ไม่ได้ — `api/export.php` เรียก
+     * `resolve_current_shop_id()` ซึ่งซ่อม session ให้กลับไปร้านของเจ้าตัวก่อนเสมอ
+     * คำขอจึงไม่มีวันเดินมาถึงตรงนี้ผ่านหน้าเว็บ · แต่มันคือด่านสุดท้ายที่กันข้อมูล
+     * ข้ามผู้ใช้ในชั้น Service และเดิม **ไม่มีเทสต์ตัวไหนแตะเลย**
+     * (ฝาแฝดฝั่ง xlsx มี `ExportServiceXlsxTest` คุมอยู่แล้ว)
+     */
+    public function testCsvExportRefusesAShopTheUserDoesNotOwn(): void
+    {
+        $recordService = $this->createMock(RecordService::class);
+        // ต้องไม่แม้แต่จะไปอ่านข้อมูลของร้านนั้น
+        $recordService->expects($this->never())->method('getMonthlyRecords');
+
+        $shopRepository = $this->createStub(ShopRepository::class);
+        $shopRepository->method('findByIdAndUserId')->willReturn(null);
+
+        $result = (new ExportService($recordService, $shopRepository))
+            ->buildMonthlyCsvPayload(1, 999, '2024-01');
+
+        $this->assertFalse($result['success'], 'ดาวน์โหลดข้อมูลของร้านคนอื่นได้');
+        $this->assertStringContainsString('ไม่มีสิทธิ์', (string)$result['error']);
+        $this->assertArrayNotHasKey('data', $result, 'มีข้อมูลติดออกมาด้วยทั้งที่ไม่มีสิทธิ์');
+    }
+
     public function testBuildMonthlyCsvPayloadProducesHeaderAndRows(): void
     {
         // ⚠️ ExportService รับ RecordService (ไม่ใช่ repo) → ต้อง stub RecordService
