@@ -130,9 +130,12 @@ final class DataEndpointParityTest extends ControllerTestCase
         $fromEndpoint = $this->json('/api/dashboard-data.php?range=month_pick&month=2099-12', $session);
         $range = (array)($fromEndpoint['data']['range'] ?? []);
 
-        // ⚠️ ดู start_date ด้วย ไม่ใช่แค่ end_date — end_date ถูกตัดด้วยตัวกัน
-        // "ห้ามเลยวันนี้" อยู่แล้ว เทสต์ที่ดูแต่ end_date จึงเขียวแม้การหดเดือนอนาคตหายไป
-        // (แล้วจะได้ช่วงกลับหัว: เริ่ม 2099-12-01 จบวันนี้)
+        // ⚠️ นี่เป็นเทสต์ระดับ "ผลลัพธ์ปลายทาง" ไม่ใช่ตัวล็อกจุดใดจุดหนึ่ง — การหด
+        // เดือนอนาคตมีอยู่ 3 ที่ (`api/dashboard-data.php`, `dashboard.php`,
+        // `DashboardService`) ถอดออกทีละที่แล้วอีกสองที่ยังคุมไว้ เทสต์นี้จึงไม่แดง
+        // **แต่ละชั้นมีเทสต์ของตัวเองแยกไว้แล้ว** (`CalendarMonthResolutionTest`,
+        // `FutureRowsConsistencyTest`) ตัวนี้กันแค่ "หลุดพร้อมกันทั้งหมด"
+        // · ดู start_date ด้วย เพราะ end_date ถูกตัดด้วยตัวกัน "ห้ามเลยวันนี้" อยู่แล้ว
         $this->assertSame(
             date('Y-m-01'),
             (string)($range['start_date'] ?? ''),

@@ -135,11 +135,16 @@ final class AuthEndpointTest extends ControllerTestCase
     {
         $userId = $this->createUser('owner@example.com', 'RealPass123');
         $shopId = $this->createShop($userId, 'ร้านทดสอบ');
-        $guest = $this->startSession(0, 0);
 
-        // ⚠️ ต้องดูว่า "ไฟล์ไหนเพิ่งเกิดใหม่" — การล็อกอินสำเร็จเรียก session_regenerate_id
-        // จึงได้ไฟล์ใหม่ · ถ้าไปค้นด้วย user_id จะเจอไฟล์ที่เทสต์ก่อนหน้าสร้างไว้แทน
-        // (ทุกเทสต์ในคลาสเดียวกันใช้โฟลเดอร์ session ร่วมกัน และ userId มักเป็น 1 เหมือนกัน)
+        // ⚠️⚠️ ต้องล็อกอินจาก session ที่ **ยังไม่มีคีย์ของการล็อกอินเลย**
+        //
+        // `session_regenerate_id(true)` ยก `$_SESSION` เดิมข้ามไปไฟล์ใหม่ทั้งก้อน
+        // ถ้าเริ่มจาก session ที่เทสต์เขียนคีย์ครบไว้แล้ว ไฟล์หลังล็อกอินจะมีคีย์ครบ
+        // เสมอ **ไม่ว่า `establishSession()` จะเขียนอะไรจริง ๆ หรือไม่** — เทสต์เวอร์ชัน
+        // แรกจึงเขียวแม้ตัดการเขียน session ของแอปเหลือคีย์เดียว ซึ่งตรงข้ามกับหน้าที่ของมัน
+        $guest = $this->startBlankSession();
+
+        // ต้องดูว่า "ไฟล์ไหนเพิ่งเกิดใหม่" — ล็อกอินสำเร็จได้ไฟล์ใหม่เสมอ
         $pattern = sys_get_temp_dir() . '/ad-profit-controller-tests-*/sess_*';
         $before = array_flip((array)glob($pattern));
 
@@ -180,6 +185,13 @@ final class AuthEndpointTest extends ControllerTestCase
             $realKeys,
             $fabricated,
             'คีย์ของ session ที่เทสต์สร้าง ไม่ตรงกับตอนล็อกอินจริง'
+        );
+
+        // และต้องมีคีย์ที่ระบบพึ่งพาจริง ๆ ครบ — กันกรณีที่ทั้งสองฝั่ง "ขาดเหมือนกัน"
+        $this->assertSame(
+            ['auth_started_at', 'current_shop_id', 'current_shop_name', 'email', 'last_activity_at', 'session_version', 'user_id'],
+            $realKeys,
+            'การล็อกอินจริงเขียนคีย์ไม่ครบตามที่ระบบใช้'
         );
     }
 

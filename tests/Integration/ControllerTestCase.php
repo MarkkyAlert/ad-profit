@@ -166,6 +166,21 @@ abstract class ControllerTestCase extends IntegrationTestCase
         return $sessionId;
     }
 
+    /**
+     * session เปล่า — มีแต่ id ไม่มีคีย์ของการล็อกอินเลย
+     *
+     * ใช้ตอนที่ต้องพิสูจน์ว่า "การล็อกอินจริงเขียนอะไรลง session บ้าง" — ถ้าเริ่มจาก
+     * session ที่มีคีย์ครบอยู่แล้ว `session_regenerate_id()` จะยกของเดิมข้ามไป
+     * แล้วดูไม่ออกว่าคีย์ไหนมาจากแอปจริง ๆ
+     */
+    protected function startBlankSession(): string
+    {
+        $sessionId = 'blank' . bin2hex(random_bytes(12));
+        file_put_contents((string)self::$sessionDir . '/sess_' . $sessionId, '');
+
+        return $sessionId;
+    }
+
     /** อ่านค่า CSRF token ที่เซิร์ฟเวอร์ตั้งไว้ใน session ของ id นี้ */
     protected function csrfTokenFor(string $sessionId): string
     {

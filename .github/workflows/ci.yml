@@ -60,7 +60,7 @@ jobs:
           php-version: '8.2'
           coverage: none
 
-      - name: php -l ทุกไฟล์ (app/, includes/, api/, root *.php)
+      - name: php -l ทุกไฟล์ (app/, includes/, api/, cron/, root *.php)
         run: |
           status=0
           while IFS= read -r -d '' file; do
@@ -70,7 +70,7 @@ jobs:
               status=1
             fi
           done < <(
-            find app includes api -type f -name '*.php' -print0
+            find app includes api cron -type f -name '*.php' -print0
             find . -maxdepth 1 -type f -name '*.php' -print0
           )
           if [ "$status" -eq 0 ]; then

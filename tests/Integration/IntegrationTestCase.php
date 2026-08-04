@@ -87,7 +87,14 @@ abstract class IntegrationTestCase extends TestCase
         // ถ้า phpunit ถูกฆ่ากลางคัน เซิร์ฟเวอร์ที่ค้างอยู่จะถือล็อกไว้ตลอดไป แล้วการรัน
         // ครั้งต่อ ๆ ไปค้างรอเงียบ ๆ โดยไม่มีอะไรบอกว่าทำไม (เกิดขึ้นจริงมาแล้ว)
         // ล็อกของ MySQL ผูกกับ "การเชื่อมต่อ" จึงคืนเองเมื่อโปรเซสตาย
-        $pdo->query("SELECT GET_LOCK('ad_profit_test_suite', 300)")->fetchAll();
+        // ⚠️ ต้องเช็กค่าที่คืนมา — `GET_LOCK` คืน 0 เมื่อรอจนหมดเวลา และ NULL เมื่อผิดพลาด
+        // ทิ้งค่าไว้เฉย ๆ = ชุดเทสต์เดินต่อโดยไม่มีล็อก ซึ่งคือปัญหาเดิมที่ตั้งใจแก้พอดี
+        $acquired = $pdo->query("SELECT GET_LOCK('ad_profit_test_suite', 300) AS ok")->fetch();
+        if ((int)($acquired['ok'] ?? 0) !== 1) {
+            self::$skipReason = 'จับล็อกชุดเทสต์ไม่ได้ภายใน 300 วินาที — มี phpunit อีกโปรเซสค้างอยู่?';
+            return;
+        }
+
 
         self::$connection = $pdo;
         self::$credentials = ['dsn' => $dsn, 'user' => $user, 'pass' => $pass];
