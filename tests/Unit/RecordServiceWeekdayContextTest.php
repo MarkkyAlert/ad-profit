@@ -45,6 +45,17 @@ final class RecordServiceWeekdayContextTest extends TestCase
                 return array_slice($sorted, 0, max(1, $limit));
             }
         );
+        // "วันล่าสุด" นับเฉพาะวันที่ผ่านมาแล้ว — เทสต์จึงต้องส่ง $today ที่ทำให้ข้อมูลเป็นอดีต
+        $recordRepository->method('findLatestOnOrBeforeDate')->willReturnCallback(
+            static function (int $shopId, string $cutoff) use ($rows): ?array {
+                $eligible = array_values(array_filter(
+                    $rows,
+                    static fn(array $row): bool => $row['record_date'] <= $cutoff
+                ));
+                usort($eligible, static fn(array $a, array $b): int => strcmp($b['record_date'], $a['record_date']));
+                return $eligible[0] ?? null;
+            }
+        );
 
         $shopRepository = $this->createStub(ShopRepository::class);
         $shopRepository->method('userCanAccessShop')->willReturn($canAccess);
@@ -99,7 +110,7 @@ final class RecordServiceWeekdayContextTest extends TestCase
     {
         $service = $this->makeService([]);
 
-        $result = $service->getWeekdayContext(1, 1);
+        $result = $service->getWeekdayContext(1, 1, null, '2026-08-31');
 
         $this->assertTrue($result['success']);
         $this->assertFalse($result['data']['has_data']);
@@ -130,7 +141,7 @@ final class RecordServiceWeekdayContextTest extends TestCase
             ['2026-08-10', 2000.0, 400.0],
         ]);
 
-        $data = $service->getWeekdayContext(1, 1)['data'];
+        $data = $service->getWeekdayContext(1, 1, null, '2026-08-31')['data'];
 
         $this->assertSame('2026-08-17', $data['target_date']);
         $this->assertSame(2, $data['sample_count']);       // 03 + 10

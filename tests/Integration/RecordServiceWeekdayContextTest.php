@@ -55,11 +55,50 @@ final class RecordServiceWeekdayContextTest extends IntegrationTestCase
         $this->createRecord($shopId, '2026-08-03', 1000.0, 200.0);
         $this->createRecord($shopId, '2026-08-10', 2000.0, 400.0);
 
-        $data = $this->makeService()->getWeekdayContext($userId, $shopId)['data'];
+        // ส่ง $today เอง — ไม่งั้นผลขึ้นกับนาฬิกาเครื่อง (08-10 เป็นอนาคตเมื่อรันก่อนวันนั้น)
+        $data = $this->makeService()->getWeekdayContext($userId, $shopId, null, '2026-08-31')['data'];
 
         $this->assertSame('2026-08-10', $data['target_date']);
         $this->assertSame(1, $data['sample_count']);
         $this->assertSame(1000.0, $data['avg_revenue']);
+    }
+
+    /** ⭐ วันอนาคตต้องไม่ถูกหยิบมาเป็น "วันล่าสุด" — เกณฑ์เดียวกับ getDaysSinceLastRecord */
+    public function testFutureDatedRecordIsNotTreatedAsTheLatestDay(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $this->createRecord($shopId, '2026-08-03', 1000.0, 200.0);
+        $this->createRecord($shopId, '2026-08-10', 2000.0, 400.0);
+        $this->createRecord($shopId, '2026-12-25', 9999.0, 1.0);   // ลงล่วงหน้า/พิมพ์เดือนผิด
+
+        $data = $this->makeService()->getWeekdayContext($userId, $shopId, null, '2026-08-11')['data'];
+
+        $this->assertSame('2026-08-10', $data['target_date']);
+        $this->assertSame(2000.0, $data['target_revenue']);
+    }
+
+    /**
+     * getWeekdayContext กับ getDaysSinceLastRecord ต้องเห็น "วันล่าสุด" เป็นวันเดียวกัน
+     *
+     * สองเมธอดนี้เคยใช้คนละเกณฑ์ (อันหนึ่งกัน อีกอันไม่กัน) ทั้งที่โชว์อยู่บนหน้าจอเดียวกัน
+     */
+    public function testLatestDayAgreesWithDaysSinceLastRecord(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $this->createRecord($shopId, '2026-08-03', 1000.0, 200.0);
+        $this->createRecord($shopId, '2026-12-25', 9999.0, 1.0);
+
+        $service = $this->makeService();
+
+        $this->assertSame(
+            $service->getDaysSinceLastRecord($userId, $shopId, '2026-08-11')['data']['last_record_date'],
+            $service->getWeekdayContext($userId, $shopId, null, '2026-08-11')['data']['target_date'],
+            'สองการ์ดบนหน้าเดียวกันชี้วันล่าสุดคนละวัน'
+        );
     }
 
     public function testShopsAreIsolated(): void
@@ -87,7 +126,7 @@ final class RecordServiceWeekdayContextTest extends IntegrationTestCase
         $userId = $this->createUser();
         $shopId = $this->createShop($userId);
 
-        $data = $this->makeService()->getWeekdayContext($userId, $shopId)['data'];
+        $data = $this->makeService()->getWeekdayContext($userId, $shopId, null, '2026-08-31')['data'];
 
         $this->assertFalse($data['has_data']);
         $this->assertNull($data['target_date']);

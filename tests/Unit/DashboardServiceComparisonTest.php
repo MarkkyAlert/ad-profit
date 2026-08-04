@@ -153,8 +153,10 @@ final class DashboardServiceComparisonTest extends TestCase
 
         $goal = (array)$result['data']['goal'];
 
-        $this->assertSame(100.0, $goal['progress_revenue']); // แสดงผลยังปัดได้
-        $this->assertFalse($goal['revenue_reached']);        // แต่การตัดสินต้องเทียบค่าจริง
+        // เดิมยอมให้แถบปัดขึ้นเป็น 100.0% แล้วให้ป้ายเป็นคนบอกความจริง — แต่ในการ์ดเดียวกัน
+        // แถบเต็มคู่กับป้าย "ยังไม่ถึงเป้า" อ่านแล้วขัดกันเอง ตอนนี้ progress ปัดลง
+        $this->assertLessThan(100.0, $goal['progress_revenue']);
+        $this->assertFalse($goal['revenue_reached']);        // การตัดสินยังเทียบค่าจริงเหมือนเดิม
         $this->assertFalse($goal['is_achieved']);
     }
 

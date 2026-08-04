@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 class GoalService
 {
+    /**
+     * เพดานเดียวกับ RecordService::MAX_AMOUNT — monthly_goals.target_* เป็น DECIMAL(12,2)
+     * เท่ากับ daily_records ถ้าจะขยับต้องขยับทั้งสองฝั่งพร้อม schema
+     */
+    public const MAX_AMOUNT = RecordService::MAX_AMOUNT;
+
     private GoalRepository $goalRepository;
     private ShopRepository $shopRepository;
     private ?PDO $db;
@@ -37,18 +43,34 @@ class GoalService
             ];
         }
 
-        if ($targetRevenue !== null && $targetRevenue < 0) {
-            return [
-                'success' => false,
-                'error' => 'เป้ารายได้ต้องไม่ติดลบ',
-            ];
-        }
+        foreach ([['เป้ารายได้', $targetRevenue], ['เป้ากำไร', $targetProfit]] as [$label, $value]) {
+            if ($value === null) {
+                continue;
+            }
 
-        if ($targetProfit !== null && $targetProfit < 0) {
-            return [
-                'success' => false,
-                'error' => 'เป้ากำไรต้องไม่ติดลบ',
-            ];
+            // INF/NAN ผ่าน is_float ได้ แต่ลงคอลัมน์ DECIMAL ไม่ได้ — กันไว้ก่อนถึง SQL
+            if (!is_finite($value)) {
+                return [
+                    'success' => false,
+                    'error' => $label . 'ต้องเป็นตัวเลข',
+                ];
+            }
+
+            if ($value < 0) {
+                return [
+                    'success' => false,
+                    'error' => $label . 'ต้องไม่ติดลบ',
+                ];
+            }
+
+            // เกินเพดานแล้ว MySQL strict mode จะ throw ออกมาเป็น "ไม่สามารถบันทึกเป้าหมายได้"
+            // ที่ไม่บอกสาเหตุ ส่วน non-strict จะตัดค่าเงียบแล้วรายงานว่าสำเร็จ
+            if ($value > self::MAX_AMOUNT) {
+                return [
+                    'success' => false,
+                    'error' => $label . 'ต้องไม่เกิน ' . number_format(self::MAX_AMOUNT, 2),
+                ];
+            }
         }
 
         if ($targetRevenue === null && $targetProfit === null) {

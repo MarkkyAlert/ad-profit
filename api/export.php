@@ -18,7 +18,7 @@ $wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
-$selectedMonth = isset($_GET['month']) ? trim((string)$_GET['month']) : date('Y-m');
+$selectedMonth = resolve_calendar_month($_GET['month'] ?? null);
 
 if (preg_match('/^\d{4}-\d{2}$/', $selectedMonth) !== 1) {
     $selectedMonth = date('Y-m');

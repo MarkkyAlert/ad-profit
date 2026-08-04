@@ -75,12 +75,22 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 
 - **Rate-limit ของ profile:** อยู่ใน `api/profile.php` เป็น closure session-based (5 ครั้ง/60s → 429) **ไม่ได้อยู่ใน `ProfileService`** — ต่างจาก `AuthService` ที่ rate-limit อยู่ใน service (ระวังตอนแก้/เพิ่ม rate-limit อย่าถือว่าเป็น pattern เดียวกัน) · นับเฉพาะเคสที่รหัสผ่านปัจจุบันผิด (service ทำเครื่องหมาย `credential_failure`) ไม่ใช่ทุก validation error
 - **สูตร profit/ROAS ซ้ำใน view:** `RecordService->getRecentRecords()` คืน row ดิบ → `add-record.php` (ตาราง "รายการล่าสุด") คำนวณ profit/ROAS เองในเพจ ⚠️ **แก้สูตร profit/ROAS ต้องตามไปอัปเดต view นี้ด้วย ไม่ใช่แค่ service**
-- **`$today` seam:** service ที่ผลลัพธ์ขึ้นกับวันที่ (`RecordService`, `AnnualService`, `OverviewAnnualService`, `ExportService`, `DashboardService`) รับ `?string $today = null` ท้าย param ไว้ให้เทสต์ล็อกวันได้ — **ถ้าเพิ่ม logic ที่อ่านวันที่ ต้องรับ seam ต่อไปด้วย** ไม่งั้นบางส่วนอ้างวันนี้จริงขณะที่ส่วนอื่นใช้ค่าที่ส่งเข้ามา (เคยเป็นบั๊กใน `DashboardService::resolveRange`)
+- **`$today` seam:** service ที่ผลลัพธ์ขึ้นกับวันที่ (`RecordService`, `AnnualService`, `OverviewAnnualService`, `ExportService`, `DashboardService`) รับ `?string $today = null` ท้าย param ไว้ให้เทสต์ล็อกวันได้ — **ถ้าเพิ่ม logic ที่อ่านวันที่ ต้องรับ seam ต่อไปด้วย** ไม่งั้นบางส่วนอ้างวันนี้จริงขณะที่ส่วนอื่นใช้ค่าที่ส่งเข้ามา (เคยเป็นบั๊กใน `DashboardService::resolveRange`) · ใน `RecordService` ใช้ `resolveToday()` ตัวเดียว (เคยคัดลอกบล็อกเดิมไว้ 4 ที่)
+- **"วันล่าสุด" = วันล่าสุดที่ ≤ วันนี้ ไม่ใช่ `record_date` มากที่สุด** — ระบบอนุญาตให้ลงวันล่วงหน้า แถวพวกนั้นจึงลอยขึ้นบนสุดของ `ORDER BY record_date DESC` เสมอ `getDaysSinceLastRecord` และ `getWeekdayContext` จึงใช้ `findLatestOnOrBeforeDate()` เหมือนกัน ⚠️ **ยกเว้น `getRecentRecords()` ที่ตั้งใจให้เห็นแถววันอนาคต** (ไม่งั้นผู้ใช้ที่เพิ่งบันทึกจะคิดว่าไม่ถูกบันทึก) — มีเทสต์ล็อกไว้ทั้งสองฝั่ง อย่า "กวาดให้เหมือนกัน"
+- **เพดานค่าเงิน `9,999,999,999.99`** = `RecordService::MAX_AMOUNT` และ `GoalService::MAX_AMOUNT` (alias ของตัวแรก) — คอลัมน์เป็น `DECIMAL(12,2)` ทั้งคู่ ขยับต้องขยับพร้อม schema
+- **วันที่กำกวมถูกปฏิเสธทั้งสองฝั่ง:** `05/03/2026` (ทั้งสองเลข ≤ 12) อ่านได้ทั้ง D/M และ M/D → PHP `RecordService::isAmbiguousSlashDate()` (import CSV) และ JS `parseDateCell()` ใน `add-record.php` (วางจาก Excel) คืน null เหมือนกัน · JS ใช้ `looksLikeDateCell()` แยกต่างหากสำหรับเช็กแถวหัวตาราง — **ห้ามเอา `parseDateCell` ไปเช็ก header** ไม่งั้นแถวข้อมูลแรกที่วันกำกวมจะถูกทิ้ง
+- **`%` ความคืบหน้าเป้าปัดลง** (`DashboardService::calculateGoalPercent` ใช้ `floor`) — `round` ทำให้ 99.996% ขึ้นเป็น 100.0% คู่กับป้าย "ยังไม่ถึงเป้า" ในการ์ดเดียวกัน (ป้ายเทียบค่าจริง)
 
 > ตรรกะที่เคยอยู่ที่ controller และถูกย้ายลง service/helper แล้ว — อย่าย้ายกลับ:
 > แปลงปี พ.ศ. → `resolve_calendar_year()` · cutoff เดือนอนาคต → `resolve_calendar_month()` ·
 > typed-confirm ตอนลบร้าน → `ShopService::confirmationNameFor()` + `deleteShop()` ·
 > ตรวจรูปแบบเดือนของเป้าหมาย → `GoalService` (controller ส่งค่าดิบ ห้ามใช้ `normalize_month_input` กับข้อมูล)
+
+**`?month` ต้องผ่าน `resolve_calendar_month()` ทุกจุด ไม่มีข้อยกเว้น** — ปัจจุบันครบแล้วทั้ง 7 จุด
+(`dashboard.php`, `overview.php`, `history.php`, `api/dashboard-data.php`, `api/overview-data.php`,
+`api/month-grid.php`, `api/export.php`) และ picker ทุกตัวมี `max="<เดือนนี้>"`
+⚠️ `dashboard.php`/`api/dashboard-data.php` ต้องแยก `month=` **ที่ว่าง** (= ไม่ได้เลือก → `null`)
+ออกจากเดือนปัจจุบัน — สองไฟล์นี้ต้องเขียนเหมือนกันเป๊ะ ๆ ไม่งั้นหน้าเว็บกับ endpoint ตอบคนละอย่าง
 
 ---
 

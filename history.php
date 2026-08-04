@@ -10,10 +10,8 @@ requireAuth();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
-$selectedMonth = (string)($_GET['month'] ?? date('Y-m'));
-if (preg_match('/^\d{4}-\d{2}$/', $selectedMonth) !== 1) {
-    $selectedMonth = date('Y-m');
-}
+// ไม่รับเดือนอนาคต/รูปแบบผิด — helper เดียวกับ overview.php และ dashboard.php
+$selectedMonth = resolve_calendar_month($_GET['month'] ?? null);
 
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
@@ -57,6 +55,7 @@ require __DIR__ . '/includes/header.php';
                     id="month"
                     name="month"
                     type="month"
+                    max="<?= e(date('Y-m')) ?>"
                     value="<?= e($selectedMonth) ?>"
                     class="rounded-xl px-3 py-2 text-sm transition-all">
                 <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>

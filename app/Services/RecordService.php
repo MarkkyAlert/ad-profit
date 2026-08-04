@@ -308,6 +308,26 @@ class RecordService
      * เข้าเป็น 3 ส.ค. ทั้งที่ไฟล์หมายถึง 8 มี.ค. โดยไม่มีสัญญาณเตือน
      * ปฏิเสธไปเลยดีกว่าให้ข้อมูลเข้าผิดเดือนเงียบ ๆ (ปี พ.ศ. ไม่ได้ช่วยแก้ความกำกวมนี้)
      */
+    /**
+     * seam "วันนี้" ที่ใช้ร่วมกันทุกเมธอดที่ต้องรู้ว่าวันไหนผ่านมาแล้ว
+     * ส่ง Y-m-d ที่ถูกต้องมา = ใช้ค่านั้น · ส่งอย่างอื่นหรือไม่ส่ง = วันนี้จริง
+     *
+     * เดิมบล็อกนี้ถูกคัดลอกไว้ 4 ที่ — รวมไว้จุดเดียวเพื่อไม่ให้แก้ที่หนึ่งแล้วลืมอีกสามที่
+     */
+    private function resolveToday(?string $today): string
+    {
+        $input = is_string($today) ? trim($today) : '';
+        $object = $input !== ''
+            ? DateTimeImmutable::createFromFormat('!Y-m-d', $input)
+            : false;
+
+        if (!$object || $object->format('Y-m-d') !== $input) {
+            $object = new DateTimeImmutable('today');
+        }
+
+        return $object->format('Y-m-d');
+    }
+
     private function isAmbiguousSlashDate(string $raw): bool
     {
         if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', trim($raw), $matched) !== 1) {
@@ -822,7 +842,7 @@ class RecordService
      *
      * @param string|null $targetDate รูปแบบ Y-m-d — ไม่ส่ง = วันล่าสุดที่กรอกไว้
      */
-    public function getWeekdayContext(int $userId, int $shopId, ?string $targetDate = null): array
+    public function getWeekdayContext(int $userId, int $shopId, ?string $targetDate = null, ?string $today = null): array
     {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
@@ -858,9 +878,12 @@ class RecordService
                 ];
             }
         } else {
-            // ไม่ระบุ → ใช้วันล่าสุดที่กรอกไว้
+            // ไม่ระบุ → ใช้วันล่าสุด "ที่ผ่านมาแล้ว" ไม่ใช่ record_date มากที่สุด
+            // (ระบบอนุญาตให้บันทึกวันอนาคต แถวพวกนั้นจะลอยขึ้นบนสุดของ ORDER BY เสมอ)
+            // เกณฑ์เดียวกับ getDaysSinceLastRecord — แก้ที่นี่ต้องดูที่นั่นด้วย
             try {
-                $recentRecords = $this->recordRepository->getRecentByShopId($shopId, 1);
+                $latest = $this->recordRepository
+                    ->findLatestOnOrBeforeDate($shopId, $this->resolveToday($today));
             } catch (Throwable $exception) {
                 error_log('[record] getWeekdayContext failed: ' . $exception->getMessage());
                 return [
@@ -869,7 +892,6 @@ class RecordService
                 ];
             }
 
-            $latest = $recentRecords[0] ?? null;
             $resolvedDate = is_array($latest) ? trim((string)($latest['record_date'] ?? '')) : '';
             if ($resolvedDate === '') {
                 return $emptyResult;
@@ -969,14 +991,7 @@ class RecordService
     {
         $normalizedMode = $mode === 'month' ? 'month' : '8w';
 
-        $todayInput = is_string($today) ? trim($today) : '';
-        $todayObject = $todayInput !== ''
-            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
-            : false;
-        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
-            $todayObject = new DateTimeImmutable('today');
-        }
-        $todayObject = $todayObject->setTime(0, 0, 0);
+        $todayObject = (new DateTimeImmutable($this->resolveToday($today)))->setTime(0, 0, 0);
 
         $endDate = $todayObject->format('Y-m-d');
         $startDate = $normalizedMode === 'month'
@@ -1117,14 +1132,7 @@ class RecordService
             ];
         }
 
-        $todayInput = is_string($today) ? trim($today) : '';
-        $todayObject = $todayInput !== ''
-            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
-            : false;
-        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
-            $todayObject = new DateTimeImmutable('today');
-        }
-        $todayObject = $todayObject->setTime(0, 0, 0);
+        $todayObject = (new DateTimeImmutable($this->resolveToday($today)))->setTime(0, 0, 0);
 
         try {
             $records = $this->recordRepository->getRecentByShopId($shopId, 1);
@@ -1245,14 +1253,7 @@ class RecordService
         $monthStart = $monthStart->setTime(0, 0, 0);
 
         // $today ไม่ถูกต้อง/ไม่ส่ง → ใช้วันนี้จริง
-        $todayInput = is_string($today) ? trim($today) : '';
-        $todayObject = $todayInput !== ''
-            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
-            : false;
-        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
-            $todayObject = new DateTimeImmutable('today');
-        }
-        $todayObject = $todayObject->setTime(0, 0, 0);
+        $todayObject = (new DateTimeImmutable($this->resolveToday($today)))->setTime(0, 0, 0);
 
         $selectedMonthKey = $monthStart->format('Y-m');
         $todayMonthKey = $todayObject->format('Y-m');
@@ -1356,14 +1357,7 @@ class RecordService
         }
         $monthStart = $monthStart->setTime(0, 0, 0);
 
-        $todayInput = is_string($today) ? trim($today) : '';
-        $todayObject = $todayInput !== ''
-            ? DateTimeImmutable::createFromFormat('Y-m-d', $todayInput)
-            : false;
-        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
-            $todayObject = new DateTimeImmutable('today');
-        }
-        $todayObject = $todayObject->setTime(0, 0, 0);
+        $todayObject = (new DateTimeImmutable($this->resolveToday($today)))->setTime(0, 0, 0);
 
         $selectedMonthKey = $monthStart->format('Y-m');
         $todayMonthKey = $todayObject->format('Y-m');

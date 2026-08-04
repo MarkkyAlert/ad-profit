@@ -196,6 +196,7 @@ require __DIR__ . '/includes/header.php';
                 <input
                     type="month"
                     id="bulk-month"
+                    max="<?= e(date('Y-m')) ?>"
                     value="<?= e(date('Y-m')) ?>"
                     class="rounded-xl px-3 py-2 text-sm">
             </div>
@@ -353,6 +354,10 @@ require __DIR__ . '/includes/header.php';
         const getRows = () => Array.from(tbody.querySelectorAll('tr'));
         const pad2 = (value) => String(value).padStart(2, '0');
 
+        // "หน้าตาเหมือนวันที่ไหม" — ใช้แยกแถวหัวตารางออกจากข้อมูล ไม่สนว่าจะ parse ได้จริงหรือไม่
+        const looksLikeDateCell = (raw) =>
+            /^(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4})$/.test(String(raw).trim());
+
         // รองรับ YYYY-MM-DD และ D/M/YYYY (+ แปลง พ.ศ. 2400–2700) — นอกเหนือจากนี้คืน null
         const parseDateCell = (raw) => {
             const value = String(raw).trim();
@@ -377,6 +382,13 @@ require __DIR__ . '/includes/header.php';
                 day = Number(matched[1]);
                 month = Number(matched[2]);
                 year = Number(matched[3]);
+
+                // วันกำกวม: 05/03/2026 เป็นได้ทั้ง 5 มี.ค. และ 3 พ.ค. แล้วแต่ว่าไฟล์ต้นทาง
+                // เป็น D/M หรือ M/D — คืน null ให้ค่าดิบไปถึง server แล้วถูกปฏิเสธด้วยข้อความ
+                // เดียวกับ RecordService::isAmbiguousSlashDate() แทนที่จะเดาแล้วบันทึกผิดเงียบ ๆ
+                if (day <= 12 && month <= 12) {
+                    return null;
+                }
             }
 
             if (year >= 2400 && year <= 2700) {
@@ -439,12 +451,14 @@ require __DIR__ . '/includes/header.php';
             }
 
             // ข้าม header — เช็กเฉพาะตอนวางเริ่มที่คอลัมน์วันที่ (กันตัดข้อมูลทิ้งผิด)
-            if (startCol === 0 && grid.length > 1 && parseDateCell(grid[0][0]) === null) {
+            // ใช้ looksLikeDateCell ไม่ใช่ parseDateCell เพราะวันกำกวมคืน null แต่เป็นข้อมูล ไม่ใช่หัวตาราง
+            if (startCol === 0 && grid.length > 1 && !looksLikeDateCell(grid[0][0])) {
                 grid.shift();
             }
 
             let placedRows = 0;
             let truncatedRows = 0;
+            let unreadableDates = 0;
 
             grid.forEach((cells, rowOffset) => {
                 const rowIndex = startRow + rowOffset;
@@ -467,9 +481,19 @@ require __DIR__ . '/includes/header.php';
                     }
 
                     const input = row.querySelector('input[name="' + COLUMN_NAMES[columnIndex] + '"]');
-                    if (input) {
-                        input.value = normalizeCell(columnIndex, cell);
+                    if (!input) {
+                        return;
                     }
+
+                    // ช่องวันที่: เดาไม่ได้ก็อย่าเดา — เว้นว่างแล้วบอกผู้ใช้ ดีกว่าใส่ค่าที่อาจผิด
+                    // แล้วให้ผ่านไปทั้งชุด (05/03/2026 อ่านได้ทั้ง 5 มี.ค. และ 3 พ.ค.)
+                    if (columnIndex === 0 && parseDateCell(cell) === null && String(cell).trim() !== '') {
+                        unreadableDates++;
+                        input.value = '';
+                        return;
+                    }
+
+                    input.value = normalizeCell(columnIndex, cell);
                 });
 
                 placedRows++;
@@ -478,13 +502,21 @@ require __DIR__ . '/includes/header.php';
             refresh();
 
             if (pasteNotice) {
+                const messages = [];
+
                 if (truncatedRows > 0) {
-                    pasteNotice.textContent = 'วางได้ ' + placedRows + ' แถว · ส่วนที่เกิน '
-                        + MAX_ROWS + ' แถว (' + truncatedRows + ' แถว) ถูกตัด';
-                    pasteNotice.classList.remove('hidden');
-                } else {
-                    pasteNotice.classList.add('hidden');
+                    messages.push('วางได้ ' + placedRows + ' แถว · ส่วนที่เกิน '
+                        + MAX_ROWS + ' แถว (' + truncatedRows + ' แถว) ถูกตัด');
                 }
+
+                if (unreadableDates > 0) {
+                    messages.push('มี ' + unreadableDates + ' ช่องวันที่ที่อ่านไม่ได้หรือกำกวม '
+                        + '(เช่น 05/03/2026 อ่านได้ทั้งวัน/เดือน และเดือน/วัน) — เว้นว่างไว้ '
+                        + 'กรุณาเลือกวันที่เอง หรือใช้รูปแบบ ปี-เดือน-วัน');
+                }
+
+                pasteNotice.textContent = messages.join(' · ');
+                pasteNotice.classList.toggle('hidden', messages.length === 0);
             }
         });
 

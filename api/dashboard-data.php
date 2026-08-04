@@ -25,7 +25,14 @@ if (!in_array($rangeType, $allowedRangeTypes, true)) {
 
 $customStartDate = isset($_GET['start_date']) ? trim((string)$_GET['start_date']) : null;
 $customEndDate = isset($_GET['end_date']) ? trim((string)$_GET['end_date']) : null;
+// ต้องตรงกับ dashboard.php ทุกกรณี รวมถึง month= ที่ว่างเปล่า (= ไม่ได้เลือก ไม่ใช่เดือนนี้)
 $selectedMonth = isset($_GET['month']) ? trim((string)$_GET['month']) : null;
+if ($selectedMonth === '') {
+    $selectedMonth = null;
+}
+if ($selectedMonth !== null) {
+    $selectedMonth = resolve_calendar_month($selectedMonth);
+}
 
 if ($customStartDate === '') {
     $customStartDate = null;

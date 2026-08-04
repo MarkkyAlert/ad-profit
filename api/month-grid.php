@@ -18,7 +18,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = (int)($_SESSION['current_shop_id'] ?? 0);
 
-$selectedMonth = isset($_GET['month']) ? trim((string)$_GET['month']) : date('Y-m');
+$selectedMonth = resolve_calendar_month($_GET['month'] ?? null);
 
 $recordRepository = new RecordRepository($pdo);
 $shopRepository = new ShopRepository($pdo);
