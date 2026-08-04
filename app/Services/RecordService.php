@@ -181,6 +181,18 @@ class RecordService
             }
         }
 
+        // ไม่เจอคอลัมน์ที่ต้องการ "สักอันเดียว" มักไม่ได้แปลว่าไฟล์ขาดคอลัมน์จริง
+        // แต่แปลว่าอ่านหัวตารางไม่ออก — encoding ไม่ใช่ UTF-8 (เช่น CP874 จาก Excel ไทย)
+        // หรือใช้ตัวคั่นอื่น (`;`) หรือไม่ใช่ไฟล์ CSV เลย (เช่น .xlsx ที่เปลี่ยนนามสกุลมา)
+        // ข้อความเดิมบอกว่า "ไม่พบคอลัมน์วันที่" ทั้งที่ผู้ใช้เปิดไฟล์แล้วเห็นคอลัมน์ครบ
+        if ($columnMap === []) {
+            fclose($handle);
+            return $fail(
+                'อ่านหัวตารางไม่ออก — ไฟล์อาจไม่ใช่ CSV แบบ UTF-8 หรือใช้ตัวคั่นอื่นที่ไม่ใช่จุลภาค '
+                . 'กรุณาเปิดใน Excel แล้ว Save as "CSV UTF-8 (Comma delimited)" หรือใช้ไฟล์ที่ดาวน์โหลดจากหน้าประวัติ'
+            );
+        }
+
         foreach (['record_date' => 'วันที่', 'revenue' => 'รายได้', 'ad_cost' => 'ค่าแอด'] as $field => $label) {
             if (!isset($columnMap[$field])) {
                 fclose($handle);
@@ -219,31 +231,52 @@ class RecordService
                 continue;
             }
 
+            if ($this->isAmbiguousSlashDate($rawDate)) {
+                fclose($handle);
+                return $fail(
+                    'บรรทัดที่ ' . $lineNumber . ': วันที่ "' . $rawDate . '" กำกวม '
+                    . '(อ่านได้ทั้งวัน/เดือน และเดือน/วัน) — กรุณาใช้รูปแบบ ปี-เดือน-วัน เช่น 2026-08-03'
+                );
+            }
+
             $recordDate = $this->parseImportDate($rawDate);
             if ($recordDate === null) {
                 fclose($handle);
                 return $fail('บรรทัดที่ ' . $lineNumber . ': อ่านวันที่ "' . $rawDate . '" ไม่ได้');
             }
 
-            $revenue = $this->cleanImportNumber($cellAt($columnMap['revenue']));
-            $adCost = $this->cleanImportNumber($cellAt($columnMap['ad_cost']));
+            $rawRevenue = $cellAt($columnMap['revenue']);
+            $rawAdCost = $cellAt($columnMap['ad_cost']);
+            $revenue = $this->cleanImportNumber($rawRevenue);
+            $adCost = $this->cleanImportNumber($rawAdCost);
 
-            if ($revenue !== '' && !is_numeric($revenue)) {
-                fclose($handle);
-                return $fail('บรรทัดที่ ' . $lineNumber . ': รายได้ "' . $revenue . '" ไม่ใช่ตัวเลข');
+            // ช่องว่าง = 0 — วันที่ไม่ได้ยิงแอด/ไม่มีรายได้เป็นเรื่องปกติ และ UI ก็ปล่อยว่างได้
+            // (เดิม parser ปล่อยผ่านเป็น '' แล้วชั้นบันทึกปฏิเสธ ทำให้ทั้งไฟล์ไม่ถูกนำเข้า)
+            if ($revenue === '') {
+                $revenue = '0';
+            }
+            if ($adCost === '') {
+                $adCost = '0';
             }
 
-            if ($adCost !== '' && !is_numeric($adCost)) {
+            // รายงานค่าที่ผู้ใช้เห็นในไฟล์ ไม่ใช่ค่าที่ clean แล้ว
+            if (!is_numeric($revenue)) {
                 fclose($handle);
-                return $fail('บรรทัดที่ ' . $lineNumber . ': ค่าแอด "' . $adCost . '" ไม่ใช่ตัวเลข');
+                return $fail('บรรทัดที่ ' . $lineNumber . ': รายได้ "' . $rawRevenue . '" ไม่ใช่ตัวเลข');
+            }
+
+            if (!is_numeric($adCost)) {
+                fclose($handle);
+                return $fail('บรรทัดที่ ' . $lineNumber . ': ค่าแอด "' . $rawAdCost . '" ไม่ใช่ตัวเลข');
             }
 
             $note = isset($columnMap['note']) ? $cellAt($columnMap['note']) : '';
-            if ($note !== '' && $note[0] === "'") {
-                $note = substr($note, 1); // ถอด guard formula injection ตอน export
-            }
+            $note = $this->stripExportFormulaGuard($note);
 
             $rows[] = [
+                // เลขบรรทัดจริงในไฟล์ — ชั้นบันทึกจะได้ชี้แถวที่ผู้ใช้เปิดเจอ ไม่ใช่ลำดับ
+                // ใน array ที่ตัดหัวตาราง/แถวว่าง/แถวรวม/แถวไม่มีวันที่ ออกไปแล้ว
+                'row_number' => $lineNumber,
                 'record_date' => $recordDate,
                 'revenue' => $revenue,
                 'ad_cost' => $adCost,
@@ -268,6 +301,39 @@ class RecordService
      * parse วันที่จาก CSV — ISO · D/M/YYYY · "2 ส.ค. 2569" (+ แปลง พ.ศ.)
      * คืน null ถ้าอ่านไม่ได้
      */
+    /**
+     * วันที่แบบ x/y/zzzz ที่เลขทั้งสองตัวไม่เกิน 12 อ่านได้สองทาง
+     *
+     * ระบบตีความเป็น วัน/เดือน เสมอ แต่ Excel ภาษาอังกฤษเขียน เดือน/วัน → "3/8/2026"
+     * เข้าเป็น 3 ส.ค. ทั้งที่ไฟล์หมายถึง 8 มี.ค. โดยไม่มีสัญญาณเตือน
+     * ปฏิเสธไปเลยดีกว่าให้ข้อมูลเข้าผิดเดือนเงียบ ๆ (ปี พ.ศ. ไม่ได้ช่วยแก้ความกำกวมนี้)
+     */
+    private function isAmbiguousSlashDate(string $raw): bool
+    {
+        if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', trim($raw), $matched) !== 1) {
+            return false;
+        }
+
+        return (int)$matched[1] <= 12 && (int)$matched[2] <= 12;
+    }
+
+    /**
+     * ถอด ' ที่ export เติมไว้กัน formula injection — เฉพาะกรณีที่ export เติมจริงเท่านั้น
+     *
+     * api/export.php เติม ' ให้เซลล์ที่ขึ้นต้นด้วย = + - @ \t \r การถอดทุกครั้งที่เจอ '
+     * ทำให้โน้ตที่ผู้ใช้พิมพ์ ' นำหน้าเอง เสียอักขระตัวแรกไปถาวรเมื่อ export→import
+     */
+    private function stripExportFormulaGuard(string $value): string
+    {
+        if ($value === '' || $value[0] !== "'") {
+            return $value;
+        }
+
+        $rest = substr($value, 1);
+
+        return preg_match('/^[=+\-@\t\r]/', $rest) === 1 ? $rest : $value;
+    }
+
     private function parseImportDate(string $raw): ?string
     {
         $value = trim($raw);
