@@ -321,6 +321,12 @@ function resolve_safe_redirect_path(string $fallback, ?string $postRedirectTo = 
 function ensure_post_request_or_respond(bool $wantsJson, string $redirectUrl): void
 {
     if (!is_post_request()) {
+        // ⚠️ 405 ต้องมาคู่กับ header `Allow` เสมอ (RFC 9110 บังคับ) ไม่งั้นฝั่งที่เรียก
+        // ได้แต่ "ห้ามใช้วิธีนี้" โดยไม่มีทางรู้ว่าต้องใช้วิธีไหนแทน
+        if (!headers_sent()) {
+            header('Allow: POST');
+        }
+
         api_respond([
             'success' => false,
             'error' => 'Method Not Allowed',
@@ -544,7 +550,13 @@ function resolve_calendar_year(mixed $rawYear, mixed $fallbackYear = null): int
         return ($year >= 2000 && $year <= 2100) ? $year : null;
     };
 
-    return $normalize($rawYear) ?? $normalize($fallbackYear) ?? (int)date('Y');
+    $currentYear = (int)date('Y');
+    $resolved = $normalize($rawYear) ?? $normalize($fallbackYear) ?? $currentYear;
+
+    // ⚠️ ไม่รับปีอนาคต — เกณฑ์เดียวกับ `resolve_calendar_month()`
+    // เดิม `?year=2573` (พ.ศ. → ค.ศ. 2030) เปิดได้ แล้วหน้าขึ้นทุกการ์ดเป็น ฿0 พร้อม
+    // คำเชิญ "ลองเริ่มบันทึกข้อมูล" ของปีที่ยังมาไม่ถึง
+    return $resolved > $currentYear ? $currentYear : $resolved;
 }
 
 /**
@@ -918,4 +930,61 @@ function schema_unique_index_exists(PDO $pdo, string $tableName, string $indexNa
     ]);
 
     return $stmt->fetchColumn() !== false;
+}
+
+/**
+ * ป้าย "เหลืออีก …" ของประมาณการสิ้นปี — ใช้ร่วมกันระหว่างหน้าเว็บกับไฟล์ Excel
+ *
+ * ⚠️ เดิมข้อความนี้ถูกคัดลอกไว้ 2 ที่ (`annual.php` กับ `XlsxReportService`) พร้อมคอมเมนต์
+ * "แก้ต้องแก้คู่" — แล้วก็เพี้ยนกันจริง ๆ (หน้าเว็บ "ไม่คิดฤดูกาล/การเปิดรอบ" ส่วนไฟล์
+ * Excel "ไม่คิดฤดูกาล") ผู้ใช้ที่พิมพ์รายงานออกมาอ่านจึงได้เงื่อนไขคนละชุดกับที่เห็นบนจอ
+ *
+ * @param array<string,mixed> $projection
+ */
+function projection_remaining_label(array $projection): string
+{
+    $months = (int)($projection['months_remaining'] ?? 0);
+    $days = (int)($projection['current_month_remaining_days'] ?? 0);
+
+    return $days > 0
+        ? sprintf('%d เดือน + อีก %d วันของเดือนนี้', $months, $days)
+        : sprintf('%d เดือน', $months);
+}
+
+/**
+ * คำอธิบายใต้ตัวเลขประมาณการ — ต้องเหมือนกันทั้งบนจอและในไฟล์ Excel
+ *
+ * @param array<string,mixed> $projection
+ */
+function projection_footnote_text(array $projection): string
+{
+    return sprintf(
+        'สมมติช่วงที่เหลือ (%s) ทำได้เท่า %d เดือนล่าสุด · ไม่คิดฤดูกาล/การเปิดรอบ — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง',
+        projection_remaining_label($projection),
+        (int)($projection['basis_month_count'] ?? 0)
+    );
+}
+
+/**
+ * นับเดือนกำไร/ขาดทุน/เท่าทุนจากสรุปประจำปี
+ *
+ * ⚠️ "เท่าทุน" ไม่ได้มาจาก service — เป็นส่วนที่เหลือจากการลบ ถ้าคำนวณกันคนละที่จะหลุด
+ * ได้ง่าย (ไฟล์ Excel เคยแสดงแค่ "กำไร A / ขาดทุน B" เดือนที่กำไรเป็น 0 พอดีจึงหายไป
+ * เฉย ๆ ผู้ใช้บวกเลขแล้วไม่ครบตามจำนวนเดือนที่มีข้อมูล)
+ *
+ * @param array<string,mixed> $summary
+ * @return array{with_data:int,profit:int,loss:int,break_even:int}
+ */
+function annual_month_outcome_counts(array $summary): array
+{
+    $withData = max(0, (int)($summary['months_with_data'] ?? 0));
+    $profit = max(0, (int)($summary['profit_months'] ?? 0));
+    $loss = max(0, (int)($summary['loss_months'] ?? 0));
+
+    return [
+        'with_data' => $withData,
+        'profit' => $profit,
+        'loss' => $loss,
+        'break_even' => max(0, $withData - $profit - $loss),
+    ];
 }

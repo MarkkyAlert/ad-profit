@@ -19,6 +19,7 @@ $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
 $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 
+$historyError = null;
 $historyResult = $recordService->getMonthlyRecords($userId, $shopId, $selectedMonth);
 
 $records = [];
@@ -33,7 +34,9 @@ if (($historyResult['success'] ?? false) === true) {
     $records = (array)($historyResult['data']['records'] ?? []);
     $totals = array_merge($totals, (array)($historyResult['data']['totals'] ?? []));
 } else {
-    set_flash('error', (string)($historyResult['error'] ?? 'ไม่สามารถโหลดข้อมูลประวัติได้'));
+    // แสดงเป็นแถบถาวรเหมือนทุกหน้า — เดิมเป็น toast ที่หายไปใน 3 วินาที
+    // ผู้ใช้ที่พลาดจังหวะจะเห็นแค่ "ยังไม่มีข้อมูลในเดือนนี้" กับยอดรวม ฿0
+    $historyError = (string)($historyResult['error'] ?? 'ไม่สามารถโหลดข้อมูลประวัติได้');
 }
 
 $shopCount = $shopRepository->countByUserId($userId);
@@ -69,6 +72,12 @@ require __DIR__ . '/includes/header.php';
         </div>
     </div>
 
+    <?php if ($historyError !== null): ?>
+        <div class="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-400">
+            <?= e($historyError) ?>
+        </div>
+    <?php endif; ?>
+
     <div class="mt-5 overflow-x-auto">
         <table class="min-w-full text-sm">
             <thead>
@@ -86,7 +95,9 @@ require __DIR__ . '/includes/header.php';
             <tbody>
                 <?php if (empty($records)): ?>
                     <tr>
-                        <td colspan="8" class="px-3 py-4 text-center text-slate-400">ยังไม่มีข้อมูลในเดือนนี้</td>
+                        <td colspan="8" class="px-3 py-4 text-center text-slate-400">
+                            <?= $historyError !== null ? 'โหลดข้อมูลไม่สำเร็จ' : 'ยังไม่มีข้อมูลในเดือนนี้' ?>
+                        </td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($records as $record): ?>
@@ -144,6 +155,8 @@ require __DIR__ . '/includes/header.php';
                 <?php endif; ?>
             </tbody>
 
+            <?php // โหลดไม่สำเร็จ = ไม่รู้ยอดรวม → ไม่แสดงแถวรวม ไม่ใช่แสดง ฿0 ?>
+            <?php if ($historyError === null): ?>
             <tfoot>
                 <tr class="border-t border-white/10 bg-white/[0.03] font-semibold">
                     <td class="px-3 py-3 text-slate-200">รวม</td>
@@ -157,6 +170,7 @@ require __DIR__ . '/includes/header.php';
                     <td class="px-3 py-3 text-slate-400">–</td>
                 </tr>
             </tfoot>
+            <?php endif; ?>
         </table>
     </div>
 </section>

@@ -630,9 +630,15 @@ require __DIR__ . '/includes/header.php';
             // แต่ท่าที่ใช้จริงบ่อยคือ "กดเติมวันที่ขาด แล้ววางเฉพาะคอลัมน์ยอด" ซึ่งเริ่มที่
             // คอลัมน์รายได้ หัวตารางจาก Excel จึงกินแถวแรกไป แล้วยอดทุกตัวเลื่อนไปผิดวัน
             // → ถ้าเริ่มที่คอลัมน์ตัวเลข ให้ดูว่าแถวแรกเป็นตัวเลขไหม ไม่ใช่ก็คือหัวตาราง
-            const firstCellLooksLikeHeader = startCol === 0
-                ? !looksLikeDateCell(grid[0][0])
-                : (grid[0] || []).every((cell) => String(cell).trim() !== '' && !isNumericCell(cell));
+            // ⚠️ ใช้ได้เฉพาะคอลัมน์ที่ "ค่าจริงต้องเป็นวันที่/ตัวเลข" เท่านั้น
+            // คอลัมน์โน้ตเป็นข้อความล้วน ทุกแถวจึงเข้าเกณฑ์ "ไม่ใช่ตัวเลข = หัวตาราง"
+            // → วางโน้ต 3 แถวแล้วแถวแรกหายและทุกแถวเลื่อนขึ้น (เคยเกิดจริง)
+            const NOTE_COLUMN_INDEX = 3;
+            const firstCellLooksLikeHeader = startCol === NOTE_COLUMN_INDEX
+                ? false
+                : (startCol === 0
+                    ? !looksLikeDateCell(grid[0][0])
+                    : (grid[0] || []).every((cell) => String(cell).trim() !== '' && !isNumericCell(cell)));
 
             if (grid.length > 1 && firstCellLooksLikeHeader) {
                 grid.shift();

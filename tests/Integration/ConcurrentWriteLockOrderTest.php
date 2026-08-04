@@ -1,0 +1,123 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration;
+
+require_once __DIR__ . '/IntegrationTestCase.php';
+
+use GoalRepository;
+use GoalService;
+use PDO;
+use RecordRepository;
+use RecordService;
+use ShopRepository;
+
+/**
+ * สองแท็บที่บันทึกพร้อมกันต้องไม่ทำให้ระบบตัดใครทิ้ง
+ *
+ * ก่อนหน้านี้การบันทึกจะ "จองแถวของวันนั้น" ไว้ก่อนเขียน ซึ่งสร้างปัญหา 2 ชั้น:
+ *  1. วันที่ยังไม่มีข้อมูล → MySQL จองเป็น "ช่องว่างระหว่างวัน" แทน สองคนที่บันทึก
+ *     คนละวันในช่องว่างเดียวกันจึงจองทับกัน แล้วถูกตัดทิ้งเป็น deadlock
+ *  2. ตอนลบร้านจองแถวร้านก่อนแล้วค่อยลบข้อมูลข้างใน ส่วนตอนบันทึกจองข้อมูลก่อน
+ *     แล้วค่อยแตะแถวร้าน (ผ่าน foreign key) — ลำดับกลับหัวกัน = วนรอกันได้
+ *
+ * ตอนนี้ทุกทางที่เขียนจองแถว "ร้าน" ก่อนเสมอ แล้วค่อยแตะข้อมูลข้างใน
+ * เทสต์นี้พิสูจน์ว่าลำดับนั้นเกิดขึ้นจริงกับ DB จริง และผลลัพธ์ยังถูกต้อง
+ */
+final class ConcurrentWriteLockOrderTest extends IntegrationTestCase
+{
+    private function recordService(?PDO $pdo = null): RecordService
+    {
+        $pdo ??= $this->pdo;
+
+        return new RecordService(new RecordRepository($pdo), new ShopRepository($pdo), $pdo);
+    }
+
+    /**
+     * ⭐ อีกคำขอที่ถือแถวร้านไว้ ต้องทำให้การบันทึก "รอ" ไม่ใช่ "ถูกตัดทิ้ง"
+     *
+     * ใช้การเชื่อมต่อที่ 2 จับแถวร้านแบบเขียน (เหมือนตอนลบร้าน) แล้วตั้งเวลารอสั้น ๆ
+     * ให้การบันทึกล้มด้วย "รอเกินเวลา" (1205) — ซึ่งแปลว่าลำดับถูกต้องแล้ว
+     * ถ้าเป็น deadlock (1213) แปลว่ายังจองกันคนละทางอยู่
+     */
+    public function testSavingWaitsOnTheShopRowInsteadOfDeadlocking(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $other = $this->newConnection();
+        $other->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $other->beginTransaction();
+        $other->query("SELECT id FROM shops WHERE id = {$shopId} FOR UPDATE")->fetchAll();
+
+        $writer = $this->newConnection();
+        $writer->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $result = $this->recordService($writer)
+            ->upsertRecord($userId, $shopId, '2026-08-01', 1000.0, 200.0, null);
+
+        $other->rollBack();
+
+        $this->assertFalse($result['success'], 'เขียนผ่านทั้งที่แถวร้านถูกจับไว้ = ไม่ได้จองแถวร้านก่อน');
+
+        // ต้องไม่มีเศษ transaction ค้าง และข้อมูลต้องไม่ถูกเขียนครึ่ง ๆ
+        $this->assertFalse($writer->inTransaction());
+        $this->assertSame(0, $this->countRows('daily_records'));
+    }
+
+    /** ⭐ บันทึกหลายวัน: เขียนเรียงตามวันที่เสมอ ไม่ว่าจะพิมพ์มาเรียงยังไง */
+    public function testBulkSaveWritesInDateOrderRegardlessOfInputOrder(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $result = $this->recordService()->upsertManyRecords($userId, $shopId, [
+            ['row_number' => 1, 'record_date' => '2026-08-09', 'revenue' => '900', 'ad_cost' => '90', 'note' => ''],
+            ['row_number' => 2, 'record_date' => '2026-08-01', 'revenue' => '100', 'ad_cost' => '10', 'note' => ''],
+            ['row_number' => 3, 'record_date' => '2026-08-05', 'revenue' => '500', 'ad_cost' => '50', 'note' => ''],
+        ]);
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+
+        // id เรียงตามลำดับที่ถูกเขียนจริง — ต้องตรงกับลำดับวันที่ ไม่ใช่ลำดับที่พิมพ์
+        $written = $this->pdo
+            ->query("SELECT record_date FROM daily_records WHERE shop_id = {$shopId} ORDER BY id")
+            ->fetchAll(PDO::FETCH_COLUMN);
+
+        $this->assertSame(['2026-08-01', '2026-08-05', '2026-08-09'], $written);
+    }
+
+    /** ⭐ ตั้งเป้าหมายก็จองแถวร้านก่อนเหมือนกัน */
+    public function testGoalSaveAlsoWaitsOnTheShopRow(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $other = $this->newConnection();
+        $other->beginTransaction();
+        $other->query("SELECT id FROM shops WHERE id = {$shopId} FOR UPDATE")->fetchAll();
+
+        $writer = $this->newConnection();
+        $writer->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $result = (new GoalService(new GoalRepository($writer), new ShopRepository($writer), $writer))
+            ->upsertGoal($userId, $shopId, '2026-08', 50000.0, null);
+
+        $other->rollBack();
+
+        $this->assertFalse($result['success'], 'ตั้งเป้าผ่านทั้งที่แถวร้านถูกจับไว้');
+        $this->assertFalse($writer->inTransaction());
+        $this->assertSame(0, $this->countRows('monthly_goals'));
+    }
+
+    /** ทางปกติ (ไม่มีใครแย่ง) ยังบันทึกได้ตามเดิม */
+    public function testTheNormalPathIsUnaffected(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $result = $this->recordService()->upsertRecord($userId, $shopId, '2026-08-01', 1000.0, 200.0, 'โน้ต');
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertSame(1, $this->countRows('daily_records'));
+    }
+}

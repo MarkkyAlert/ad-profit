@@ -130,13 +130,16 @@ final class ExportServiceTest extends TestCase
     }
 
     /**
-     * ⭐ คอลัมน์ "เทียบครั้งก่อน" ต้องไม่มีตัวคั่นหลักพัน
+     * ⭐ คอลัมน์ "เทียบครั้งก่อน" ต้องไม่มีตัวคั่นหลักพัน และห้ามขึ้นต้นด้วย +
      *
      * คอลัมน์ตัวเลขอื่นส่ง '' เป็น separator อยู่แล้ว เฉพาะช่องนี้ที่เคยใช้ค่า default
      * ทำให้ค่าที่โตมาก (รายได้กระโดดจาก 10 เป็นล้าน) ออกมาเป็น "+9,999,900.0%"
      * ซึ่ง Excel อ่านเป็นสูตรที่ผิดไวยากรณ์ แทนที่จะเป็นตัวเลข
+     *
+     * เอาจุลภาคออกแล้วยังเหลือ "+" ซึ่ง Excel แปลงเป็นสูตรอยู่ดี (มรดก Lotus 1-2-3) —
+     * ช่องนี้จึงเป็นสูตรช่องเดียวในไฟล์ และพังบนเครื่องที่ตั้งทศนิยมเป็นจุลภาค
      */
-    public function testLargeComparePercentHasNoThousandsSeparator(): void
+    public function testLargeComparePercentIsPlainNumberText(): void
     {
         $payload = $this->payloadForRecord([
             'record_date' => '2024-01-10',
@@ -148,14 +151,47 @@ final class ExportServiceTest extends TestCase
             'note' => '',
         ]);
 
-        $this->assertSame('+9999900.0%', $payload['rows'][0][5]);
+        $this->assertSame('9999900.0%', $payload['rows'][0][5]);
         $this->assertStringNotContainsString(',', $payload['rows'][0][5]);
+    }
+
+    /**
+     * ⭐ ไม่มีเซลล์ไหนในไฟล์ที่ระบบสร้างเองขึ้นต้นด้วยอักขระที่ Excel ถือว่าเป็นสูตร
+     *
+     * (โน้ตของผู้ใช้เป็นคนละเรื่อง — controller เติม ' ให้เอง)
+     */
+    public function testNoSystemGeneratedCellStartsAFormula(): void
+    {
+        $payload = $this->payloadForRecord([
+            'record_date' => '2024-01-10',
+            'revenue' => 1000000.0,
+            'ad_cost' => 1.0,
+            'profit' => -999999.5,
+            'roas' => 1000000.0,
+            'compare_revenue_percent' => 9999900.0,
+            'note' => '',
+        ]);
+
+        $noteIndex = (int)$payload['note_column_index'];
+        foreach ([...$payload['rows'], $payload['totals_row'], $payload['headers']] as $row) {
+            foreach ((array)$row as $index => $cell) {
+                if ($index === $noteIndex) {
+                    continue;
+                }
+
+                $this->assertDoesNotMatchRegularExpression(
+                    '/^[=+@\t\r]/',
+                    (string)$cell,
+                    'เซลล์ที่ระบบสร้างเองกลายเป็นสูตรใน Excel: ' . (string)$cell
+                );
+            }
+        }
     }
 
     /** ค่าปกติยังอ่านง่ายเหมือนเดิม */
     public function testOrdinaryComparePercentKeepsItsSign(): void
     {
-        foreach ([[12.5, '+12.5%'], [-11.1, '-11.1%'], [0.0, '0.0%']] as [$percent, $expected]) {
+        foreach ([[12.5, '12.5%'], [-11.1, '-11.1%'], [0.0, '0.0%']] as [$percent, $expected]) {
             $data = $this->payloadForRecord([
                 'record_date' => '2024-01-10',
                 'revenue' => 100.0,

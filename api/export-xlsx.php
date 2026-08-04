@@ -20,7 +20,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
 $wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
-$shopId = (int)($_SESSION['current_shop_id'] ?? 0);
+// อ่านอย่างเดียว → ซ่อม session ที่ชี้ร้านที่ถูกลบไปแล้วเหมือนที่ทุกเพจทำ
+// ⚠️ ทางที่ "เขียน" ข้อมูลห้ามซ่อม — ต้องล้มดัง ๆ ไม่ใช่เงียบ ๆ เปลี่ยนร้านปลายทางให้
+$shopId = resolve_current_shop_id($pdo, $userId);
 
 // รับปีเป็น ค.ศ. หรือ พ.ศ. ก็ได้ — helper เดียวกับ annual.php/overview.php
 // เดิมที่นี่ไม่ตรวจรูปแบบและไม่ clamp ทำให้ ?year เดียวกันได้ผลต่างกัน: หน้า annual

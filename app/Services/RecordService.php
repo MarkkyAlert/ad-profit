@@ -114,8 +114,15 @@ class RecordService
 
                 $canLockRows = $this->db->inTransaction();
                 if ($canLockRows) {
-                    // Serialize concurrent upserts/updates for the same shop+date.
-                    $this->recordRepository->findByShopIdAndRecordDateForUpdate($shopId, (string)$payload['record_date']);
+                    // ⚠️ จองแถว "ร้าน" ก่อน ไม่ใช่แถว "วัน"
+                    //
+                    // เดิมจองแถวของวันนั้นด้วย FOR UPDATE ก่อนเขียน ซึ่ง (1) ไม่ได้ช่วยอะไร
+                    // เพราะคำสั่งเขียนเป็น INSERT … ON DUPLICATE KEY UPDATE ที่กันชนกันเอง
+                    // อยู่แล้ว และ (2) เมื่อยังไม่มีข้อมูลของวันนั้น MySQL จะจอง "ช่องว่าง"
+                    // ระหว่างวันแทน สองคนที่บันทึกคนละวันในช่องว่างเดียวกันจึงล็อกกันเอง
+                    // จนถูกตัดทิ้งเป็น deadlock · ที่ต้องจองจริง ๆ คือแถวร้าน เพื่อให้ลำดับ
+                    // ตรงกับตอนลบร้าน (ร้าน → ข้อมูลในร้าน) ดู ShopRepository::lockForShare()
+                    $this->shopRepository->lockForShare($shopId, $userId);
                 }
             }
 
@@ -570,11 +577,6 @@ class RecordService
             }
         }
 
-        $overwriteCheck = $this->rejectBlankCellsOverwritingExistingDays($shopId, $blankCells);
-        if ($overwriteCheck !== null) {
-            return $overwriteCheck;
-        }
-
         $startedTransaction = false;
         $canLockRows = false;
         try {
@@ -585,14 +587,39 @@ class RecordService
                 }
 
                 $canLockRows = $this->db->inTransaction();
+                if ($canLockRows) {
+                    // จองแถวร้านครั้งเดียวก่อนเขียนทั้งชุด — ลำดับเดียวกับตอนลบร้าน
+                    $this->shopRepository->lockForShare($shopId, $userId);
+                }
             }
 
-            foreach ($payloads as $payload) {
-                if ($canLockRows) {
-                    // Serialize concurrent upserts for the same shop+date.
-                    $this->recordRepository->findByShopIdAndRecordDateForUpdate($shopId, (string)$payload['record_date']);
+            // ⚠️ ตรวจ "ช่องว่างจะทับของเดิมไหม" **ข้างใน** transaction เท่านั้น
+            //
+            // เดิมตรวจก่อนเปิด transaction — ระหว่างที่ผู้ใช้กำลังนำเข้าไฟล์ ถ้าอีกแท็บ
+            // (หรือมือถืออีกเครื่อง) บันทึกวันเดียวกันแทรกเข้ามา ตัวกันจะเห็นภาพเก่าว่า
+            // "วันนั้นยังว่าง" แล้วปล่อยให้เขียนทับยอดที่เพิ่งลงไปด้วยศูนย์ พร้อมบอกว่าสำเร็จ
+            // ตอนนี้อ่านหลังจองแถวร้านแล้ว จึงเห็นภาพเดียวกับตอนที่กำลังจะเขียนจริง
+            $overwriteCheck = $this->rejectBlankCellsOverwritingExistingDays($shopId, $blankCells);
+            if ($overwriteCheck !== null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
                 }
 
+                return $overwriteCheck;
+            }
+
+            // ⚠️ เขียนเรียงตามวันที่เสมอ ไม่ใช่ตามลำดับที่ผู้ใช้พิมพ์
+            //
+            // เดิมเขียนตามลำดับในตาราง — สองแท็บที่บันทึกวันชุดเดียวกันแต่เรียงคนละแบบ
+            // (แท็บ A: 1 ส.ค. แล้ว 5 ส.ค. · แท็บ B: 5 ส.ค. แล้ว 1 ส.ค.) จะจองแถวไขว้กัน
+            // แล้ว MySQL ตัดฝ่ายหนึ่งทิ้ง ผู้ใช้เห็นแค่ "ไม่สามารถบันทึกข้อมูลได้"
+            // ทั้งที่ไม่มีอะไรผิด · เรียงให้ทุกคำขอหยิบทางเดียวกัน = ไขว้กันไม่ได้
+            usort(
+                $payloads,
+                static fn(array $a, array $b): int => strcmp((string)$a['record_date'], (string)$b['record_date'])
+            );
+
+            foreach ($payloads as $payload) {
                 $this->recordRepository->upsert(
                     $shopId,
                     (string)$payload['record_date'],

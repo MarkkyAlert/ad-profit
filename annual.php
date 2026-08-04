@@ -79,6 +79,14 @@ if (($annualResult['success'] ?? false) === true) {
     $annualData = array_replace($annualData, (array)($annualResult['data'] ?? []));
 } else {
     $annualError = (string)($annualResult['error'] ?? 'ไม่สามารถโหลดข้อมูลสรุปประจำปีได้');
+
+    // ⚠️ โหลดไม่สำเร็จ = "ไม่รู้" ไม่ใช่ "ทุกอย่างเป็นศูนย์"
+    // เดิมค่าตั้งต้น 12 เดือนศูนย์ถูกใช้แสดงผลต่อ หน้าจึงขึ้นตารางเทียบรายเดือน 12 แถว
+    // การ์ด "เดือนกำไรดีสุด ม.ค. (฿0)" สีเขียว และคำเชิญ "ลองเริ่มบันทึกข้อมูล"
+    // พร้อมกับแถบแดงบอกว่าไม่มีสิทธิ์เข้าถึงร้าน — ขัดกันเองทั้งหน้า
+    $annualData['months'] = [];
+    $annualData['summary'] = [];
+    $annualData['goal_progress'] = [];
 }
 
 $months = array_values((array)($annualData['months'] ?? []));
@@ -93,9 +101,10 @@ $totalProfitMargin = isset($summary['profit_margin']) && $summary['profit_margin
     : null;
 
 $monthsWithData = (int)($summary['months_with_data'] ?? 0);
-$profitMonths = (int)($summary['profit_months'] ?? 0);
-$lossMonths = (int)($summary['loss_months'] ?? 0);
-$breakEvenMonths = max(0, $monthsWithData - $profitMonths - $lossMonths);
+$monthOutcomes = annual_month_outcome_counts($summary);
+$profitMonths = $monthOutcomes['profit'];
+$lossMonths = $monthOutcomes['loss'];
+$breakEvenMonths = $monthOutcomes['break_even'];
 $hasAnnualData = abs($totalRevenue) > 0.00001 || abs($totalAdCost) > 0.00001;
 
 $bestMonth = is_array($summary['best_month'] ?? null) ? (array)$summary['best_month'] : null;
@@ -270,12 +279,18 @@ require __DIR__ . '/includes/header.php';
         </div>
     <?php endif; ?>
 
-    <?php if (!$hasAnnualData): ?>
+    <?php if (!$hasAnnualData && $annualError === null): ?>
         <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
             ปีนี้ยังไม่มีข้อมูลยอดขาย ลองเริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
         </div>
     <?php endif; ?>
 </section>
+
+<?php if ($annualError !== null): ?>
+    <?php // โหลดไม่สำเร็จ = ไม่รู้ตัวเลข → ไม่แสดงการ์ด/ตาราง/กราฟใด ๆ เลย
+          // เดิมทุกอย่างยังเรนเดอร์ด้วยค่าตั้งต้น ฿0 หน้าจึงบอกทั้ง "ไม่มีสิทธิ์"
+          // และ "ทั้งปีทำได้ ฿0 · เดือนกำไรดีสุด ม.ค." พร้อมกันในหน้าเดียว ?>
+<?php else: ?>
 
 <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
     <article class="stat-card s-revenue">
@@ -576,14 +591,9 @@ require __DIR__ . '/includes/header.php';
     $projectionLow = (float)($projection['projection_low'] ?? 0);
     $projectionMid = (float)($projection['projection_mid'] ?? 0);
     $projectionHigh = (float)($projection['projection_high'] ?? 0);
-    $projectionRemaining = (int)($projection['months_remaining'] ?? 0);
-    $projectionRemainingDays = (int)($projection['current_month_remaining_days'] ?? 0);
     // ป้ายต้องบอกทั้งเดือนเต็มและเศษของเดือนนี้ ไม่งั้นตัวเลขที่โชว์อธิบายผลลัพธ์ไม่ได้
-    // ⚠️ ข้อความเดียวกันนี้อยู่ใน XlsxReportService::buildProjectionBlock ด้วย — แก้ต้องแก้คู่
-    $projectionRemainingText = $projectionRemainingDays > 0
-        ? $projectionRemaining . ' เดือน + อีก ' . $projectionRemainingDays . ' วันของเดือนนี้'
-        : $projectionRemaining . ' เดือน';
-    $projectionBasisCount = (int)($projection['basis_month_count'] ?? 0);
+    // ข้อความมาจาก helper ตัวเดียวกับที่ไฟล์ Excel ใช้ — เดิมคัดลอกไว้ 2 ที่แล้วเพี้ยนกัน
+    $projectionRemainingText = projection_remaining_label($projection);
     // ช่วงคร่อม 0 = ยังบอกไม่ได้ว่าจะจบปีบวกหรือลบ — ไม่ควรระบายเขียว
     $projectionTone = $projectionHigh < 0
         ? 'text-red-400'
@@ -603,9 +613,7 @@ require __DIR__ . '/includes/header.php';
         </p>
 
         <p class="mt-3 border-t border-white/[0.06] pt-2 text-xs leading-relaxed text-slate-500">
-            สมมติช่วงที่เหลือ (<?= e($projectionRemainingText) ?>) ทำได้เท่า <?= e((string)$projectionBasisCount) ?> เดือนล่าสุด
-            <span class="text-slate-600">·</span>
-            ไม่คิดฤดูกาล/การเปิดรอบ — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง
+            <?= e(projection_footnote_text($projection)) ?>
         </p>
     </section>
 <?php elseif ($projectionReason === 'insufficient_data' && $hasAnnualData): ?>
@@ -775,4 +783,5 @@ require __DIR__ . '/includes/header.php';
         });
     })();
 </script>
+<?php endif; // $annualError ?>
 <?php require __DIR__ . '/includes/footer.php'; ?>

@@ -27,6 +27,10 @@ abstract class IntegrationTestCase extends TestCase
     private static ?PDO $connection = null;
     private static ?string $skipReason = null;
     private static bool $initialised = false;
+    /** @var array{dsn:string,user:string,pass:string}|null */
+    private static ?array $credentials = null;
+    /** @var list<PDO> */
+    private array $extraConnections = [];
 
     protected PDO $pdo;
 
@@ -74,6 +78,51 @@ abstract class IntegrationTestCase extends TestCase
         }
 
         self::$connection = $pdo;
+        self::$credentials = ['dsn' => $dsn, 'user' => $user, 'pass' => $pass];
+    }
+
+    /**
+     * ข้อมูลการเชื่อมต่อ test DB — ให้ ControllerTestCase ส่งต่อเป็น env ให้ `php -S`
+     *
+     * @return array{host:string,port:string,name:string,user:string,pass:string}|null
+     */
+    protected static function testDatabaseCredentials(): ?array
+    {
+        if (self::$connection === null) {
+            return null;
+        }
+
+        $passEnv = getenv('TEST_DB_PASS');
+
+        return [
+            'host' => (string)(getenv('TEST_DB_HOST') ?: '127.0.0.1'),
+            'port' => (string)(getenv('TEST_DB_PORT') ?: '3306'),
+            'name' => (string)(getenv('TEST_DB_NAME') ?: 'ad_profit_test'),
+            'user' => (string)(getenv('TEST_DB_USER') ?: 'root'),
+            'pass' => $passEnv === false ? '' : (string)$passEnv,
+        ];
+    }
+
+    /**
+     * เปิดการเชื่อมต่อเพิ่มอีกเส้น — ใช้จำลอง "สองแท็บกดพร้อมกัน"
+     *
+     * ⚠️ ล็อกระดับแถวเป็นเรื่องของแต่ละการเชื่อมต่อ ใช้ `$this->pdo` เส้นเดียวจำลองไม่ได้
+     * · ปิดให้อัตโนมัติใน tearDown() เพื่อไม่ให้ล็อกค้างไปกวนเทสต์ถัดไป
+     */
+    protected function newConnection(): PDO
+    {
+        if (self::$credentials === null) {
+            $this->markTestSkipped('test DB ไม่พร้อมใช้งาน');
+        }
+
+        $pdo = new PDO(self::$credentials['dsn'], self::$credentials['user'], self::$credentials['pass'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]);
+        $this->extraConnections[] = $pdo;
+
+        return $pdo;
     }
 
     protected function setUp(): void
@@ -84,6 +133,18 @@ abstract class IntegrationTestCase extends TestCase
 
         $this->pdo = self::$connection;
         $this->truncateAll();
+    }
+
+    protected function tearDown(): void
+    {
+        // ปิด transaction ที่เทสต์เปิดค้างไว้ก่อน ไม่งั้น TRUNCATE ของเทสต์ถัดไปจะค้างรอล็อก
+        foreach ($this->extraConnections as $connection) {
+            if ($connection->inTransaction()) {
+                $connection->rollBack();
+            }
+        }
+
+        $this->extraConnections = [];
     }
 
     /**

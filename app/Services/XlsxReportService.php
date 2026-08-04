@@ -428,12 +428,20 @@ class XlsxReportService
             ['เดือนกำไรแย่สุด', $this->describeMonth($summary['worst_month'] ?? null)],
             [
                 'เดือนที่มีข้อมูล',
-                sprintf(
-                    '%d เดือน · กำไร %d / ขาดทุน %d',
-                    (int)($summary['months_with_data'] ?? 0),
-                    (int)($summary['profit_months'] ?? 0),
-                    (int)($summary['loss_months'] ?? 0)
-                ),
+                // นับด้วย helper ตัวเดียวกับหน้าสรุปประจำปี — เดือนที่กำไรเป็น 0 พอดี
+                // ไม่เข้าทั้งกำไรและขาดทุน เดิมจึงหายไปจากไฟล์ Excel เฉย ๆ
+                (static function (array $counts): string {
+                    $text = sprintf(
+                        '%d เดือน · กำไร %d / ขาดทุน %d',
+                        $counts['with_data'],
+                        $counts['profit'],
+                        $counts['loss']
+                    );
+
+                    return $counts['break_even'] > 0
+                        ? $text . sprintf(' · เท่าทุน %d', $counts['break_even'])
+                        : $text;
+                })(annual_month_outcome_counts($summary)),
             ],
         ];
 
@@ -1027,20 +1035,10 @@ class XlsxReportService
 
         $sheet->mergeCells('A' . ($startRow + 1) . ':H' . ($startRow + 1));
         $sheet->getStyle('A' . ($startRow + 1))->getAlignment()->setIndent(1);
+        // ข้อความจาก helper ตัวเดียวกับ annual.php — เดิมคัดลอกไว้แล้วเพี้ยนกันจริง
         $sheet->setCellValueExplicit(
             'A' . ($startRow + 1),
-            sprintf(
-                // ⚠️ ข้อความเดียวกับ annual.php ($projectionRemainingText) — แก้ต้องแก้คู่
-                'สมมติช่วงที่เหลือ (%s) ทำได้เท่า %d เดือนล่าสุด · ไม่คิดฤดูกาล — ใช้ประกอบ ไม่ใช่ตัวเลขที่เกิดขึ้นจริง',
-                ((int)($projection['current_month_remaining_days'] ?? 0)) > 0
-                    ? sprintf(
-                        '%d เดือน + อีก %d วันของเดือนนี้',
-                        (int)($projection['months_remaining'] ?? 0),
-                        (int)($projection['current_month_remaining_days'] ?? 0)
-                    )
-                    : sprintf('%d เดือน', (int)($projection['months_remaining'] ?? 0)),
-                (int)($projection['basis_month_count'] ?? 0)
-            ),
+            projection_footnote_text($projection),
             DataType::TYPE_STRING
         );
         $sheet->getStyle('A' . ($startRow + 1))->getFont()->setItalic(true)->setSize(9)

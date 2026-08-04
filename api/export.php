@@ -17,7 +17,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
 $wantsJson = wants_json_response();
 
 $userId = (int)($_SESSION['user_id'] ?? 0);
-$shopId = (int)($_SESSION['current_shop_id'] ?? 0);
+// อ่านอย่างเดียว → ซ่อม session ที่ชี้ร้านที่ถูกลบไปแล้วเหมือนที่ทุกเพจทำ
+// ⚠️ ทางที่ "เขียน" ข้อมูลห้ามซ่อม — ต้องล้มดัง ๆ ไม่ใช่เงียบ ๆ เปลี่ยนร้านปลายทางให้
+$shopId = resolve_current_shop_id($pdo, $userId);
 $selectedMonth = resolve_calendar_month($_GET['month'] ?? null);
 
 if (preg_match('/^\d{4}-\d{2}$/', $selectedMonth) !== 1) {

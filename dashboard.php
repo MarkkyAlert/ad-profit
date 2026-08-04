@@ -168,8 +168,14 @@ $dashboardError = null;
 
 if (($dashboardResult['success'] ?? false) !== true) {
     $dashboardError = (string)($dashboardResult['error'] ?? 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้');
+
+    // ลองใหม่ด้วยช่วงมาตรฐาน เผื่อปัญหาอยู่ที่ช่วงวันที่ที่เลือก
+    // ⚠️ ถ้าเป็นเรื่องสิทธิ์ การลองใหม่ก็ล้มเหมือนเดิม — อย่าเอาค่าตั้งต้น ฿0 มาแสดง
+    // เป็นข้อมูลจริง (เคยขึ้นการ์ด ฿0 + "ยังไม่มีข้อมูลในช่วงนี้" คู่กับแถบแดง)
     $dashboardResult = $dashboardService->buildDashboard($userId, $shopId, 'month_this', null, null, null);
 }
+
+$dashboardFailed = ($dashboardResult['success'] ?? false) !== true;
 
 $dashboardData = [
     'range' => [
@@ -483,12 +489,18 @@ require __DIR__ . '/includes/header.php';
         </div>
     <?php endif; ?>
 
-    <?php if ($daysCount === 0): ?>
+    <?php if ($daysCount === 0 && !$dashboardFailed): ?>
         <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
             ยังไม่มีข้อมูลในช่วงเวลานี้ ลองไปที่หน้า "➕ บันทึก" เพื่อเริ่มบันทึกยอดขายและค่าแอด
         </div>
     <?php endif; ?>
 </section>
+
+<?php if ($dashboardFailed): ?>
+    <?php // โหลดไม่สำเร็จ = ไม่รู้ตัวเลข → ไม่แสดงการ์ด/กราฟ/ตารางใด ๆ
+          // เดิมทุกอย่างยังเรนเดอร์ด้วยค่าตั้งต้น ฿0 หน้าจึงบอกทั้ง "ไม่มีสิทธิ์"
+          // และ "เดือนนี้ทำได้ ฿0 · ยังไม่มีข้อมูลในช่วงนี้" พร้อมกันในหน้าเดียว ?>
+<?php else: ?>
 
 <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <article class="stat-card s-revenue">
@@ -1117,4 +1129,5 @@ require __DIR__ . '/includes/header.php';
         }
     })();
 </script>
+<?php endif; // $dashboardFailed ?>
 <?php require __DIR__ . '/includes/footer.php'; ?>

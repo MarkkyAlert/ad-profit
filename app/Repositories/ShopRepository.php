@@ -100,6 +100,31 @@ class ShopRepository
         return (int)($result['total'] ?? 0);
     }
 
+    /**
+     * จองแถวร้าน "แบบอ่าน" ก่อนเขียนข้อมูลลูก (daily_records / monthly_goals)
+     *
+     * ⚠️ เป็นเรื่องลำดับการจองล็อก ไม่ใช่เรื่องสิทธิ์ — การเขียนแถวลูกต้องแตะแถวแม่อยู่แล้ว
+     * (InnoDB ตรวจ foreign key) ถ้าไม่จองก่อน ลำดับจะกลับหัวกับตอนลบร้าน (ล็อกร้านก่อน
+     * แล้วจึงลบข้อมูลลูกแบบ cascade) สองคำขอที่มาพร้อมกันจะวนรอกันจน MySQL ตัดทิ้ง
+     * · ใช้ล็อกแบบอ่าน (share) เพื่อให้การบันทึกหลายวันพร้อมกันไม่บล็อกกันเอง
+     */
+    public function lockForShare(int $shopId, int $userId): bool
+    {
+        $sql = 'SELECT id
+                FROM shops
+                WHERE id = :shop_id AND user_id = :user_id
+                LIMIT 1
+                LOCK IN SHARE MODE';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':shop_id' => $shopId,
+            ':user_id' => $userId,
+        ]);
+
+        return $stmt->fetchColumn() !== false;
+    }
+
     public function countByUserIdForUpdate(int $userId): int
     {
         $sql = 'SELECT COUNT(*) AS total

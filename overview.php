@@ -420,7 +420,7 @@ require __DIR__ . '/includes/header.php';
             $dayIncompleteDays = (int)($dailySummary['incomplete_days'] ?? 0);
             ?>
 
-            <?php if (!$hasDailyData): ?>
+            <?php if (!$hasDailyData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
                     เดือนนี้ยังไม่มีข้อมูลรายวันของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>
@@ -701,7 +701,7 @@ require __DIR__ . '/includes/header.php';
                 : ($yearTotalRevenue > 0 ? round(($yearProfit / $yearTotalRevenue) * 100, 1) : null);
             ?>
 
-            <?php if (!$hasYearlyData): ?>
+            <?php if (!$hasYearlyData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
                     ปีนี้ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>
@@ -978,7 +978,7 @@ require __DIR__ . '/includes/header.php';
                 })();
             </script>
         <?php else: ?>
-            <?php if (!$hasOverviewData): ?>
+            <?php if (!$hasOverviewData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
                     เดือนนี้ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>

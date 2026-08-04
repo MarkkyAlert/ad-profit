@@ -14,11 +14,33 @@ use PHPUnit\Framework\TestCase;
  */
 final class CalendarYearResolutionTest extends TestCase
 {
+    /**
+     * ⭐ ปีอนาคตต้องถูกหดมาเป็นปีปัจจุบัน — เกณฑ์เดียวกับ `resolve_calendar_month()`
+     *
+     * เดิม `?year=2573` เปิดได้ หน้าขึ้นทุกการ์ดเป็น ฿0 พร้อมคำเชิญ "ลองเริ่มบันทึกข้อมูล"
+     * ของปีที่ยังไม่เริ่ม และตัวเลือกปียังโชว์ 2573 อยู่
+     */
+    public function testFutureYearsAreClampedToTheCurrentYear(): void
+    {
+        $currentYear = (int)date('Y');
+
+        $this->assertSame($currentYear, resolve_calendar_year((string)($currentYear + 5)));
+        $this->assertSame($currentYear, resolve_calendar_year('2573'));   // พ.ศ. → ค.ศ. 2030
+        $this->assertSame($currentYear, resolve_calendar_year('2100'));
+    }
+
+    /** ปีอดีตยังเปิดดูได้ตามปกติ */
+    public function testPastYearsStillWork(): void
+    {
+        $this->assertSame(2024, resolve_calendar_year('2024'));
+        $this->assertSame(2024, resolve_calendar_year('2567'));
+    }
+
     public function testKeepsValidChristianYear(): void
     {
         $this->assertSame(2026, resolve_calendar_year('2026'));
         $this->assertSame(2000, resolve_calendar_year('2000'));
-        $this->assertSame(2100, resolve_calendar_year('2100'));
+        // 2100 อยู่ในช่วงที่ยอมรับ แต่เป็นอนาคต → ถูกหดมาเป็นปีปัจจุบัน (ดูเทสต์ด้านบน)
     }
 
     public function testConvertsBuddhistYear(): void
@@ -27,11 +49,11 @@ final class CalendarYearResolutionTest extends TestCase
         $this->assertSame(2025, resolve_calendar_year('2568'));
     }
 
-    /** ขอบของช่วง พ.ศ. ที่แปลงแล้วยังอยู่ในช่วงที่ยอมรับ (2000–2100) */
+    /** ขอบล่างของช่วง พ.ศ. ที่แปลงแล้วยังอยู่ในช่วงที่ยอมรับ (ขอบบนเป็นอนาคต จึงถูกหด) */
     public function testBuddhistYearsAtTheEdgeOfTheAcceptedRange(): void
     {
         $this->assertSame(2000, resolve_calendar_year('2543'));
-        $this->assertSame(2100, resolve_calendar_year('2643'));
+        $this->assertSame((int)date('Y'), resolve_calendar_year('2643'));
     }
 
     /** อยู่ในช่วงที่ถือว่าเป็น พ.ศ. แต่แปลงแล้วหลุดช่วงที่ยอมรับ → ตกไปปีปัจจุบัน */

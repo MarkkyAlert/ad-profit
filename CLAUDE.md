@@ -121,6 +121,13 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 - **`cron/cleanup-logs.php` กวาด `dirname(LOG_FILE)` ไม่ใช่ `<project>/logs`** — default ของ `LOG_FILE` คือ `sys_get_temp_dir()/ad-profit/php-error.log` เดิม cron hardcode ไปที่โฟลเดอร์ `logs/` ในโปรเจกต์ซึ่งมีแต่ `.gitkeep` (log จริงจึงโตไปเรื่อย ๆ) · `LogCleanupRepository` ลบเฉพาะไฟล์ที่หน้าตาเป็น log (`*.log`, `*.log.1`, `*.log-20260101`, และ `error_log` ที่ cPanel/Hostinger สร้างเอง) — เดิมลบทุกไฟล์ในโฟลเดอร์ ถ้ามีคนวาง `.htaccess` กันไม่ให้เข้าถึง log ผ่านเว็บ ไฟล์นั้นจะหายไปเงียบ ๆ
 - **คอลัมน์ "เทียบครั้งก่อน" ใน CSV ต้องไม่มีตัวคั่นหลักพัน** — คอลัมน์ตัวเลขอื่นส่ง `''` เป็น separator อยู่แล้ว เฉพาะช่องนี้ที่เคยใช้ค่า default ทำให้ค่าโต ๆ ออกมาเป็น `+9,999,900.0%` ที่ Excel อ่านเป็นสูตรผิดไวยากรณ์
 - **ข้อความ error ตอน import CSV ใช้ "แถวที่ N" ไม่ใช่ "บรรทัดที่ N"** — `fgetcsv` คืน 1 record ต่อครั้ง โน้ตที่มีขึ้นบรรทัดใหม่ในเครื่องหมายคำพูดกินหลายบรรทัดในไฟล์ เลขนี้จึงตรงกับเลขแถวใน Excel (สิ่งที่ผู้ใช้เปิดดูจริง) ไม่ตรงกับเลขบรรทัดของไฟล์ดิบ
+- **หน้าเว็บห้ามเดาแทนข้อมูล — โหลดไม่สำเร็จ = ไม่แสดงตัวเลขเลย** `dashboard.php` / `annual.php` / `history.php` / `overview.php` ห่อทั้งเนื้อหาไว้ใน `if (error === null)` · เดิมค่าตั้งต้น ฿0 ถูกเรนเดอร์ต่อ ผู้ใช้จึงเห็น "ไม่มีสิทธิ์เข้าถึงร้านค้านี้" คู่กับ "ทั้งปีทำได้ ฿0 · เดือนกำไรดีสุด ม.ค." และคำเชิญ "ลองเริ่มบันทึกข้อมูล" ในหน้าเดียวกัน ⚠️ **แถวรวมใน `<tfoot>` ก็ต้องซ่อนด้วย** (พลาดมาแล้ว) · มีเทสต์ `PageRenderTest` ล็อกทั้ง 3 หน้า
+- **ข้อความ/สูตรที่หน้าเว็บกับไฟล์ Excel ใช้ร่วมกัน ต้องอยู่ใน helper ตัวเดียว** — `projection_remaining_label()`, `projection_footnote_text()`, `annual_month_outcome_counts()` ใน `includes/functions.php` ⚠️ เดิมคัดลอกไว้ 2 ที่พร้อมคอมเมนต์ "แก้ต้องแก้คู่" แล้วก็เพี้ยนจริง (หน้าเว็บ "ไม่คิดฤดูกาล/การเปิดรอบ" ส่วน Excel "ไม่คิดฤดูกาล"; หน้าเว็บนับ "เท่าทุน" ส่วน Excel ไม่นับ) · `AnnualReportParityTest` ล็อกไว้
+- ⚠️ **ทุกทางที่ "เขียน" ต้องจองแถวร้านก่อนด้วย `ShopRepository::lockForShare()`** — ลำดับเดียวกับตอนลบร้าน (ร้าน → ข้อมูลในร้าน) · เดิม `RecordService` จองแถว *วัน* ด้วย `FOR UPDATE` ก่อน upsert ซึ่ง (1) ไม่ช่วยอะไรเพราะ `INSERT … ON DUPLICATE KEY UPDATE` กันชนกันเองอยู่แล้ว และ (2) เมื่อวันนั้นยังไม่มีข้อมูล MySQL จองเป็น **gap lock** สองคนที่บันทึกคนละวันในช่องว่างเดียวกันจึง deadlock · `upsertManyRecords` ยัง `usort` ตามวันที่ก่อนเขียนเสมอ (ลำดับที่ผู้ใช้พิมพ์ทำให้สองแท็บจองไขว้กัน) · `ConcurrentWriteLockOrderTest` พิสูจน์ว่าได้ **1205 (รอ)** ไม่ใช่ **1213 (deadlock)**
+- **ตัวกัน "ช่องว่างทับของเดิม" ต้องอ่านข้างใน transaction** — `rejectBlankCellsOverwritingExistingDays()` ถูกย้ายมาหลัง `beginTransaction` + `lockForShare` · เดิมอ่านก่อนเปิด transaction อีกแท็บที่บันทึกแทรกเข้ามาระหว่างนั้นจะถูกทับด้วยศูนย์พร้อมข้อความ "สำเร็จ"
+- **คอลัมน์ "เทียบครั้งก่อน" ใน CSV ห้ามขึ้นต้นด้วย `+`** — Excel แปลงเซลล์ที่ขึ้นต้นด้วย `+` เป็น *สูตร* (มรดก Lotus 1-2-3) ช่องนี้จึงเป็นสูตรช่องเดียวในไฟล์และพังบนเครื่องที่ตั้งทศนิยมเป็นจุลภาค · เครื่องหมายลบไม่มีปัญหา (Excel อ่าน `-50.0%` เป็นจำนวนลบ) · `ExportServiceTest::testNoSystemGeneratedCellStartsAFormula` กวาดทุกเซลล์ที่ไม่ใช่โน้ต
+- **405 ต้องมาคู่กับ header `Allow: POST` เสมอ** (`ensure_post_request_or_respond`) — RFC 9110 บังคับ ไม่งั้นฝั่งที่เรียกได้แต่ "ห้ามใช้วิธีนี้" โดยไม่รู้ว่าต้องใช้อะไรแทน
+- **`config_positive_int()` ห่อด้วย `function_exists`** — `includes/config.php` ถูก include ได้จากหลายทาง เดิม include ซ้ำ = fatal "Cannot redeclare" ทั้งที่ค่าคงที่ข้างล่างกันตัวเองด้วย `if (!defined(...))` อยู่แล้ว ⚠️ และอ่าน env ด้วย `getenv() === false` ไม่ใช่ `?: ''` เพราะ `"0"` เป็น falsy — ค่าที่ตั้งผิดเป็น 0 เคยเงียบสนิทเหมือนไม่ได้ตั้ง
 - **เกณฑ์ตัวอย่างขั้นต่ำของวันในสัปดาห์ = `RecordService::WEEKDAY_MIN_SAMPLE`** — `comparable` (มีอะไรให้เทียบไหม) ยังเป็น `>= 1` แต่การฟันธง "สูงกว่า/ต่ำกว่าปกติ" ใช้ `trend_reliable` (`>= 3`) เกณฑ์เดียวกับที่ตารางแยกตามวันใช้เลือกวันดี/วันเงียบ · **อย่าฮาร์ดโค้ด 3 ซ้ำในเพจ**
 
 > ตรรกะที่เคยอยู่ที่ controller และถูกย้ายลง service/helper แล้ว — อย่าย้ายกลับ:
@@ -151,12 +158,29 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 | RecordService ฝั่งอ่าน (grid, weekday, days-since, unfilled) | ครอบแน่น |
 | Auth (login/logout/reset password/session guard) | ครอบแล้ว (integration) |
 | ShopService / GoalService / ProfileService / RecordService เขียน-ลบ | ครอบแล้ว |
-| **ชั้น controller (`api/*.php`) ทั้งชั้น** | **0** — `grep "api/\|\$_POST\|csrf" tests/` ยังว่างเปล่า |
+| ชั้น controller (`api/*.php`) — ด่านตรวจ (auth/405/415/CSRF/409) | ครอบแล้ว (`EndpointGuardChainTest`, `RecordEndpointGuardTest`) |
+| ชั้นเพจ — เปิดขึ้นจริง, กันคนไม่ล็อกอิน, ไม่โกหก ฿0, หดช่วงอนาคต | ครอบแล้ว (`PageRenderTest`) |
+| **ชั้น controller — ตรรกะเฉพาะของแต่ละ action** | **บางส่วน** — ครอบเฉพาะ `records.php` ที่เหลือครอบแค่ด่านตรวจ |
 | **JavaScript ทั้งหมด** (paste TSV, month-grid, typed-confirm) | **0** — ไม่มี JS test runner |
 | **EmailService การส่งจริง** | ตรวจได้แค่คอนฟิก — การส่งถึงจริง **ต้อง verify มือ** |
 
-**ชั้น controller และ JS ยังไม่มีตาข่าย** — logic ที่อยู่ตรงนั้นให้ย้ายลง service/helper
-ก่อนแก้ (มีตัวอย่างในหัวข้อด้านบน) หรือถ้าย้ายไม่ได้ ให้ verify ด้วย curl/เบราว์เซอร์จริง
+**JS ยังไม่มีตาข่าย** — logic ที่อยู่ตรงนั้นให้ย้ายลง service/helper ก่อนแก้
+(มีตัวอย่างในหัวข้อด้านบน) หรือถ้าย้ายไม่ได้ ให้ verify ด้วยเบราว์เซอร์จริง
+
+### เทสต์ชั้นหน้าเว็บ (controller + page) — `ControllerTestCase`
+
+`api/*.php` เรียก `includes/bootstrap.php` (session_start + security header + `db()` + schema
+guard) จึง `require` เข้ามาเรียกใน process ของ PHPUnit ไม่ได้ · `tests/Integration/ControllerTestCase.php`
+จึง **ยก `php -S` ขึ้นมา 1 ตัวต่อคลาสเทสต์** ชี้ `DB_*` ไปที่ test DB เดิม แล้วยิง HTTP จริง
+
+- `startSession($userId, $shopId)` — เขียนไฟล์ session ตรง ๆ (ไม่ต้องรู้รหัสผ่าน, เลี่ยง rate limit)
+- `get/post` = โหมดฟอร์ม (ตอบ **302 + flash**) · `getJson/postJson` = โหมด XHR (ตอบ **รหัสสถานะจริง**)
+  ⚠️ **ทั้งสองโหมดต้องตัดสินเหมือนกัน ต่างแค่วิธีบอกผู้ใช้** — เทสต์ 409/405 ต้องยิงทั้งคู่
+  (`api_respond()` เลือกจาก `Accept: application/json`)
+- `csrfTokenFor($sessionId)` — ดึง token จากหน้าจริง · `flashMessages()` — อ่านไฟล์ session ดิบ
+- ⚠️ ชื่อ field คือ **`shop_context_id`** (จาก `shop_context_field()`) ไม่ใช่ `shop_context`
+- ⚠️ **เพิ่ม endpoint ใหม่ใน `api/` ต้องเพิ่มชื่อใน `EndpointGuardChainTest::writeEndpointProvider()`**
+  ไม่งั้นด่านตรวจของไฟล์ใหม่จะไม่มีใครเช็ก
 
 ### Framework
 - **PHPUnit** เป็น dev dependency, รันด้วย `composer test`

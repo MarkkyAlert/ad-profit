@@ -7,22 +7,31 @@ declare(strict_types=1);
  *
  * ⚠️ `(int)"4h"` = 4 และ `(int)"-1"` = -1 ซึ่งทั้งคู่บูตผ่านโดยไม่มีอะไรเตือน
  * (ค่าติดลบใน SESSION_*_TIMEOUT ทำให้การหมดอายุถูกปิดเงียบ ๆ)
+ *
+ * ⚠️ ห่อด้วย function_exists เพราะไฟล์นี้ถูก include ได้จากหลายทาง (bootstrap, เทสต์,
+ * สคริปต์ CLI) — เดิม include ซ้ำ = fatal "Cannot redeclare" ทั้งที่ค่าคงที่ข้างล่าง
+ * ป้องกันตัวเองด้วย `if (!defined(...))` อยู่แล้ว
  */
-function config_positive_int(string $key, int $default): int
-{
-    $raw = trim((string)(getenv($key) ?: ''));
+if (!function_exists('config_positive_int')) {
+    function config_positive_int(string $key, int $default): int
+    {
+        // ⚠️ `getenv($key) ?: ''` กลืน "0" ทิ้ง เพราะ "0" เป็น falsy — ค่าที่ตั้งผิดจึง
+        // เงียบสนิท เหมือนไม่ได้ตั้งอะไรเลย ต้องเทียบกับ false ตรง ๆ
+        $rawEnv = getenv($key);
+        $raw = $rawEnv === false ? '' : trim($rawEnv);
 
-    if ($raw === '' || preg_match('/^\d+$/', $raw) !== 1) {
-        if ($raw !== '') {
-            error_log(sprintf('[config] %s="%s" ใช้ไม่ได้ (ต้องเป็นจำนวนเต็มบวก) — ใช้ค่าปริยาย %d', $key, $raw, $default));
+        if ($raw === '') {
+            return $default;
         }
 
-        return $default;
+        if (preg_match('/^\d+$/', $raw) !== 1 || (int)$raw <= 0) {
+            error_log(sprintf('[config] %s="%s" ใช้ไม่ได้ (ต้องเป็นจำนวนเต็มบวก) — ใช้ค่าปริยาย %d', $key, $raw, $default));
+
+            return $default;
+        }
+
+        return (int)$raw;
     }
-
-    $value = (int)$raw;
-
-    return $value > 0 ? $value : $default;
 }
 
 $projectRoot = dirname(__DIR__);

@@ -129,6 +129,11 @@ class GoalService
                 }
 
                 $canLockRows = $this->db->inTransaction();
+                if ($canLockRows) {
+                    // จองแถวร้านก่อนแตะแถวเป้าหมาย — ลำดับเดียวกับตอนลบร้าน
+                    // (ร้าน → ข้อมูลในร้าน) ไม่งั้นสองคำขอจะวนรอกันจนถูกตัดทิ้ง
+                    $this->shopRepository->lockForShare($shopId, $userId);
+                }
             }
 
             // ⚠️ ช่องที่ไม่ได้กรอกมา = "ไม่แก้" ไม่ใช่ "ล้างทิ้ง"
