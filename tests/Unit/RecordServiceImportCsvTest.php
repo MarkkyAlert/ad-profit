@@ -14,6 +14,40 @@ use ShopRepository;
  */
 final class RecordServiceImportCsvTest extends TestCase
 {
+    /**
+     * ⭐ จุลภาคเป็น "ทศนิยม" ต้องไม่ถูกลบทิ้งเหมือนตัวคั่นหลักพัน
+     *
+     * ไฟล์ที่ออกจาก Excel ของยุโรป (เยอรมัน/ฝรั่งเศส/ไทยบางเครื่อง) ใช้ `1234,56`
+     * เดิมระบบลบจุลภาคทิ้งเสมอ → 1,234.56 บาท กลายเป็น 123,456 บาท (100 เท่า)
+     * แล้วนำเข้าสำเร็จโดยไม่มีคำเตือน
+     *
+     * @return array<string,array{0:string,1:string}> ชื่อเคส => [ค่าที่พิมพ์, ค่าที่ต้องได้]
+     */
+    public static function amountFormatProvider(): array
+    {
+        return [
+            'จุดเป็นทศนิยม' => ['1234.56', '1234.56'],
+            'จุลภาคคั่นหลักพัน' => ['1,234.56', '1234.56'],
+            'จุลภาคเป็นทศนิยม' => ['1234,56', '1234.56'],
+            'จุลภาคเป็นทศนิยม 1 ตำแหน่ง' => ['1234,5', '1234.5'],
+            'ยุโรปเต็มรูปแบบ' => ['1.234,56', '1234.56'],
+            'อังกฤษเต็มรูปแบบ' => ['1,234,567.89', '1234567.89'],
+            'เว้นวรรคคั่นหลักพัน + จุลภาคทศนิยม' => ['1 234,56', '1234.56'],
+            'มีสัญลักษณ์เงิน' => ['฿1,234.56', '1234.56'],
+            'จำนวนเต็มมีจุลภาค' => ['1,234', '1234'],
+            'ไม่มีตัวคั่นเลย' => ['1234', '1234'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('amountFormatProvider')]
+    public function testAmountFormatsAreReadCorrectly(string $typed, string $expected): void
+    {
+        $result = $this->makeService()->parseImportCsv("date,revenue,ad_cost\n2026-08-01,\"{$typed}\",100\n");
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertSame($expected, (string)$result['rows'][0]['revenue'], "ค่าที่พิมพ์: {$typed}");
+    }
+
     private function makeService(): RecordService
     {
         return new RecordService(

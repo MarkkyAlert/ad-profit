@@ -154,10 +154,18 @@ if ($action === 'reset_password') {
         ], 200, '/login.php');
     }
 
+    // ⚠️ ต้องพา token กลับไปด้วย ไม่งั้นหน้าปลายทางไม่มี token → เด้งไป /forgot-password.php
+    // พร้อมข้อความ "ลิงก์ไม่ถูกต้อง" (ซึ่งไม่จริง) แล้วเขียนทับข้อความจริงทิ้ง
+    // ผู้ใช้ที่พิมพ์รหัสยืนยันผิดครั้งเดียวจึงต้องขออีเมลใหม่ทั้งใบ
+    // token ยังไม่ถูกใช้ (resetPassword คืนค่าก่อนแตะ) จึงส่งกลับได้ปลอดภัย
+    $failureRedirect = $resetToken !== ''
+        ? '/reset-password.php?token=' . rawurlencode($resetToken)
+        : '/forgot-password.php';
+
     $respond([
         'success' => false,
         'error' => (string)($result['error'] ?? 'ไม่สามารถรีเซ็ตรหัสผ่านได้'),
-    ], 422, '/reset-password.php');
+    ], 422, $failureRedirect);
 }
 
 $respond([

@@ -432,6 +432,29 @@ require __DIR__ . '/includes/header.php';
             return year + '-' + pad2(month) + '-' + pad2(day);
         };
 
+        // ตัวคั่นทศนิยมอาจเป็นจุดหรือจุลภาค แล้วแต่ภาษาของ Excel ที่สร้างไฟล์
+        // ⚠️ ต้องใช้กติกาเดียวกับ RecordService::cleanImportNumber() ฝั่ง PHP
+        // ลบจุลภาคทิ้งเสมอทำให้ 1234,56 กลายเป็น 123456 (100 เท่า) แล้วบันทึกสำเร็จ
+        const cleanAmountCell = (raw) => {
+            const value = String(raw).replace(/[฿\s\u00a0]/g, '').trim();
+            const lastDot = value.lastIndexOf('.');
+            const lastComma = value.lastIndexOf(',');
+
+            if (lastDot === -1 && lastComma === -1) {
+                return value;
+            }
+
+            const decimalPosition = Math.max(lastDot, lastComma);
+            const fractionDigits = value.slice(decimalPosition + 1);
+
+            // ตามหลังด้วยตัวเลข 1–2 หลักเท่านั้น จึงเป็นทศนิยมของค่าเงิน
+            if (!/^\d{1,2}$/.test(fractionDigits)) {
+                return value.replace(/[.,]/g, '');
+            }
+
+            return value.slice(0, decimalPosition).replace(/[.,]/g, '') + '.' + fractionDigits;
+        };
+
         const normalizeCell = (columnIndex, raw) => {
             if (columnIndex === 0) {
                 // parse ไม่ได้ → คืนค่าดิบ ให้ฝั่ง server เป็นคน reject
@@ -439,7 +462,7 @@ require __DIR__ . '/includes/header.php';
             }
 
             if (columnIndex === 1 || columnIndex === 2) {
-                return String(raw).replace(/[฿,\s]/g, '').trim();
+                return cleanAmountCell(raw);
             }
 
             return String(raw).trim();

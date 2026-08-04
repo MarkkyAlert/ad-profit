@@ -438,6 +438,16 @@ class RecordService
     }
 
     /** ตัด ฿ / comma / ช่องว่าง / leading ' (จาก guard formula injection ตอน export) */
+    /**
+     * แปลงตัวเลขจากไฟล์ให้เป็นรูปแบบที่ PHP อ่านได้ โดยเดา "ตัวคั่นทศนิยม" ให้ถูก
+     *
+     * ⚠️ ห้ามลบจุลภาคทิ้งเสมอ — Excel ของยุโรป (และเครื่องที่ตั้งภาษาเป็นเยอรมัน/ฝรั่งเศส)
+     * ใช้จุลภาคเป็นจุดทศนิยม `1234,56` การลบทิ้งทำให้ 1,234.56 บาท กลายเป็น 123,456 บาท
+     * แล้วนำเข้าสำเร็จโดยไม่มีคำเตือน (พิสูจน์แล้วว่าเกิดจริง)
+     *
+     * กติกา: ตัวคั่นที่อยู่ "ขวาสุด" คือตัวคั่นทศนิยม เว้นแต่หลังมันมีตัวเลขไม่ใช่ 1–2 หลัก
+     * (เช่น `1,234` = คั่นหลักพัน เพราะมี 3 หลักตาม) — เกณฑ์มาตรฐานเดียวกับที่ Excel ใช้
+     */
     private function cleanImportNumber(string $raw): string
     {
         $value = trim($raw);
@@ -445,9 +455,33 @@ class RecordService
             $value = substr($value, 1);
         }
 
-        $value = str_replace(['฿', ',', ' ', "\xC2\xA0"], '', $value);
+        // สัญลักษณ์เงินและช่องว่างทุกชนิดไม่ใช่ตัวคั่นทศนิยมแน่นอน ตัดทิ้งได้เลย
+        $value = str_replace(['฿', ' ', "\xC2\xA0"], '', $value);
+        $value = trim($value);
 
-        return trim($value);
+        $lastDot = strrpos($value, '.');
+        $lastComma = strrpos($value, ',');
+
+        if ($lastDot === false && $lastComma === false) {
+            return $value;
+        }
+
+        // ตัวคั่นที่อยู่ขวาสุดเป็นผู้สมัครเป็น "จุดทศนิยม"
+        $decimalPosition = max($lastDot === false ? -1 : $lastDot, $lastComma === false ? -1 : $lastComma);
+        $fractionDigits = substr($value, $decimalPosition + 1);
+
+        // ตามหลังด้วยตัวเลข 1–2 หลักเท่านั้น จึงจะถือว่าเป็นทศนิยมของค่าเงิน
+        $isDecimalSeparator = $fractionDigits !== ''
+            && preg_match('/^\d{1,2}$/', $fractionDigits) === 1;
+
+        if (!$isDecimalSeparator) {
+            // ทุกตัวเป็นตัวคั่นหลักพัน
+            return str_replace([',', '.'], '', $value);
+        }
+
+        $integerPart = str_replace([',', '.'], '', substr($value, 0, $decimalPosition));
+
+        return $integerPart . '.' . $fractionDigits;
     }
 
     /**
@@ -555,14 +589,23 @@ class RecordService
             $seenDates[$recordDate] = true;
             $payloads[] = $payload;
 
-            // ช่องตัวเลขที่ "ว่าง" ในไฟล์ CSV ถูกแปลงเป็น 0 ไปแล้ว — ถ้าวันนั้นมีข้อมูลอยู่
-            // การเขียนทับจะลบยอดจริงทิ้งโดยที่ผู้ใช้ตั้งใจแค่ "ไม่แก้ช่องนี้"
-            // เก็บไว้เช็กทีเดียวหลังลูป (ต้องรู้ช่วงวันทั้งหมดก่อนจึงจะ query ครั้งเดียวได้)
-            if (($row['revenue_was_blank'] ?? false) === true || ($row['ad_cost_was_blank'] ?? false) === true) {
+            // ช่องที่ "เว้นว่าง" — ถ้าวันนั้นมีข้อมูลอยู่แล้ว การเขียนทับจะลบของจริงทิ้ง
+            // โดยที่ผู้ใช้ตั้งใจแค่ "ไม่แก้ช่องนี้" · เก็บไว้เช็กทีเดียวหลังลูป
+            // (ต้องรู้ช่วงวันทั้งหมดก่อนจึงจะ query ครั้งเดียวได้)
+            //
+            // โน้ตนับรวมด้วยและใช้ได้กับ "ทุกทาง" ไม่ใช่เฉพาะ CSV — ตารางกรอกหลายวัน
+            // เคยลบโน้ตของวันเดิมทิ้งเงียบ ๆ แล้วตอบว่าบันทึกสำเร็จ
+            $noteWasBlank = ($payload['note'] ?? null) === null || trim((string)$payload['note']) === '';
+
+            if (($row['revenue_was_blank'] ?? false) === true
+                || ($row['ad_cost_was_blank'] ?? false) === true
+                || $noteWasBlank
+            ) {
                 $blankCells[$recordDate] = [
                     'row_number' => $rowNumber,
                     'revenue' => ($row['revenue_was_blank'] ?? false) === true,
                     'ad_cost' => ($row['ad_cost_was_blank'] ?? false) === true,
+                    'note' => $noteWasBlank,
                 ];
             }
         }
@@ -783,7 +826,10 @@ class RecordService
             $existingByDate[(string)($row['record_date'] ?? '')] = $row;
         }
 
-        // ไล่ตามลำดับวัน เพื่อให้รายงานแถวแรกที่มีปัญหาเสมอ (ผลลัพธ์คาดเดาได้)
+        // รวบรวมทุกแถวที่มีปัญหา แล้วรายงาน "แถวแรกตามที่ผู้ใช้เห็น" (เลขแถวน้อยสุด)
+        // เดิมไล่ตามลำดับวัน ทำให้ไฟล์ที่เรียงวันใหม่ก่อนชี้ไปที่บรรทัดท้ายไฟล์
+        $problems = [];
+
         foreach ($dates as $date) {
             $row = $existingByDate[$date] ?? null;
             if ($row === null) {
@@ -792,22 +838,47 @@ class RecordService
 
             $blank = $blankCells[$date];
             $fields = [];
-            if ($blank['revenue']) {
-                $fields[] = 'รายได้ (มียอด ' . number_format((float)($row['revenue'] ?? 0), 2) . ' อยู่แล้ว)';
+
+            // ⚠️ เตือนเฉพาะเมื่อ "มีของจริงจะหาย" — ค่าเดิมที่เป็น 0 อยู่แล้วเขียนทับด้วย 0
+            // ไม่ได้ทำให้ข้อมูลหาย การปฏิเสธจึงเป็นการขวางงานที่ไม่มีผลอะไร
+            $existingRevenue = (float)($row['revenue'] ?? 0);
+            $existingAdCost = (float)($row['ad_cost'] ?? 0);
+            $existingNote = trim((string)($row['note'] ?? ''));
+
+            if ($blank['revenue'] && $existingRevenue > 0) {
+                $fields[] = 'รายได้ (มียอด ' . number_format($existingRevenue, 2) . ' อยู่แล้ว)';
             }
-            if ($blank['ad_cost']) {
-                $fields[] = 'ค่าแอด (มียอด ' . number_format((float)($row['ad_cost'] ?? 0), 2) . ' อยู่แล้ว)';
+            if ($blank['ad_cost'] && $existingAdCost > 0) {
+                $fields[] = 'ค่าแอด (มียอด ' . number_format($existingAdCost, 2) . ' อยู่แล้ว)';
+            }
+            if (($blank['note'] ?? false) && $existingNote !== '') {
+                $fields[] = 'โน้ต (มีข้อความ "' . $existingNote . '" อยู่แล้ว)';
             }
 
-            return [
-                'success' => false,
-                'error' => 'แถวที่ ' . $blank['row_number'] . ': เว้นช่อง' . implode(' และ ', $fields)
-                    . ' — วันที่ ' . $date . ' มีข้อมูลอยู่แล้ว ระบบไม่นำเข้าทั้งไฟล์เพื่อไม่ให้ยอดเดิมหาย '
-                    . 'ถ้าต้องการให้เป็น 0 จริง ๆ กรุณาพิมพ์ 0 ลงในช่องนั้น',
+            if ($fields === []) {
+                continue;
+            }
+
+            $problems[] = [
+                'row_number' => (int)$blank['row_number'],
+                'date' => $date,
+                'fields' => $fields,
             ];
         }
 
-        return null;
+        if ($problems === []) {
+            return null;
+        }
+
+        usort($problems, static fn(array $a, array $b): int => $a['row_number'] <=> $b['row_number']);
+        $first = $problems[0];
+
+        return [
+            'success' => false,
+            'error' => 'แถวที่ ' . $first['row_number'] . ': เว้นช่อง' . implode(' และ ', $first['fields'])
+                . ' — วันที่ ' . $first['date'] . ' มีข้อมูลอยู่แล้ว ระบบไม่บันทึกทั้งชุดเพื่อไม่ให้ของเดิมหาย '
+                . 'ถ้าต้องการล้างค่าเดิมจริง ๆ กรุณากรอก 0 (หรือแก้โน้ต) ลงในช่องนั้น',
+        ];
     }
 
     public function getRecordForDate(int $userId, int $shopId, string $recordDate): array

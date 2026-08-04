@@ -16,7 +16,11 @@ require_once __DIR__ . '/includes/auth.php';
 $token = trim((string)($_GET['token'] ?? ''));
 
 if ($token === '') {
-    set_flash('error', 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง');
+    // อย่าเขียนทับข้อความที่ชั้น API ตั้งไว้ (เช่น "รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน")
+    if (!isset($_SESSION['flash']['error'])) {
+        set_flash('error', 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง');
+    }
+
     redirect('/forgot-password.php');
 }
 
