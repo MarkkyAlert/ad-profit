@@ -630,6 +630,10 @@ function schema_required_unique_indexes(): array
         ['monthly_goals', 'uq_monthly_goals_shop_month'],
         ['auth_rate_limits', 'uq_auth_rate_limits_bucket'],
         ['password_reset_tokens', 'uq_password_reset_token_hash'],
+        // 1 ผู้ใช้มี token ได้ใบเดียว — `PasswordResetRepository::createToken` อาศัย index นี้
+        // ทำ ON DUPLICATE KEY UPDATE เพื่อให้ "ขอลิงก์ใหม่ = ลิงก์เก่าใช้ไม่ได้"
+        // ถ้า index หาย การขอลิงก์ใหม่จะกลายเป็น INSERT ทำให้ลิงก์เก่าทุกใบยังใช้ได้ต่อ
+        ['password_reset_tokens', 'uq_password_reset_user'],
     ];
 }
 

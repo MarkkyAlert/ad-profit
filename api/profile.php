@@ -14,7 +14,8 @@ $wantsJson = wants_json_response();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $userRepository = new UserRepository($pdo);
-$profileService = new ProfileService($userRepository, $pdo);
+// ฉีด PasswordResetRepository เข้ามาด้วย — เปลี่ยนรหัสผ่าน/อีเมลแล้วต้องล้างลิงก์รีเซ็ตที่ค้างอยู่
+$profileService = new ProfileService($userRepository, $pdo, new PasswordResetRepository($pdo));
 
 $redirectPath = resolve_safe_redirect_path(
     '/profile.php',

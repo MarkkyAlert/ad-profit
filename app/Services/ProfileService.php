@@ -6,11 +6,39 @@ class ProfileService
 {
     private UserRepository $userRepository;
     private ?PDO $db;
+    private ?PasswordResetRepository $passwordResetRepository;
 
-    public function __construct(UserRepository $userRepository, ?PDO $db = null)
-    {
+    public function __construct(
+        UserRepository $userRepository,
+        ?PDO $db = null,
+        ?PasswordResetRepository $passwordResetRepository = null
+    ) {
         $this->userRepository = $userRepository;
         $this->db = $db;
+        $this->passwordResetRepository = $passwordResetRepository;
+    }
+
+    /**
+     * ล้างลิงก์รีเซ็ตรหัสผ่านที่ยังค้างอยู่ของผู้ใช้คนนี้
+     *
+     * เรียกทุกครั้งที่ credential เปลี่ยน (รหัสผ่าน/อีเมล) — สถานการณ์จริงคือผู้ใช้ได้อีเมล
+     * "ลืมรหัสผ่าน" ที่ตัวเองไม่ได้ขอ แล้วรีบไปเปลี่ยนรหัสผ่านเองเพื่อป้องกันตัว
+     * ถ้าลิงก์เก่ายังใช้ได้ คนที่ถือลิงก์นั้นยังตั้งรหัสทับของใหม่ได้ = การป้องกันตัวไร้ผล
+     *
+     * ⚠️ คู่กับ `AuthService::resetPassword` ที่ลบ token ทิ้งอยู่แล้ว — แก้ที่หนึ่งต้องดูอีกที่
+     * ล้มเหลวไม่ควรทำให้การเปลี่ยนรหัสผ่านล้มตาม (บันทึก log แล้วไปต่อ)
+     */
+    private function revokePasswordResetTokens(int $userId): void
+    {
+        if ($this->passwordResetRepository === null) {
+            return;
+        }
+
+        try {
+            $this->passwordResetRepository->deleteByUserId($userId);
+        } catch (Throwable $exception) {
+            error_log('[profile] revokePasswordResetTokens failed: ' . $exception->getMessage());
+        }
     }
 
     public function getProfile(int $userId): array
@@ -222,6 +250,9 @@ class ProfileService
             // ไม่งั้นคนที่ยึด session ไว้ได้ เปลี่ยนอีเมลแล้วยังค้างอยู่ในบัญชีต่อไป
             $this->userRepository->incrementSessionVersion($userId);
 
+            // ลิงก์รีเซ็ตที่ส่งไปอีเมล "เดิม" ต้องใช้ไม่ได้อีก
+            $this->revokePasswordResetTokens($userId);
+
             if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                 $this->db->commit();
             }
@@ -369,6 +400,9 @@ class ProfileService
             }
 
             $this->userRepository->incrementSessionVersion($userId);
+
+            // ลิงก์รีเซ็ตที่ยังค้างอยู่ต้องใช้ไม่ได้อีก — ผู้ใช้เพิ่งตั้งรหัสใหม่เองแล้ว
+            $this->revokePasswordResetTokens($userId);
 
             if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                 $this->db->commit();

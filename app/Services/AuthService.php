@@ -9,6 +9,14 @@ class AuthService
     /** bucket ที่ผูกกับ IP ล้วน — กัน password spraying ที่ bucket ต่ออีเมลจับไม่ได้ */
     private const LOGIN_IP_ACTION = 'login_ip';
 
+    /**
+     * bucket ที่ผูกกับ IP ล้วนของการสมัคร — คู่แฝดของ LOGIN_IP_ACTION ที่ตกหล่น
+     *
+     * bucket เดิมผูกกับ (IP + อีเมล) ซึ่งเปลี่ยนกุญแจทุกครั้งที่เปลี่ยนอีเมลที่ลอง
+     * เครื่องเดียวจึงยิงทดสอบได้ไม่จำกัดว่าอีเมลไหนมีในระบบแล้วบ้าง
+     */
+    private const REGISTER_IP_ACTION = 'register_ip';
+
     /** cache ของ dummy hash ต่อ process — คิดครั้งเดียวแล้วใช้ซ้ำ */
     private static ?string $dummyPasswordHash = null;
 
@@ -37,7 +45,8 @@ class AuthService
     {
         $normalizedEmail = normalize_email($email);
 
-        if ($this->isRateLimited('register', $clientIp, $normalizedEmail)) {
+        if ($this->isRateLimited('register', $clientIp, $normalizedEmail)
+            || $this->isRateLimited(self::REGISTER_IP_ACTION, $clientIp)) {
             return [
                 'success' => false,
                 'error' => 'ลองสมัครบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
@@ -45,7 +54,7 @@ class AuthService
         }
 
         if ($normalizedEmail === '' || !is_valid_email($normalizedEmail)) {
-            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
+            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
@@ -53,7 +62,7 @@ class AuthService
         }
 
         if (strlen($normalizedEmail) > 255) {
-            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
+            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'อีเมลยาวเกินไป',
@@ -62,7 +71,7 @@ class AuthService
 
         $passwordError = validate_password_length($password);
         if ($passwordError !== null) {
-            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
+            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => $passwordError,
@@ -70,7 +79,7 @@ class AuthService
         }
 
         if ($password !== $passwordConfirm) {
-            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
+            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน',
@@ -78,7 +87,7 @@ class AuthService
         }
 
         if ($this->userRepository->findByEmail($normalizedEmail) !== null) {
-            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
+            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่อีกครั้ง',
@@ -110,7 +119,7 @@ class AuthService
                 $this->db->rollBack();
             }
 
-            $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
+            $this->markFailedRegisterAttempt($clientIp, $normalizedEmail);
             error_log('[auth][register] ' . $exception->getMessage());
 
             $isDuplicateUser = $exception instanceof PDOException && $exception->getCode() === '23000';
@@ -129,6 +138,8 @@ class AuthService
 
         $this->establishSession($userId, $normalizedEmail, $shopId, self::DEFAULT_SHOP_NAME, $sessionVersion);
         $this->clearRateLimit('register', $clientIp, $normalizedEmail);
+        // ไม่ล้าง bucket ของ IP โดยตั้งใจ — เหตุผลเดียวกับฝั่งล็อกอิน:
+        // สมัครสำเร็จ 1 ครั้งไม่ควรล้างประวัติการไล่ทดสอบอีเมลอื่นทิ้ง
 
         return [
             'success' => true,
@@ -499,6 +510,13 @@ class AuthService
     {
         $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
         $this->markFailedAttempt(self::LOGIN_IP_ACTION, $clientIp);
+    }
+
+    /** เหมือนกันกับฝั่งล็อกอิน — สมัครล้มเหลวต้องนับทั้ง 2 bucket */
+    private function markFailedRegisterAttempt(string $clientIp, string $normalizedEmail): void
+    {
+        $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
+        $this->markFailedAttempt(self::REGISTER_IP_ACTION, $clientIp);
     }
 
     private function isRateLimited(string $action, string $clientIp, string $subject = ''): bool

@@ -5,29 +5,36 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/auth.php';
 
-// รับ token ก่อน requireGuest() เสมอ
-// ผู้ที่ยังล็อกอินค้างในเบราว์เซอร์แล้วกดลิงก์จากอีเมล เดิมจะถูกเด้งไป /dashboard.php
-// ตั้งแต่บรรทัดถัดไป โดยที่ token ถูกทิ้งเงียบ ๆ และไม่มีข้อความบอกว่าเกิดอะไรขึ้น
-$tokenFromQuery = trim((string)($_GET['token'] ?? ''));
-if ($tokenFromQuery !== '') {
-    // ออกจากระบบให้อัตโนมัติ — คนที่มาถึงหน้านี้ตั้งใจจะตั้งรหัสผ่านใหม่
-    // (ล้าง session ทั้งก้อน + เปลี่ยน session id ผ่าน clearAuthSession)
-    if (isset($_SESSION['user_id'])) {
-        clearAuthSession();
-    }
-
-    $_SESSION['password_reset_token'] = $tokenFromQuery;
-    redirect('/reset-password.php');
-}
-
-requireGuest();
-
-$token = trim((string)($_SESSION['password_reset_token'] ?? ''));
+// token เดินทางผ่าน URL → hidden field ของฟอร์มเท่านั้น "ห้าม" เก็บลง session
+//
+// เดิมหน้านี้เอา token จาก ?token= ไปเก็บใน $_SESSION แล้วฟอร์มไม่มีช่อง token เลย
+// ทำให้ใครก็ได้ส่งลิงก์ /reset-password.php?token=<ของตัวเอง> ให้เหยื่อกด แล้ว:
+//   1) เหยื่อถูกเตะออกจากระบบทันที (GET ที่ไม่มี CSRF แต่เปลี่ยน state)
+//   2) รหัสผ่านที่เหยื่อพิมพ์ต่อจากนั้นไปตกที่บัญชี "ของผู้ส่งลิงก์" ไม่ใช่ของเหยื่อ
+// ทั้งสองข้อทำซ้ำได้จริง จึงต้องแก้พร้อมกัน: ไม่แตะ session, ไม่เตะใครออก,
+// และแสดงให้ชัดว่าลิงก์นี้เป็นของบัญชีไหน เพื่อให้เหยื่อรู้ตัวก่อนพิมพ์
+$token = trim((string)($_GET['token'] ?? ''));
 
 if ($token === '') {
     set_flash('error', 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง');
     redirect('/forgot-password.php');
 }
+
+// ตรวจ token ก่อนแสดงฟอร์ม — ต้องตอบให้ได้ว่าลิงก์นี้เป็นของอีเมลไหน
+$resetTokenRow = (new PasswordResetRepository($pdo))->findByTokenHash(hash('sha256', $token));
+
+if ($resetTokenRow === null) {
+    set_flash('error', 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว กรุณาขอลิงก์ใหม่');
+    redirect('/forgot-password.php');
+}
+
+$resetTargetEmail = (string)($resetTokenRow['email'] ?? '');
+
+// ผู้ที่ยังล็อกอินค้างอยู่ไม่ถูกเตะออก — แค่เตือนว่ากำลังจะตั้งรหัสให้บัญชีไหน
+// (เดิมเด้งไป /dashboard.php ทิ้ง token เงียบ ๆ ต่อมาแก้เป็นเตะออกซึ่งเปิดช่องโจมตี)
+$signedInEmail = isset($_SESSION['user_id']) ? (string)($_SESSION['email'] ?? '') : '';
+$resetIsForAnotherAccount = $signedInEmail !== ''
+    && strcasecmp($signedInEmail, $resetTargetEmail) !== 0;
 
 $pageTitle = 'รีเซ็ตรหัสผ่าน - ' . APP_NAME;
 ?>
@@ -93,9 +100,28 @@ $pageTitle = 'รีเซ็ตรหัสผ่าน - ' . APP_NAME;
                 </div>
             <?php endif; ?>
 
+            <?php // บอกให้ชัดว่ากำลังตั้งรหัสให้บัญชีไหน — คนที่ถูกส่งลิงก์ของคนอื่นมาจะได้รู้ตัว ?>
+            <div class="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+                กำลังตั้งรหัสผ่านใหม่ให้บัญชี
+                <span class="font-semibold text-slate-100"><?= e($resetTargetEmail) ?></span>
+            </div>
+
+            <?php if ($resetIsForAnotherAccount): ?>
+                <div class="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                    ⚠️ ขณะนี้คุณเข้าสู่ระบบด้วยบัญชี
+                    <span class="font-semibold"><?= e($signedInEmail) ?></span>
+                    ซึ่ง<strong>ไม่ใช่บัญชีเดียวกับลิงก์นี้</strong>
+                    <p class="mt-1 text-xs text-amber-100/80">
+                        ถ้าคุณไม่ได้เป็นคนขอลิงก์นี้ ให้ปิดหน้านี้ทิ้ง — อย่ากรอกรหัสผ่านของคุณลงไป
+                    </p>
+                </div>
+            <?php endif; ?>
+
             <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" class="space-y-4">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="reset_password">
+                <?php // token ต้องมากับฟอร์ม ไม่ใช่มาจาก session ?>
+                <input type="hidden" name="token" value="<?= e($token) ?>">
                 <div>
                     <label for="password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่านใหม่</label>
                     <input id="password" name="password" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"

@@ -130,7 +130,6 @@ function clearAuthSession(): void
         $_SESSION['last_activity_at'],
         $_SESSION['current_shop_id'],
         $_SESSION['current_shop_name'],
-        $_SESSION['password_reset_token'],
         $_SESSION['csrf_token']
     );
 
