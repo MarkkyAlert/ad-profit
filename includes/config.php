@@ -147,7 +147,7 @@ if (!defined('RATE_LIMIT_WINDOW_SECONDS')) {
 }
 
 if (!defined('PASSWORD_MIN_LENGTH')) {
-    define('PASSWORD_MIN_LENGTH', max(4, (int)(getenv('PASSWORD_MIN_LENGTH') ?: 8)));
+    define('PASSWORD_MIN_LENGTH', max(4, config_positive_int('PASSWORD_MIN_LENGTH', 8)));
 }
 
 // bcrypt (PASSWORD_DEFAULT) ตัดรหัสผ่านที่ 72 byte — ยาวกว่านี้ส่วนเกินไม่มีผลต่อการตรวจ
@@ -164,7 +164,22 @@ if (!defined('SESSION_ABSOLUTE_TIMEOUT_SECONDS')) {
 }
 
 if (!defined('SCHEMA_GUARD_ENABLED')) {
-    define('SCHEMA_GUARD_ENABLED', filter_var(getenv('SCHEMA_GUARD_ENABLED') ?: 'true', FILTER_VALIDATE_BOOLEAN));
+    // ⚠️ `getenv() ?: 'true'` กลับหัวความหมายของค่า "0" — "0" เป็น falsy จึงกลายเป็น
+    // 'true' (เปิดการ์ด) ขณะที่ค่าขยะอย่าง "disabled" กลายเป็น false (ปิดการ์ดเงียบ ๆ)
+    // คือทั้งสองทางตรงข้ามกับที่ผู้ตั้งค่าคาดหวังพอดี
+    $schemaGuardRaw = getenv('SCHEMA_GUARD_ENABLED');
+    $schemaGuardValue = $schemaGuardRaw === false ? 'true' : trim($schemaGuardRaw);
+    $schemaGuardParsed = filter_var($schemaGuardValue, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+    if ($schemaGuardParsed === null) {
+        error_log(sprintf(
+            '[config] SCHEMA_GUARD_ENABLED="%s" ใช้ไม่ได้ (ต้องเป็น true/false) — เปิดการ์ดไว้เพื่อความปลอดภัย',
+            $schemaGuardValue
+        ));
+        $schemaGuardParsed = true;
+    }
+
+    define('SCHEMA_GUARD_ENABLED', $schemaGuardParsed);
 }
 
 if (!defined('TRUST_PROXY')) {
@@ -203,7 +218,7 @@ if (!defined('LOG_FILE')) {
 }
 
 if (!defined('PASSWORD_RESET_TOKEN_TTL_HOURS')) {
-    define('PASSWORD_RESET_TOKEN_TTL_HOURS', (int)(getenv('PASSWORD_RESET_TOKEN_TTL_HOURS') ?: 1));
+    define('PASSWORD_RESET_TOKEN_TTL_HOURS', config_positive_int('PASSWORD_RESET_TOKEN_TTL_HOURS', 1));
 }
 
 if (!defined('MAIL_ENABLED')) {
@@ -215,15 +230,15 @@ if (!defined('MAIL_HOST')) {
 }
 
 if (!defined('MAIL_PORT')) {
-    define('MAIL_PORT', (int)(getenv('MAIL_PORT') ?: 587));
+    define('MAIL_PORT', config_positive_int('MAIL_PORT', 587));
 }
 
 if (!defined('MAIL_TIMEOUT_SECONDS')) {
-    define('MAIL_TIMEOUT_SECONDS', (int)(getenv('MAIL_TIMEOUT_SECONDS') ?: 15));
+    define('MAIL_TIMEOUT_SECONDS', config_positive_int('MAIL_TIMEOUT_SECONDS', 15));
 }
 
 if (!defined('MAIL_RETRY_ATTEMPTS')) {
-    define('MAIL_RETRY_ATTEMPTS', max(0, (int)(getenv('MAIL_RETRY_ATTEMPTS') ?: 1)));
+    define('MAIL_RETRY_ATTEMPTS', config_positive_int('MAIL_RETRY_ATTEMPTS', 1));
 }
 
 if (!defined('MAIL_USERNAME')) {

@@ -300,6 +300,90 @@ final class BrowserScriptParityTest extends ControllerTestCase
     }
 
     /**
+     * ลบคอมเมนต์และสตริงออกจากโค้ด JS โดยเดินทีละตัวอักษร
+     *
+     * วิธีนี้รู้เสมอว่า "ตอนนี้อยู่ในสตริงหรือในคอมเมนต์" จึงไม่มีทางที่อันหนึ่ง
+     * จะกลืนอีกอันได้ · แทนที่ด้วยช่องว่างเพื่อรักษาตำแหน่งบรรทัดไว้
+     */
+    private static function stripCommentsAndStrings(string $code): string
+    {
+        $out = '';
+        $length = strlen($code);
+        $state = 'code';   // code | line-comment | block-comment | string
+        $quote = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $code[$i];
+            $next = $i + 1 < $length ? $code[$i + 1] : '';
+
+            if ($state === 'code') {
+                if ($char === '/' && $next === '/') {
+                    $state = 'line-comment';
+                    $out .= '  ';
+                    $i++;
+                    continue;
+                }
+
+                if ($char === '/' && $next === '*') {
+                    $state = 'block-comment';
+                    $out .= '  ';
+                    $i++;
+                    continue;
+                }
+
+                if ($char === "'" || $char === '"' || $char === '`') {
+                    $state = 'string';
+                    $quote = $char;
+                    $out .= ' ';
+                    continue;
+                }
+
+                $out .= $char;
+                continue;
+            }
+
+            if ($state === 'line-comment') {
+                if ($char === "\n") {
+                    $state = 'code';
+                    $out .= "\n";
+                    continue;
+                }
+
+                $out .= ' ';
+                continue;
+            }
+
+            if ($state === 'block-comment') {
+                if ($char === '*' && $next === '/') {
+                    $state = 'code';
+                    $out .= '  ';
+                    $i++;
+                    continue;
+                }
+
+                $out .= $char === "\n" ? "\n" : ' ';
+                continue;
+            }
+
+            // state === 'string'
+            if ($char === '\\') {
+                $out .= '  ';
+                $i++;
+                continue;
+            }
+
+            if ($char === $quote) {
+                $state = 'code';
+                $quote = '';
+            }
+
+            $out .= $char === "\n" ? "\n" : ' ';
+        }
+
+        return $out;
+    }
+
+    /**
      * ⭐ ไฟล์ทุกไฟล์ที่มี `<script>` ฝังอยู่ ต้องอยู่ในรายชื่อที่ถูกตรวจ
      *
      * ⚠️ เดิมรายชื่อเป็นค่าตายตัว — เพิ่มสคริปต์ลงหน้าที่ไม่อยู่ในรายชื่อ (เช่น
@@ -327,6 +411,25 @@ final class BrowserScriptParityTest extends ControllerTestCase
             [],
             array_values(array_diff($withScript, $known)),
             'มีไฟล์ที่ฝัง <script> แต่ไม่ได้อยู่ในรายชื่อที่ตรวจ — เพิ่มใน scriptedPageProvider()'
+        );
+
+        // ⚠️ ต้องอยู่ใน **ทั้งสอง** รายชื่อ — `scriptedPageProvider` คุมเรื่อง "เรียกฟังก์ชัน
+        // ที่ไม่มีนิยาม" ส่วน `renderedPageProvider` คุมเรื่อง "parse ผ่านไหม"
+        // เพิ่มหน้าเข้าแค่รายชื่อเดียวแล้วอีกด้านยังบอดอยู่ (พิสูจน์แล้ว)
+        $rendered = array_map(
+            static fn(array $row): string => ltrim((string)$row[0], '/'),
+            array_values(self::renderedPageProvider())
+        );
+
+        $pagesOnly = array_values(array_filter(
+            $withScript,
+            static fn(string $file): bool => !str_starts_with($file, 'includes/')
+        ));
+
+        $this->assertSame(
+            [],
+            array_values(array_diff($pagesOnly, $rendered)),
+            'มีหน้าที่ฝัง <script> แต่ไม่ได้อยู่ในรายชื่อตรวจ parse — เพิ่มใน renderedPageProvider()'
         );
     }
 
@@ -363,14 +466,12 @@ final class BrowserScriptParityTest extends ControllerTestCase
         // (เขียนแท็กปิดแบบต่อสตริง ไม่งั้นมันจะไปปิดแท็ก PHP ของไฟล์เทสต์เอง)
         $source = (string)preg_replace('/<\?[=php].*?\?' . '>/s', '0', $source);
 
-        // ⚠️ **ตัดคอมเมนต์ก่อน แล้วค่อยตัดสตริง** — สลับลำดับไม่ได้
-        // คอมเมนต์ที่มี ' อยู่ข้างใน จะจับคู่กับเครื่องหมายคำพูดตัวถัดไป
-        // ในโค้ดจริง แล้วลบทุกอย่างระหว่างกลางทิ้ง โค้ดช่วงนั้นหายจากการตรวจ
-        // ทั้งหมดโดยไม่มีอะไรบอก (พิสูจน์แล้ว)
-        $source = (string)preg_replace('#/\*.*?\*/#s', '', $source);
-        $source = (string)preg_replace('#(^|\s)//[^\n]*#', '', $source);
-        // แล้วค่อยตัดสตริง — ข้างในมีของที่หน้าตาเหมือนการเรียกฟังก์ชัน เช่นสี CSS
-        $source = (string)preg_replace('/([\'"`])(?:\\\\.|(?!\\1).)*\\1/s', "''", $source);
+        // ⚠️ ต้องเดินทีละตัวอักษร ไม่ใช่ใช้ regex ตัดคอมเมนต์กับสตริงทีละชั้น
+        //
+        // ตัดสตริงก่อน → คอมเมนต์ที่มี ' อยู่ข้างในจับคู่กับคำพูดตัวถัดไปในโค้ดจริง
+        // ตัดคอมเมนต์ก่อน → สตริงที่มี // อยู่ข้างในถูกตัดกลางคัน เหลือคำพูดค้าง
+        // แล้วไปจับคู่กับตัวถัดไปแทน · **ทั้งสองลำดับกลืนโค้ดหายไปเงียบ ๆ** (พิสูจน์ทั้งคู่แล้ว)
+        $source = self::stripCommentsAndStrings($source);
 
         // เก็บชื่อที่ประกาศไว้ (const/let/var/function) ในไฟล์ทั้งหมด
         // รวมชื่อที่ประกาศในไฟล์ร่วมด้วย — หน้าอื่นเรียกข้ามไฟล์ได้ (header/footer โหลดคู่กันเสมอ)

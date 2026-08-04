@@ -124,7 +124,7 @@ class EmailService
     {
         $appName = htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8');
         $safeLink = htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8');
-        $expiryHours = PASSWORD_RESET_TOKEN_TTL_HOURS;
+        $expiryHours = max(1, PASSWORD_RESET_TOKEN_TTL_HOURS);
 
         return <<<HTML
 <!DOCTYPE html>
@@ -181,7 +181,7 @@ HTML;
     private function buildPasswordResetText(string $resetLink): string
     {
         $appName = APP_NAME;
-        $expiryHours = PASSWORD_RESET_TOKEN_TTL_HOURS;
+        $expiryHours = max(1, PASSWORD_RESET_TOKEN_TTL_HOURS);
 
         return <<<TEXT
 {$appName} - รีเซ็ตรหัสผ่าน

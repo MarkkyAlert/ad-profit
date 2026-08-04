@@ -330,7 +330,14 @@ abstract class ControllerTestCase extends IntegrationTestCase
 
             $parts = explode(':', $line, 2);
             if (count($parts) === 2) {
-                $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                $name = strtolower(trim($parts[0]));
+                $value = trim($parts[1]);
+
+                // ⚠️ Set-Cookie มาได้หลายบรรทัด — ต่อกันไว้ ไม่ใช่ทับตัวก่อนหน้า
+                // (ต้องใช้หา session id ใหม่หลังล็อกอิน ซึ่ง session_regenerate_id เปลี่ยนให้)
+                $responseHeaders[$name] = $name === 'set-cookie' && isset($responseHeaders[$name])
+                    ? $responseHeaders[$name] . "\n" . $value
+                    : $value;
             }
         }
 
@@ -345,6 +352,21 @@ abstract class ControllerTestCase extends IntegrationTestCase
             'headers' => $responseHeaders,
             'body' => $responseBody === false ? '' : $responseBody,
         ];
+    }
+
+    /**
+     * session id ที่เซิร์ฟเวอร์ตั้งกลับมาในคำตอบ (ว่างถ้าไม่ได้ตั้งใหม่)
+     *
+     * ล็อกอินสำเร็จเรียก `session_regenerate_id(true)` → ได้ id ใหม่
+     * ต้องใช้ตัวนี้ถึงจะ "ใช้งานต่อด้วย session ที่การล็อกอินจริงสร้างขึ้น" ได้
+     *
+     * @param array{status:int,headers:array<string,string>,body:string} $response
+     */
+    protected function sessionIdFrom(array $response): string
+    {
+        $raw = (string)($response['headers']['set-cookie'] ?? '');
+
+        return preg_match('/PHPSESSID=([^;\s]+)/', $raw, $matched) === 1 ? $matched[1] : '';
     }
 
     /** ข้อความ flash ที่ถูกตั้งไว้ใน session (redirect+flash คือทางตอบปกติของฟอร์ม) */

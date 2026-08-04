@@ -211,6 +211,26 @@ final class AuthEndpointTest extends ControllerTestCase
 
         $this->assertSame(302, $response['status'], (string)$response['body']);
         $this->assertStringNotContainsString('login.php', $response['headers']['location'] ?? '');
+
+        // ⚠️⚠️ ต้อง **ใช้งานต่อด้วย session ที่การล็อกอินสร้างขึ้นจริง**
+        //
+        // การดูแค่ปลายทางของ redirect พิสูจน์ได้แค่ว่า "ตรวจรหัสผ่านผ่าน" — ไม่ได้
+        // พิสูจน์ว่าสิ่งที่เขียนลง session ใช้งานได้ · เคยพิสูจน์แล้วว่าเปลี่ยน
+        // `auth_started_at` เป็น 0 ทำให้ผู้ใช้หลุดทันทีในคำขอถัดไป (นับว่าหมดอายุแล้ว)
+        // ทั้งที่เทสต์ทั้ง 933 ตัวยังเขียว เพราะไม่มีใครแตะ session ที่ได้มาเลย
+        $newSession = $this->sessionIdFrom($response);
+        $this->assertNotSame('', $newSession, 'ล็อกอินแล้วไม่ได้ session ใหม่กลับมา');
+        $this->assertNotSame($guest, $newSession, 'ไม่ได้เปลี่ยน session id หลังล็อกอิน');
+
+        $afterLogin = $this->get('/dashboard.php', $newSession);
+        $this->assertSame(
+            200,
+            $afterLogin['status'],
+            'ล็อกอินสำเร็จแล้วแต่ใช้งานต่อไม่ได้ — ค่าที่เขียนลง session ใช้ไม่ได้จริง'
+        );
+
+        // และต้องยังใช้ได้ในคำขอถัดไปด้วย (ไม่ใช่ผ่านครั้งเดียวแล้วหลุด)
+        $this->assertSame(200, $this->get('/add-record.php', $newSession)['status']);
     }
 
     /** ⭐ รหัสผ่านผิด → ต้องไม่ได้เข้าระบบ และไม่บอกใบ้ว่าอีเมลนี้มีอยู่จริง */
