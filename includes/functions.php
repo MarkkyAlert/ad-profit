@@ -1126,3 +1126,49 @@ function schema_cascade_exists(PDO $pdo, string $tableName, string $constraintNa
 
     return strtoupper((string)$stmt->fetchColumn()) === 'CASCADE';
 }
+
+/**
+ * collation ที่ต้องตรงเป๊ะ — มันคือ "กติกาว่าข้อความสองอันเท่ากันไหม"
+ *
+ * ⚠️ `shops.name` ต้องเป็น `utf8mb4_unicode_520_ci` เท่านั้น · `utf8mb4_unicode_ci`
+ * ถือว่าอิโมจิทุกตัวเท่ากันหมด → ตั้งชื่อร้าน 🎉 แล้วถูกพาไปร้าน 🚀 พร้อมบอกว่าสำเร็จ
+ *
+ * ที่ต้องมีตัวนี้: การ์ดตรวจ `COLUMN_TYPE` อย่างเดียวมองไม่เห็น collation เลย
+ * ถ้า migration ล้มกลางคัน แอปจะบูตขึ้นมารายงานว่าปกติดี ทั้งที่บั๊กยังอยู่ครบ
+ *
+ * @return list<array{0:string,1:string,2:string}> [ตาราง, คอลัมน์, collation ที่ต้องเป็น]
+ */
+function schema_required_collations(): array
+{
+    return [
+        ['shops', 'name', 'utf8mb4_unicode_520_ci'],
+    ];
+}
+
+/**
+ * @return array{ok:bool,actual?:string}
+ */
+function schema_collation_matches(PDO $pdo, string $tableName, string $columnName, string $expected): array
+{
+    $sql = 'SELECT COLLATION_NAME
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND COLUMN_NAME = :column_name
+            LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':table_name' => $tableName,
+        ':column_name' => $columnName,
+    ]);
+
+    $actual = $stmt->fetchColumn();
+    if ($actual === false) {
+        return ['ok' => false, 'actual' => '(ไม่มีคอลัมน์นี้)'];
+    }
+
+    $actual = strtolower((string)$actual);
+
+    return $actual === $expected ? ['ok' => true] : ['ok' => false, 'actual' => $actual];
+}

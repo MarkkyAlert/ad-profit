@@ -172,13 +172,17 @@ final class ShopEndpointTest extends ControllerTestCase
         $this->createShop($userId, 'ร้านอื่น');
         $session = $this->startSession($userId, $existing);
 
-        $this->submit($session, ['action' => 'create', 'name' => 'ร้านต้นฉบับ']);
+        $response = $this->submit($session, ['action' => 'create', 'name' => 'ร้านต้นฉบับ']);
 
-        $this->assertStringContainsString(
-            'ร้านต้นฉบับ',
-            $this->flashMessages($session),
-            'ไม่ได้บอกว่าถูกสลับไปร้านชื่ออะไร'
-        );
+        // ⚠️ ต้องดูจาก **ข้อความในคำตอบ** ไม่ใช่ไฟล์ session ทั้งก้อน — ไฟล์ session
+        // มี `current_shop_name` อยู่แล้วเสมอ เทสต์เวอร์ชันแรกจึงเขียวแม้เปลี่ยนข้อความ
+        // เป็นตัวอักษรเดียว · และโหมด JSON ไม่ได้ตั้ง flash เลย
+        $payload = json_decode($response['body'], true);
+        $this->assertIsArray($payload, (string)$response['body']);
+
+        $message = (string)($payload['message'] ?? '');
+        $this->assertStringContainsString('ร้านต้นฉบับ', $message, 'ไม่ได้บอกว่าถูกสลับไปร้านชื่ออะไร');
+        $this->assertStringContainsString('มีร้านชื่อ', $message);
     }
 
     /** ⭐ สลับไปร้านของคนอื่นไม่ได้ และ session ต้องไม่ขยับ */

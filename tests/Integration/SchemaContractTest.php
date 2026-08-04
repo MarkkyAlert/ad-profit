@@ -68,6 +68,66 @@ final class SchemaContractTest extends IntegrationTestCase
         $this->assertLessThanOrEqual(12, $digits, 'MAX_AMOUNT ยาวเกินที่ decimal(12,2) เก็บได้');
     }
 
+    /**
+     * ⭐ การเชื่อมต่อที่แอปใช้จริงต้องเป็น strict mode
+     *
+     * ⚠️ เทสต์ integration ต่อ PDO เอง (ไม่ผ่าน `db()`) จึงไม่ได้ครอบเรื่องนี้เลย
+     * ต้องเรียก `db()` ตรง ๆ · ถ้าไม่ strict MySQL จะตัดข้อมูลให้พอดีแทนที่จะปฏิเสธ
+     */
+    public function testTheApplicationConnectionUsesStrictMode(): void
+    {
+        // ⚠️ ต้องรันใน process แยกและเรียก `db()` ตัวจริง — `tests/bootstrap.php`
+        // ไม่ได้ include `includes/database.php` และเทสต์ integration ต่อ PDO เอง
+        // จึงไม่มีทางเห็นการตั้งค่าที่ `db()` ทำเลย
+        $root = dirname(__DIR__, 2);
+        $script = sprintf(
+            'require %s; require %s; echo (string)db()->query("SELECT @@session.sql_mode")->fetchColumn();',
+            var_export($root . '/includes/config.php', true),
+            var_export($root . '/includes/database.php', true)
+        );
+
+        $mode = (string)shell_exec(sprintf(
+            'DB_HOST=%s DB_PORT=%s DB_NAME=%s DB_USER=%s DB_PASS=%s php -d error_log= -r %s 2>&1',
+            escapeshellarg((string)(getenv('TEST_DB_HOST') ?: '127.0.0.1')),
+            escapeshellarg((string)(getenv('TEST_DB_PORT') ?: '3306')),
+            escapeshellarg((string)(getenv('TEST_DB_NAME') ?: 'ad_profit_test')),
+            escapeshellarg((string)(getenv('TEST_DB_USER') ?: 'root')),
+            escapeshellarg((string)(getenv('TEST_DB_PASS') ?: '')),
+            escapeshellarg($script)
+        ));
+
+        $this->assertStringContainsString('STRICT_ALL_TABLES', $mode, 'การเชื่อมต่อของแอปไม่ได้เป็น strict: ' . $mode);
+        $this->assertStringContainsString('NO_ZERO_DATE', $mode);
+    }
+
+    /**
+     * ⭐ รายชื่อที่การ์ดใช้ต้องไม่ว่าง
+     *
+     * ⚠️ `phpunit.xml` ตั้ง `failOnWarning`/`failOnNotice` แต่ไม่ได้ตั้ง `failOnRisky`
+     * ถ้าใครทำรายชื่อให้ว่าง ลูปจะไม่ยืนยันอะไรเลย → PHPUnit ขึ้นว่า "risky" แต่
+     * exit code ยังเป็น 0 และ CI ยังเขียว (พิสูจน์แล้ว)
+     */
+    public function testTheGuardListsAreNotEmpty(): void
+    {
+        $this->assertNotEmpty(schema_required_column_types(), 'รายชื่อชนิดคอลัมน์ว่าง');
+        $this->assertNotEmpty(schema_transactional_tables(), 'รายชื่อตารางที่ต้องเป็น InnoDB ว่าง');
+        $this->assertNotEmpty(schema_required_cascades(), 'รายชื่อ foreign key ว่าง');
+        $this->assertNotEmpty(schema_required_collations(), 'รายชื่อ collation ว่าง');
+        $this->assertNotEmpty(schema_required_unique_indexes(), 'รายชื่อ unique index ว่าง');
+    }
+
+    /** ⭐ collation ของชื่อร้านต้องเป็นตัวที่แยกอิโมจิได้ */
+    public function testShopNameUsesTheCollationThatSeparatesEmoji(): void
+    {
+        foreach (schema_required_collations() as [$table, $column, $expected]) {
+            $check = schema_collation_matches($this->pdo, $table, $column, $expected);
+            $this->assertTrue(
+                ($check['ok'] ?? false) === true,
+                sprintf('%s.%s ควรใช้ %s แต่ใช้ %s', $table, $column, $expected, (string)($check['actual'] ?? '?'))
+            );
+        }
+    }
+
     /** ⭐ ทุกตารางที่ใช้ transaction ต้องเป็น InnoDB — MyISAM ทำให้ rollBack ไม่ทำอะไรเลย */
     public function testEveryTransactionalTableUsesInnoDb(): void
     {

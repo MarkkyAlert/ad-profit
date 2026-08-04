@@ -42,17 +42,34 @@ if (session_status() === PHP_SESSION_NONE) {
 
 date_default_timezone_set(APP_TIMEZONE);
 
+// ⚠️ ต้องตั้ง display_errors **ก่อน** แตะระบบไฟล์
+//
+// เดิมสร้างโฟลเดอร์ log ก่อน ถ้าเส้นทางเขียนไม่ได้ (พิมพ์ผิดใน .env, open_basedir,
+// โฟลเดอร์ temp เขียนไม่ได้) `mkdir()` จะเตือนออกมา **ก่อน** ที่แอปจะปิดการแสดง error
+// ผลคือ (1) เส้นทางเต็มของเซิร์ฟเวอร์หลุดออกไปในหน้าเว็บ และ (2) response ถูกส่งไปแล้ว
+// `header()` ทุกตัวหลังจากนั้นจึงไม่ทำงาน — หน้าที่ควรตอบ 503 กลายเป็น 200
+// และ endpoint ที่ควรตอบ JSON จะมี HTML ของคำเตือนนำหน้าจนเบราว์เซอร์อ่านไม่ออก
+error_reporting(E_ALL);
+$displayErrors = APP_ENV === 'development';
+ini_set('display_errors', $displayErrors ? '1' : '0');
+
 $logDir = dirname(LOG_FILE);
 if (!is_dir($logDir)) {
-    mkdir($logDir, 0775, true);
+    // ⚠️ กลืนคำเตือนไว้ตรงนี้เท่านั้น — เขียน log ไม่ได้ไม่ใช่เหตุให้หน้าเว็บพัง
+    // แต่ต้องไม่เงียบสนิทด้วย จึงพยายามบอกผ่าน error_log ของ PHP เอง (stderr/syslog)
+    if (!@mkdir($logDir, 0775, true) && !is_dir($logDir)) {
+        error_log('[bootstrap] สร้างโฟลเดอร์ log ไม่ได้: ' . $logDir);
+    }
 }
 
 ini_set('log_errors', '1');
-ini_set('error_log', LOG_FILE);
-error_reporting(E_ALL);
-
-$displayErrors = APP_ENV === 'development';
-ini_set('display_errors', $displayErrors ? '1' : '0');
+if (is_dir($logDir) && is_writable($logDir)) {
+    ini_set('error_log', LOG_FILE);
+} else {
+    // ปล่อยให้ error_log ไปตามค่าปริยายของ host แทนที่จะชี้ไปที่เขียนไม่ได้
+    // (ชี้ผิดที่ = log หายเงียบ ๆ ทั้งระบบ ซึ่งแย่กว่าไปกองรวมกับ log ของเซิร์ฟเวอร์)
+    error_log('[bootstrap] เขียน LOG_FILE ไม่ได้ ใช้ปลายทางปริยายของเซิร์ฟเวอร์แทน: ' . LOG_FILE);
+}
 
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/functions.php';
@@ -185,6 +202,25 @@ function check_schema_compatibility(PDO $pdo): array
                         $tableName,
                         $columnName,
                         $expectedType,
+                        (string)($check['actual'] ?? '?')
+                    ),
+                ];
+                return $cachedResult;
+            }
+        }
+
+        // ⚠️ collation คือกติกา "ข้อความสองอันเท่ากันไหม" — `COLUMN_TYPE` มองไม่เห็นมัน
+        // ถ้า migration ล้มกลางคัน แอปจะบูตขึ้นมารายงานว่าปกติ ทั้งที่บั๊กยังอยู่ครบ
+        foreach (schema_required_collations() as [$tableName, $columnName, $expectedCollation]) {
+            $check = schema_collation_matches($pdo, $tableName, $columnName, $expectedCollation);
+            if (($check['ok'] ?? false) !== true) {
+                $cachedResult = [
+                    'ok' => false,
+                    'message' => sprintf(
+                        'Column %s.%s must use collation %s (found %s) — run database/migrations',
+                        $tableName,
+                        $columnName,
+                        $expectedCollation,
                         (string)($check['actual'] ?? '?')
                     ),
                 ];

@@ -152,10 +152,22 @@ class AuthService
     {
         $normalizedEmail = normalize_email($email);
 
-        // ตรวจ 2 ชั้น: ต่อ (IP + อีเมล) กันเดารหัสของบัญชีเดียว และต่อ IP ล้วนกัน password
-        // spraying (รหัสเดียวยิงหลายบัญชีจาก IP เดียว) ซึ่ง bucket ที่ผูกกับอีเมลจับไม่ได้เลย
-        if ($this->isRateLimited('login', $clientIp, $normalizedEmail)
-            || $this->isRateLimited(self::LOGIN_IP_ACTION, $clientIp)) {
+        // ⚠️⚠️ ต้อง **นับก่อน แล้วค่อยตรวจรหัสผ่าน** ไม่ใช่ "ถามว่าเกินหรือยัง" แล้วค่อยนับทีหลัง
+        //
+        // เดิมเป็น check-then-act โดยมี `password_verify()` (bcrypt ~100ms) คั่นกลาง
+        // คำขอที่ยิงพร้อมกันจึงอ่านค่าเดียวกันหมดก่อนที่ใครจะเพิ่มเลข · วัดจริงแล้ว:
+        // เพดาน 5 ครั้ง แต่ยิงพร้อมกัน 40 ครั้งผ่านเข้าไปตรวจรหัสผ่านได้ **28 ครั้ง**
+        // (ยิงทีละครั้งผ่าน 5 ตามที่ควร) — bucket ต่อ IP ก็ทะลุพร้อมกัน ไม่มีตัวรอง
+        //
+        // การเพิ่มเลขเป็น atomic อยู่แล้ว (`ON DUPLICATE KEY UPDATE attempts + 1`)
+        // จองคิวก่อนแล้วดูเลขที่ได้ จึงนับได้แม่นแม้ยิงพร้อมกัน · สำเร็จแล้วล้าง bucket
+        // ต่อบัญชีทิ้ง (ทำอยู่แล้วด้านล่าง) คนที่รหัสถูกจึงไม่โดนกักจากความพยายามของตัวเอง
+        // 2 ตัว: ต่อ (IP + อีเมล) กันเดารหัสบัญชีเดียว · ต่อ IP ล้วนกัน password spraying
+        $accountAttempts = $this->reserveAttempt('login', $clientIp, $normalizedEmail);
+        $ipAttempts = $this->reserveAttempt(self::LOGIN_IP_ACTION, $clientIp);
+
+        if ($accountAttempts > $this->getMaxAttemptsForAction('login')
+            || $ipAttempts > $this->getMaxAttemptsForAction(self::LOGIN_IP_ACTION)) {
             return [
                 'success' => false,
                 'error' => 'ลองเข้าสู่ระบบบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
@@ -163,7 +175,6 @@ class AuthService
         }
 
         if ($normalizedEmail === '' || $password === '') {
-            $this->markFailedLoginAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลและรหัสผ่าน',
@@ -174,7 +185,7 @@ class AuthService
         if ($user === null) {
             // เผาเวลาเท่ากับการ verify จริง ไม่งั้นเวลาตอบบอกได้ว่าอีเมลไหนมีในระบบ
             password_verify($password, self::dummyPasswordHash());
-            $this->markFailedLoginAttempt($clientIp, $normalizedEmail);
+            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจรหัสผ่าน
             return [
                 'success' => false,
                 'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -183,7 +194,6 @@ class AuthService
 
         $passwordHash = (string)($user['password_hash'] ?? '');
         if (!password_verify($password, $passwordHash)) {
-            $this->markFailedLoginAttempt($clientIp, $normalizedEmail);
             return [
                 'success' => false,
                 'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -532,6 +542,56 @@ class AuthService
         $bucket = $this->getRateLimitBucket($action, $clientIp, $subject);
 
         return (int)$bucket['attempts'] >= $this->getMaxAttemptsForAction($action);
+    }
+
+    /**
+     * นับความพยายาม 1 ครั้งแบบ atomic แล้วคืน "เลขที่นับได้หลังบวกแล้ว"
+     *
+     * ⚠️ ต่างจาก `isRateLimited()` ตรงที่ **ไม่ใช่การถาม แต่เป็นการจอง** — คำขอที่ยิง
+     * พร้อมกันจึงได้เลขคนละตัวเสมอ ไม่ใช่ทุกคนอ่านค่าเดิมแล้วผ่านไปพร้อมกัน
+     *
+     * คืน `PHP_INT_MAX` เมื่อจองไม่สำเร็จเลย เพื่อให้ฝั่งเรียก "ปฏิเสธไว้ก่อน"
+     * (ปลอดภัยกว่าปล่อยผ่านตอนตัวจำกัดใช้งานไม่ได้)
+     */
+    private function reserveAttempt(string $action, string $clientIp, string $subject = ''): int
+    {
+        if ($this->canUseDatabaseRateLimit()) {
+            try {
+                $this->markFailedAttemptInDatabase($action, $clientIp, $subject);
+
+                return $this->currentAttemptsInDatabase($action, $clientIp, $subject);
+            } catch (Throwable $exception) {
+                $this->demoteToSessionLimiter('DB reserve failed', $exception);
+            }
+        }
+
+        $bucket = $this->getRateLimitBucket($action, $clientIp, $subject);
+        $attempts = (int)$bucket['attempts'] + 1;
+        $bucket['attempts'] = $attempts;
+        $_SESSION['auth_rate_limits'][$this->rateLimitKey($action, $clientIp, $subject)] = $bucket;
+
+        return $attempts;
+    }
+
+    /** จำนวนครั้งในหน้าต่างปัจจุบัน (0 เมื่อหน้าต่างหมดอายุแล้ว) */
+    private function currentAttemptsInDatabase(string $action, string $clientIp, string $subject = ''): int
+    {
+        $sql = 'SELECT attempts, TIMESTAMPDIFF(SECOND, started_at, NOW()) AS window_age_seconds
+                FROM auth_rate_limits
+                WHERE bucket_key = :bucket_key
+                LIMIT 1';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':bucket_key' => $this->rateLimitKey($action, $clientIp, $subject)]);
+        $row = $stmt->fetch();
+
+        if ($row === false) {
+            return 0;
+        }
+
+        return (int)$row['window_age_seconds'] >= RATE_LIMIT_WINDOW_SECONDS
+            ? 0
+            : (int)$row['attempts'];
     }
 
     private function markFailedAttempt(string $action, string $clientIp, string $subject = ''): void
