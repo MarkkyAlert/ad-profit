@@ -123,6 +123,126 @@ final class AuthEndpointTest extends ControllerTestCase
         $this->assertSame(1, $this->countRows('shops'), 'สมัครแล้วไม่มีร้านให้เริ่มใช้งาน');
     }
 
+    /**
+     * ⭐ session ที่เทสต์สร้างเอง ต้องมีคีย์ชุดเดียวกับตอนล็อกอินจริง
+     *
+     * ⚠️ เทสต์ชั้น controller ทั้งหมดใช้ `startSession()` แทนการกรอกฟอร์มล็อกอิน
+     * ถ้าคีย์ไม่ตรงกับที่ `AuthService::establishSession()` เขียนจริง เทสต์ทุกตัว
+     * จะรันอยู่บน session ปลอมที่ไม่มีวันเกิดขึ้นจริง — เพิ่มคีย์ใหม่ในระบบแล้ว
+     * เทสต์ยังเขียวหมด ทั้งที่ผู้ใช้จริงจะเจอปัญหา
+     */
+    public function testTheTestSessionHasTheSameShapeAsARealLogin(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'RealPass123');
+        $shopId = $this->createShop($userId, 'ร้านทดสอบ');
+        $guest = $this->startSession(0, 0);
+
+        // ⚠️ ต้องดูว่า "ไฟล์ไหนเพิ่งเกิดใหม่" — การล็อกอินสำเร็จเรียก session_regenerate_id
+        // จึงได้ไฟล์ใหม่ · ถ้าไปค้นด้วย user_id จะเจอไฟล์ที่เทสต์ก่อนหน้าสร้างไว้แทน
+        // (ทุกเทสต์ในคลาสเดียวกันใช้โฟลเดอร์ session ร่วมกัน และ userId มักเป็น 1 เหมือนกัน)
+        $pattern = sys_get_temp_dir() . '/ad-profit-controller-tests-*/sess_*';
+        $before = array_flip((array)glob($pattern));
+
+        $this->post('/api/auth.php', [
+            'action' => 'login',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'owner@example.com',
+            'password' => 'RealPass123',
+        ], $guest);
+
+        $keysOf = static function (string $raw): array {
+            preg_match_all('/(?:^|;)([a-z_]+)\|/', $raw, $matched);
+            $keys = array_values(array_filter(
+                $matched[1],
+                static fn(string $key): bool => $key !== 'flash' && $key !== 'csrf_token'
+            ));
+            sort($keys);
+
+            return $keys;
+        };
+
+        $realKeys = [];
+        foreach ((array)glob($pattern) as $file) {
+            if (isset($before[(string)$file])) {
+                continue;
+            }
+
+            $raw = (string)file_get_contents((string)$file);
+            if (str_contains($raw, 'user_id|i:' . $userId . ';')) {
+                $realKeys = $keysOf($raw);
+            }
+        }
+        $this->assertNotSame([], $realKeys, 'ล็อกอินจริงไม่สำเร็จ — เทียบคีย์ไม่ได้');
+
+        $fabricated = $keysOf($this->flashMessages($this->startSession($userId, $shopId)));
+
+        $this->assertSame(
+            $realKeys,
+            $fabricated,
+            'คีย์ของ session ที่เทสต์สร้าง ไม่ตรงกับตอนล็อกอินจริง'
+        );
+    }
+
+    /** ⭐ ล็อกอินสำเร็จผ่าน endpoint จริง → ต้องได้ session ที่ใช้งานต่อได้ */
+    public function testASuccessfulLoginProducesAWorkingSession(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'RealPass123');
+        $this->createShop($userId, 'ร้านของฉัน');
+        $guest = $this->startSession(0, 0);
+
+        $response = $this->post('/api/auth.php', [
+            'action' => 'login',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'owner@example.com',
+            'password' => 'RealPass123',
+        ], $guest);
+
+        $this->assertSame(302, $response['status'], (string)$response['body']);
+        $this->assertStringNotContainsString('login.php', $response['headers']['location'] ?? '');
+    }
+
+    /** ⭐ รหัสผ่านผิด → ต้องไม่ได้เข้าระบบ และไม่บอกใบ้ว่าอีเมลนี้มีอยู่จริง */
+    public function testAWrongPasswordDoesNotLogIn(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'RealPass123');
+        $this->createShop($userId);
+        $guest = $this->startSession(0, 0);
+
+        $response = $this->post('/api/auth.php', [
+            'action' => 'login',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'owner@example.com',
+            'password' => 'ผิดแน่นอน',
+        ], $guest);
+
+        $this->assertStringContainsString('login.php', $response['headers']['location'] ?? '');
+
+        // ข้อความต้องเป็นแบบรวม ๆ — ห้ามบอกว่า "อีเมลนี้มีอยู่แต่รหัสผิด"
+        $flash = $this->flashMessages($guest);
+        $this->assertStringContainsString('อีเมลหรือรหัสผ่านไม่ถูกต้อง', $flash);
+        $this->assertStringNotContainsString('ไม่พบอีเมล', $flash);
+        $this->assertStringNotContainsString('รหัสผ่านผิด', $flash);
+    }
+
+    /** ⭐ ออกจากระบบแล้วต้องเข้าหน้าที่ต้องล็อกอินไม่ได้อีก */
+    public function testLogoutEndsTheSession(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $this->assertSame(200, $this->get('/dashboard.php', $session)['status']);
+
+        $this->post('/api/auth.php', [
+            'action' => 'logout',
+            'csrf_token' => $this->csrfTokenFor($session),
+        ], $session);
+
+        $afterLogout = $this->get('/dashboard.php', $session);
+        $this->assertSame(302, $afterLogout['status'], 'ออกจากระบบแล้วยังเข้าแดชบอร์ดได้');
+        $this->assertStringContainsString('login.php', $afterLogout['headers']['location'] ?? '');
+    }
+
     /** ⭐ ขอลิงก์รีเซ็ตต้องผ่าน CSRF ด้วย ไม่งั้นเว็บอื่นสั่งส่งอีเมลรัว ๆ ได้ */
     public function testForgotPasswordRequiresCsrf(): void
     {

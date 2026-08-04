@@ -294,6 +294,40 @@ final class RecordActionEndpointTest extends ControllerTestCase
         $this->assertSame(0, $this->countRows('daily_records'), 'ไฟล์ใหญ่เกินกำหนดถูกนำเข้าได้');
     }
 
+    /**
+     * ⭐ ส่งข้อมูลใหญ่จน PHP ทิ้งทั้งก้อน → ต้องบอก 413 ไม่ใช่ "ไม่รู้จักคำสั่ง" 404
+     *
+     * เมื่อ body เกิน `post_max_size` PHP จะล้าง `$_POST`/`$_FILES` ทิ้งทั้งหมด
+     * ทุก endpoint จึงอ่าน `action` ไม่เจอแล้วตอบ 404 ซึ่งเดาไม่ได้เลยว่าเกิดอะไรขึ้น
+     * · ด่านนี้ (`ensure_post_body_not_truncated_or_respond`) เดิมไม่มีเทสต์แตะเลย
+     */
+    public function testABodyTooLargeForPhpIsReportedAsTooLarge(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        // ⚠️ ไม่ส่งไฟล์ใหญ่จริง (กินหน่วยความจำจนชุดเทสต์ล้ม) — จำลอง **สภาพเดียวกัน**
+        // ที่ด่านนี้ตรวจ: body มีความยาว แต่ PHP แกะเป็น $_POST/$_FILES ไม่ได้เลย
+        // (ที่นี่ใช้ boundary ที่ไม่ตรงกับเนื้อ ซึ่งให้ผลเหมือน body ถูกทิ้งเพราะใหญ่เกิน)
+        $response = $this->request(
+            'POST',
+            '/api/records.php',
+            [],
+            $session,
+            ['Content-Type' => 'multipart/form-data; boundary=----boundary-mismatched'],
+            "------cetamai\r\nContent-Disposition: form-data; name=\"action\"\r\n\r\nimport_csv\r\n------cetamai--\r\n"
+        );
+
+        $this->assertSame(302, $response['status']);
+        $this->assertStringContainsString(
+            'ใหญ่เกินกว่าที่เซิร์ฟเวอร์รับได้',
+            $this->flashMessages($session),
+            'PHP ทิ้ง body ทั้งก้อนแล้วระบบตอบ "ไม่รู้จักคำสั่ง" แทนที่จะบอกว่าไฟล์ใหญ่เกิน'
+        );
+        $this->assertSame(0, $this->countRows('daily_records'));
+    }
+
     /** ⭐ ไฟล์ที่มีวันซ้ำกันต้องถูกปฏิเสธทั้งไฟล์ ไม่ใช่เขียนทับตัวเอง */
     public function testACsvWithDuplicateDatesIsRejectedWholesale(): void
     {

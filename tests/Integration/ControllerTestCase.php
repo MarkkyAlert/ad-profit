@@ -139,8 +139,12 @@ abstract class ControllerTestCase extends IntegrationTestCase
         // ⚠️ ต้องเป็นอีเมลจริงของผู้ใช้คนนั้น ไม่ใช่ค่าคงที่ — หน้าเว็บบางหน้าเทียบอีเมล
         // ใน session กับข้อมูลอื่น (เช่นหน้าตั้งรหัสใหม่เตือนเมื่อลิงก์เป็นของคนละบัญชี)
         // ค่าคงที่ทำให้เทสต์เรื่องนั้นเขียนไม่ได้เลย
-        $email = (string)($this->pdo
-            ->query('SELECT email FROM users WHERE id = ' . $userId)->fetchColumn() ?: 'owner@example.com');
+        // ⚠️ `startSession(0, 0)` = "ยังไม่ได้ล็อกอิน" (ใช้ถือ CSRF token ของหน้าเข้าสู่ระบบ)
+        // ต้องไม่มีอีเมลปลอมติดมา ไม่งั้นเทสต์ที่ตรวจว่า "ระบบไม่บอกใบ้อีเมล" จะไปเจอ
+        // อีเมลของตัวเองที่ fixture เขียนไว้ แล้วแดงด้วยเหตุผลที่ผิด
+        $email = $userId > 0
+            ? (string)$this->pdo->query('SELECT email FROM users WHERE id = ' . $userId)->fetchColumn()
+            : '';
 
         $values = [
             'user_id' => $userId,

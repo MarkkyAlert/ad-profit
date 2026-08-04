@@ -48,29 +48,58 @@ final class DataEndpointParityTest extends ControllerTestCase
     }
 
     /**
-     * ⭐ `month=` ที่ว่าง ต้องไม่เท่ากับ "เลือกเดือนปัจจุบัน"
+     * ⭐ หน้าเว็บกับ endpoint ต้องตอบช่วงเดียวกัน ทุกรูปแบบของ query
      *
-     * ไม่ได้เลือกเดือน = ใช้ช่วงปริยายของแดชบอร์ด · เลือกเดือนปัจจุบัน = ช่วงของเดือนนั้น
-     * สองอย่างนี้ให้ช่วงวันคนละแบบ ถ้าตีความปนกันจะได้ตัวเลขคนละชุด
+     * นี่คือกฎที่ CLAUDE.md บังคับไว้ ("สองไฟล์นี้ต้องเขียนเหมือนกันเป๊ะ ๆ")
+     *
+     * ⚠️ **หมายเหตุที่พิสูจน์แล้ว:** "`month=` ว่าง" กับ "`month=` เดือนปัจจุบัน" ให้ผลลัพธ์
+     * ที่เหมือนกันทุกไบต์ทั้งบนหน้าเว็บและใน endpoint (ทางที่ไม่ได้เลือกเดือนจะตกไปใช้
+     * เดือนปัจจุบันอยู่ดี) จึง **แยกจากภายนอกไม่ได้** — เทสต์เวอร์ชันแรกอ้างว่าแยกได้
+     * และเขียวโดยไม่ได้ตรวจอะไรเลย · สิ่งที่ตรวจได้จริงคือ "สองไฟล์ตอบตรงกันไหม"
+     *
+     * @return array<string,array{0:string}>
      */
-    public function testAnEmptyMonthIsNotTheSameAsPickingThisMonth(): void
+    public static function queryShapeProvider(): array
+    {
+        $thisMonth = date('Y-m');
+        $lastMonth = date('Y-m', strtotime('first day of last month'));
+
+        return [
+            'ไม่ส่งอะไรเลย' => [''],
+            'month ว่าง' => ['?range=month_pick&month='],
+            'เดือนปัจจุบัน' => ['?range=month_pick&month=' . $thisMonth],
+            'เดือนที่แล้ว' => ['?range=month_pick&month=' . $lastMonth],
+            'เดือนอนาคต' => ['?range=month_pick&month=2099-12'],
+            'เดือนผิดรูป' => ['?range=month_pick&month=%E0%B9%84%E0%B8%A1%E0%B9%88%E0%B9%83%E0%B8%8A%E0%B9%88%E0%B9%80%E0%B8%94%E0%B8%B7%E0%B8%AD%E0%B8%99'],
+            'สัปดาห์นี้' => ['?range=week_this'],
+            'เดือนที่แล้วแบบ preset' => ['?range=month_last'],
+            'ช่วงที่ไม่รู้จัก' => ['?range=%E0%B9%84%E0%B8%A1%E0%B9%88%E0%B8%A1%E0%B8%B5%E0%B8%8A%E0%B9%88%E0%B8%A7%E0%B8%87%E0%B8%99%E0%B8%B5%E0%B9%89'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('queryShapeProvider')]
+    public function testThePageAndTheEndpointNeverDisagree(string $query): void
     {
         ['session' => $session] = $this->seedTwoMonths();
 
-        $noMonth = $this->json('/api/dashboard-data.php?month=', $session);
-        $pickedThisMonth = $this->json('/api/dashboard-data.php?range=month_pick&month=' . date('Y-m'), $session);
+        $range = (array)($this->json('/api/dashboard-data.php' . $query, $session)['data']['range'] ?? []);
+        $pageBody = $this->get('/dashboard.php' . $query, $session)['body'];
 
-        $this->assertTrue($noMonth['success'] ?? false);
-        $this->assertTrue($pickedThisMonth['success'] ?? false);
-        $this->assertSame(
-            'month_pick',
-            (string)($pickedThisMonth['data']['range']['type'] ?? ''),
-            'เลือกเดือนแล้วช่วงไม่ได้เป็น month_pick'
+        $start = (string)($range['start_date'] ?? '');
+        $end = (string)($range['end_date'] ?? '');
+        $this->assertNotSame('', $start, $query . ': endpoint ไม่ได้บอกช่วงเริ่มต้น');
+        $this->assertLessThanOrEqual($end, $start, $query . ': endpoint ให้ช่วงกลับหัว');
+
+        // หน้าเว็บพิมพ์ช่วงเดียวกันนี้ไว้ใต้หัวข้อ — ต้องเป็นวันเดียวกับที่ endpoint ตอบ
+        $this->assertStringContainsString(
+            formatThaiDate($start),
+            $pageBody,
+            $query . ': หน้าเว็บเริ่มนับคนละวันกับ endpoint'
         );
-        $this->assertNotSame(
-            'month_pick',
-            (string)($noMonth['data']['range']['type'] ?? ''),
-            'month= ที่ว่างถูกตีความว่า "เลือกเดือนนี้"'
+        $this->assertStringContainsString(
+            formatThaiDate($end),
+            $pageBody,
+            $query . ': หน้าเว็บจบคนละวันกับ endpoint'
         );
     }
 
@@ -101,6 +130,14 @@ final class DataEndpointParityTest extends ControllerTestCase
         $fromEndpoint = $this->json('/api/dashboard-data.php?range=month_pick&month=2099-12', $session);
         $range = (array)($fromEndpoint['data']['range'] ?? []);
 
+        // ⚠️ ดู start_date ด้วย ไม่ใช่แค่ end_date — end_date ถูกตัดด้วยตัวกัน
+        // "ห้ามเลยวันนี้" อยู่แล้ว เทสต์ที่ดูแต่ end_date จึงเขียวแม้การหดเดือนอนาคตหายไป
+        // (แล้วจะได้ช่วงกลับหัว: เริ่ม 2099-12-01 จบวันนี้)
+        $this->assertSame(
+            date('Y-m-01'),
+            (string)($range['start_date'] ?? ''),
+            'endpoint ไม่ได้หดเดือนอนาคตกลับมาเป็นเดือนปัจจุบัน'
+        );
         $this->assertLessThanOrEqual(
             date('Y-m-d'),
             (string)($range['end_date'] ?? '9999-12-31'),
@@ -117,13 +154,14 @@ final class DataEndpointParityTest extends ControllerTestCase
     public function testTheAnnualEndpointConvertsBuddhistYearsLikeThePage(): void
     {
         ['session' => $session] = $this->seedTwoMonths();
-        $christianYear = (int)date('Y');
-        $buddhistYear = $christianYear + 543;
 
-        $fromEndpoint = $this->json('/api/annual-data.php?year=' . $buddhistYear, $session);
+        // ⚠️ ต้องใช้ปี พ.ศ. ใน **อดีต** — ถ้าใช้ปีปัจจุบัน (เช่น 2569) แล้วถอดการแปลง
+        // ปีออก ค่าจะตกนอกช่วง 2000–2100 แล้วกลับไปใช้ปีปัจจุบันเป็นค่าปริยายพอดี
+        // ได้คำตอบเดียวกันโดยบังเอิญ เทสต์จึงเขียวทั้งที่การแปลงหายไปแล้ว
+        $fromEndpoint = $this->json('/api/annual-data.php?year=2565', $session);
 
         $this->assertSame(
-            $christianYear,
+            2022,
             (int)($fromEndpoint['data']['year'] ?? 0),
             'endpoint ไม่ได้แปลงปี พ.ศ. เป็น ค.ศ. เหมือนหน้าเว็บ'
         );

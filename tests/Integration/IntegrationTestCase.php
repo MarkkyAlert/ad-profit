@@ -27,8 +27,6 @@ abstract class IntegrationTestCase extends TestCase
     private static ?PDO $connection = null;
     private static ?string $skipReason = null;
     private static bool $initialised = false;
-    /** @var resource|null ล็อกกันสองโปรเซสรันพร้อมกันบน test DB เดียวกัน */
-    private static $lockHandle = null;
     /** @var array{dsn:string,user:string,pass:string}|null */
     private static ?array $credentials = null;
     /** @var list<PDO> */
@@ -60,14 +58,6 @@ abstract class IntegrationTestCase extends TestCase
 
         $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $host, $port, $name);
 
-        // ⚠️ ทุกคลาสใช้ test DB ตัวเดียวกันและล้างด้วย TRUNCATE ต่อเทสต์ — ถ้ามี phpunit
-        // อีกโปรเซสรันพร้อมกัน (เปิดอีกหน้าต่าง, เอเจนต์ตรวจงาน) สองฝ่ายจะล้างข้อมูล
-        // ของกันและกันกลางคัน แล้วได้ error หลอก ๆ อย่าง "Duplicate entry" ที่ไม่เกี่ยว
-        // กับโค้ดเลย · ล็อกไฟล์นี้บังคับให้เข้าคิว แทนที่จะพังใส่กัน
-        self::$lockHandle = fopen(sys_get_temp_dir() . '/ad-profit-' . $name . '.lock', 'c');
-        if (is_resource(self::$lockHandle)) {
-            flock(self::$lockHandle, LOCK_EX);
-        }
 
         try {
             $pdo = new PDO($dsn, $user, $pass, [
@@ -87,6 +77,17 @@ abstract class IntegrationTestCase extends TestCase
             self::$skipReason = 'โหลด database/schema.sql เข้า test DB ไม่ได้: ' . $exception->getMessage();
             return;
         }
+
+        // ⚠️ ทุกคลาสใช้ test DB ตัวเดียวกันและล้างด้วย TRUNCATE ต่อเทสต์ — ถ้ามี phpunit
+        // อีกโปรเซสรันพร้อมกัน สองฝ่ายจะล้างข้อมูลของกันและกันกลางคัน แล้วได้ error
+        // หลอก ๆ อย่าง "Duplicate entry" ที่ไม่เกี่ยวกับโค้ดเลย · ล็อกนี้บังคับให้เข้าคิว
+        //
+        // ⚠️ **ต้องใช้ล็อกของ MySQL ไม่ใช่ `flock` บนไฟล์** — `ControllerTestCase`
+        // ยก `php -S` ด้วย proc_open ซึ่งลูกจะ **สืบทอด file descriptor** ของล็อกไปด้วย
+        // ถ้า phpunit ถูกฆ่ากลางคัน เซิร์ฟเวอร์ที่ค้างอยู่จะถือล็อกไว้ตลอดไป แล้วการรัน
+        // ครั้งต่อ ๆ ไปค้างรอเงียบ ๆ โดยไม่มีอะไรบอกว่าทำไม (เกิดขึ้นจริงมาแล้ว)
+        // ล็อกของ MySQL ผูกกับ "การเชื่อมต่อ" จึงคืนเองเมื่อโปรเซสตาย
+        $pdo->query("SELECT GET_LOCK('ad_profit_test_suite', 300)")->fetchAll();
 
         self::$connection = $pdo;
         self::$credentials = ['dsn' => $dsn, 'user' => $user, 'pass' => $pass];

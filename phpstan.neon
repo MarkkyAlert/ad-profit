@@ -24,6 +24,7 @@ parameters:
         - app
         - includes
         - api
+        - cron
         - tests
         - add-record.php
         - annual.php
@@ -45,12 +46,14 @@ parameters:
     ignoreErrors:
         # (a) ดูคำอธิบายด้านบน — ครอบ 2 ที่ที่ใช้ $pdo แบบ global เหมือนกัน:
         #     - api/*            : front-controller ที่ require bootstrap.php
+        #     - cron/*           : สคริปต์ CLI ที่ require bootstrap.php เหมือนกัน
         #     - includes/header.php : view shell ที่ถูก require ต่อจาก bootstrap (บรรทัด 14-15)
         -
             identifier: variable.undefined
             message: '#Variable \$pdo might not be defined#'
             paths:
                 - api/*
+                - cron/*
                 - includes/header.php
                 # หน้าเว็บที่ราก require bootstrap.php แล้วใช้ $pdo แบบเดียวกับ api/
                 - add-record.php
