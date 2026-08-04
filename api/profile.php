@@ -146,6 +146,16 @@ if ($action === 'change_email') {
 
         $clearProfileRateLimit($rateLimitAction, $userId, $profileClientIp);
 
+        // changeEmail bump session_version ไปแล้ว → ต้องอัปเดตค่าใน session ตาม
+        // ไม่งั้น request ถัดไปไม่ตรงกับ DB แล้วเตะเจ้าของบัญชีออกเอง
+        try {
+            $_SESSION['session_version'] = $userRepository->getSessionVersion($userId);
+        } catch (Throwable $exception) {
+            $_SESSION['session_version'] = max(1, (int)($_SESSION['session_version'] ?? 1)) + 1;
+        }
+
+        session_regenerate_id(true);
+
         $respond([
             'success' => true,
             'message' => 'เปลี่ยนอีเมลเรียบร้อยแล้ว',
@@ -153,7 +163,11 @@ if ($action === 'change_email') {
         ], 200, $redirectPath);
     }
 
-    $markProfileRateLimitFailedAttempt($rateLimitAction, $userId, $profileClientIp);
+    // นับเฉพาะตอนที่รหัสผ่านปัจจุบันผิดจริง — เดิมนับทุก failure รวมถึง "ยืนยันรหัสผ่าน
+    // ไม่ตรง" หรือ "อีเมลผิดรูปแบบ" ทำให้พิมพ์ผิด 5 ครั้งโดนล็อก 60 วิ ทั้งที่ไม่ได้เดารหัส
+    if (($result['credential_failure'] ?? false) === true) {
+        $markProfileRateLimitFailedAttempt($rateLimitAction, $userId, $profileClientIp);
+    }
 
     $respond([
         'success' => false,
@@ -199,7 +213,11 @@ if ($action === 'change_password') {
         ], 200, $redirectPath);
     }
 
-    $markProfileRateLimitFailedAttempt($rateLimitAction, $userId, $profileClientIp);
+    // นับเฉพาะตอนที่รหัสผ่านปัจจุบันผิดจริง — เดิมนับทุก failure รวมถึง "ยืนยันรหัสผ่าน
+    // ไม่ตรง" หรือ "อีเมลผิดรูปแบบ" ทำให้พิมพ์ผิด 5 ครั้งโดนล็อก 60 วิ ทั้งที่ไม่ได้เดารหัส
+    if (($result['credential_failure'] ?? false) === true) {
+        $markProfileRateLimitFailedAttempt($rateLimitAction, $userId, $profileClientIp);
+    }
 
     $respond([
         'success' => false,

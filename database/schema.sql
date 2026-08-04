@@ -10,7 +10,6 @@ USE ad_profit;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS password_reset_tokens;
 DROP TABLE IF EXISTS auth_rate_limits;
-DROP TABLE IF EXISTS idempotency_requests;
 DROP TABLE IF EXISTS monthly_goals;
 DROP TABLE IF EXISTS daily_records;
 DROP TABLE IF EXISTS goals;
@@ -86,26 +85,6 @@ CREATE TABLE IF NOT EXISTS monthly_goals (
     CONSTRAINT fk_monthly_goals_shop
         FOREIGN KEY (shop_id)
         REFERENCES shops (id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS idempotency_requests (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    user_id BIGINT UNSIGNED NOT NULL,
-    action_type VARCHAR(50) NOT NULL,
-    idempotency_key CHAR(64) NOT NULL,
-    request_fingerprint CHAR(64) NOT NULL,
-    response_payload JSON NULL,
-    status ENUM('processing', 'completed', 'failed') NOT NULL DEFAULT 'processing',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_idempotency_scope (user_id, action_type, idempotency_key),
-    KEY idx_idempotency_expire (expires_at),
-    CONSTRAINT fk_idempotency_user
-        FOREIGN KEY (user_id)
-        REFERENCES users (id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

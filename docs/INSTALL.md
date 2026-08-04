@@ -33,7 +33,6 @@
 ### B.3 Database
 - ✅ MySQL/MariaDB
 - ✅ ต้องรองรับ **InnoDB**, Foreign Key, และ charset `utf8mb4`
-- ✅ ต้องรองรับคอลัมน์ชนิด **JSON** (ดู `database/schema.sql` ตาราง `idempotency_requests.response_payload`)
 
 ### B.4 PHP Extensions (เท่าที่ตรวจพบจากโค้ด)
 - ✅ `PDO` และไดรเวอร์ MySQL (`pdo_mysql`) — ระบบเชื่อมต่อ DB ผ่าน PDO (`includes/database.php`)
@@ -59,7 +58,7 @@
 - `/logs/` — โฟลเดอร์เก็บ log (โปรเจกต์มี cron ล้างไฟล์เก่าในโฟลเดอร์นี้)
 - `/uploads/` — โฟลเดอร์ในโปรเจกต์ (โปรเจกต์มีโฟลเดอร์นี้ แต่ **ไม่พบโค้ดอัปโหลดไฟล์** ในเวอร์ชันนี้)
 - `/cron/cleanup-logs.php` — cron ลบไฟล์ใน `logs/` ที่เก่ากว่า 30 วัน
-- `/cron/cleanup-idempotency.php` — cron ลบแถวหมดอายุในตาราง `idempotency_requests`
+- `/cron/cleanup-password-reset-tokens.php` — cron ลบ token รีเซ็ตรหัสผ่านที่หมดอายุ
 
 > ไม่พบไฟล์ `install.php` ในโปรเจกต์นี้
 
@@ -294,8 +293,8 @@ chmod 775 logs uploads
 พบ cron scripts ในโปรเจกต์:
 1) `cron/cleanup-logs.php`
    - ลบไฟล์ในโฟลเดอร์ `logs/` ที่เก่ากว่า **30 วัน** (ค่าถูกกำหนดในไฟล์นี้)
-2) `cron/cleanup-idempotency.php`
-   - ลบข้อมูลหมดอายุในตาราง `idempotency_requests` (ลบแถวที่ `expires_at < NOW()`)
+2) `cron/cleanup-password-reset-tokens.php`
+   - ลบ token รีเซ็ตรหัสผ่านที่หมดอายุ (ลบแถวที่ `expires_at < NOW()`)
 
 > หมายเหตุ: cron ทั้ง 2 ตัว “บังคับให้รันผ่าน CLI เท่านั้น” (ถ้าเรียกผ่านเว็บจะตอบ `403 Forbidden`)
 
@@ -304,7 +303,7 @@ chmod 775 logs uploads
 
 ```bash
 php /home/USERNAME/public_html/ad-profit/cron/cleanup-logs.php
-php /home/USERNAME/public_html/ad-profit/cron/cleanup-idempotency.php
+php /home/USERNAME/public_html/ad-profit/cron/cleanup-password-reset-tokens.php
 ```
 
 ### H.2 ความถี่ในการรัน
@@ -377,7 +376,7 @@ php /home/USERNAME/public_html/ad-profit/cron/cleanup-idempotency.php
 - **สาเหตุ**: cron scripts บังคับให้รันผ่าน CLI เท่านั้น
 - **วิธีแก้**:
   - ตั้ง cron ให้เรียก `php /path/to/script.php` จากระบบ cron ของโฮสต์
-- **ไฟล์เกี่ยวข้อง**: `cron/cleanup-logs.php`, `cron/cleanup-idempotency.php`
+- **ไฟล์เกี่ยวข้อง**: `cron/cleanup-logs.php`, `cron/cleanup-password-reset-tokens.php`
 
 ### เคส 10: Import `database/schema.sql` บน Shared Hosting แล้ว error แนว ๆ “CREATE DATABASE denied”
 - **สาเหตุ**: โฮสต์ไม่ให้สร้าง DB ผ่าน SQL

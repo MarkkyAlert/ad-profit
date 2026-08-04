@@ -11,6 +11,14 @@ class GoalRepository
         $this->db = $db;
     }
 
+    /**
+     * เขียนทับทั้ง 2 ฟิลด์เสมอ — ตั้งใจ ไม่ใช่ partial update
+     *
+     * ฟอร์มตั้งเป้า (dashboard.php) prefill ทั้งสองช่องและส่งมาครบทุกครั้ง การล้างช่องหนึ่ง
+     * ให้ว่างจึงแปลว่า "ลบเป้านั้น" ซึ่งต้องกลายเป็น NULL จริง ๆ
+     * ⚠️ ถ้าจะเพิ่มผู้เรียกที่ส่งมาไม่ครบ ต้องเปลี่ยน contract ตรงนี้ก่อน ไม่งั้นฟิลด์ที่
+     * ไม่ได้ส่งจะถูกล้างเงียบ ๆ
+     */
     public function upsert(int $shopId, string $goalMonth, ?float $targetRevenue, ?float $targetProfit): bool
     {
         $sql = 'INSERT INTO monthly_goals (shop_id, goal_month, target_revenue, target_profit)

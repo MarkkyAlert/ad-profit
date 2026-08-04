@@ -174,6 +174,9 @@ class ProfileService
                 return [
                     'success' => false,
                     'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
+                    // บอก controller ว่านี่คือการเดารหัสผ่านจริง ๆ ไม่ใช่กรอกฟอร์มผิด
+                    // → ให้เป็นเคสเดียวที่นับเข้าตัวจำกัดจำนวนครั้ง
+                    'credential_failure' => true,
                 ];
             }
 
@@ -214,6 +217,10 @@ class ProfileService
                     'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
                 ];
             }
+
+            // อีเมลคือช่องทางกู้บัญชี — เปลี่ยนแล้วต้องเตะ session อื่นเหมือนตอนเปลี่ยนรหัสผ่าน
+            // ไม่งั้นคนที่ยึด session ไว้ได้ เปลี่ยนอีเมลแล้วยังค้างอยู่ในบัญชีต่อไป
+            $this->userRepository->incrementSessionVersion($userId);
 
             if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                 $this->db->commit();
@@ -343,6 +350,9 @@ class ProfileService
                 return [
                     'success' => false,
                     'error' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง',
+                    // บอก controller ว่านี่คือการเดารหัสผ่านจริง ๆ ไม่ใช่กรอกฟอร์มผิด
+                    // → ให้เป็นเคสเดียวที่นับเข้าตัวจำกัดจำนวนครั้ง
+                    'credential_failure' => true,
                 ];
             }
 

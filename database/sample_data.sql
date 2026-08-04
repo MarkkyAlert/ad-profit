@@ -8,7 +8,6 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 DELETE FROM password_reset_tokens;
 DELETE FROM auth_rate_limits;
-DELETE FROM idempotency_requests;
 DELETE FROM monthly_goals;
 DELETE FROM daily_records;
 DELETE FROM shops;
@@ -54,26 +53,6 @@ VALUES
     (1, '2026-02', 55000.00, 35000.00),
     (2, '2026-02', 25000.00, 15000.00),
     (3, '2026-02', 18000.00, 10000.00);
-
-INSERT INTO idempotency_requests (
-    user_id,
-    action_type,
-    idempotency_key,
-    request_fingerprint,
-    response_payload,
-    status,
-    created_at,
-    expires_at
-) VALUES (
-    1,
-    'record_upsert',
-    SHA2('sample-idempotency-key-1', 256),
-    SHA2('shop=1|date=2026-02-18|revenue=3200|ad=1000', 256),
-    JSON_OBJECT('success', true, 'message', 'upserted'),
-    'completed',
-    NOW(),
-    DATE_ADD(NOW(), INTERVAL 1 DAY)
-);
 
 ALTER TABLE users AUTO_INCREMENT = 3;
 ALTER TABLE shops AUTO_INCREMENT = 4;

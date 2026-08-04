@@ -82,6 +82,10 @@ require __DIR__ . '/includes/header.php';
                 class="w-full rounded-xl px-4 py-2.5 transition-all date-input-formatted"
                 style="position: relative;"
                 onchange="this.setAttribute('data-date', this.value ? this.value.split('-').reverse().join('/') : '')">
+            <?php // ลงวันที่ล่วงหน้าทำได้ (บางคนตั้งใจ) แต่ต้องเห็นว่ากำลังทำอยู่ — กันพิมพ์ปีผิด ?>
+            <p id="future-date-warning" class="mt-1 hidden text-xs text-amber-300">
+                ⚠️ วันที่นี้อยู่ในอนาคต — บันทึกได้ แต่ตรวจสอบอีกครั้งว่าพิมพ์ปีถูกไหม
+            </p>
         </div>
 
         <div>
@@ -717,4 +721,30 @@ require __DIR__ . '/includes/header.php';
         </table>
     </div>
 </section>
+<script>
+    // เตือนเมื่อวันที่อยู่ในอนาคต — ไม่บล็อกการบันทึก (ลงล่วงหน้าเป็นเรื่องปกติ)
+    // แต่ทำให้การพิมพ์ปีผิด เช่น 2027 ไม่ผ่านไปเงียบ ๆ
+    (() => {
+        const dateInput = document.getElementById('record-date');
+        const warning = document.getElementById('future-date-warning');
+        if (!dateInput || !warning) {
+            return;
+        }
+
+        const today = new Date();
+        const todayIso = [
+            today.getFullYear(),
+            String(today.getMonth() + 1).padStart(2, '0'),
+            String(today.getDate()).padStart(2, '0'),
+        ].join('-');
+
+        const sync = () => {
+            warning.classList.toggle('hidden', !(dateInput.value && dateInput.value > todayIso));
+        };
+
+        dateInput.addEventListener('change', sync);
+        dateInput.addEventListener('input', sync);
+        sync();
+    })();
+</script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

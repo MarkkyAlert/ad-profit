@@ -41,7 +41,6 @@ Deployment คือ “การนำระบบที่ติดตั้�
 - [ ] DB เป็น MySQL/MariaDB และรองรับ:
   - [ ] InnoDB + Foreign Key
   - [ ] `utf8mb4`
-  - [ ] ชนิดคอลัมน์ **JSON** (ดู `database/schema.sql` ตาราง `idempotency_requests`)
 - [ ] PHP extensions ตามโค้ด:
   - [ ] `pdo_mysql` (จำเป็น — เชื่อม DB ผ่าน PDO ที่ `includes/database.php`)
   - [ ] `mbstring` (แนะนำ — ถ้าไม่มีระบบยังรันได้ แต่การตรวจความยาวข้อความภาษาไทยอาจไม่แม่น)
@@ -56,6 +55,19 @@ Deployment คือ “การนำระบบที่ติดตั้�
 - [ ] สำรองฐานข้อมูล (อย่างน้อย 1 ไฟล์) ก่อนย้ายขึ้น production/ก่อนอัปเดตโค้ด
 - [ ] เก็บไฟล์ `.env` ของ production ไว้ในที่ปลอดภัย (อย่าเก็บในที่สาธารณะ)
 - [ ] ถ้าคุณไม่มีทีมเทคนิค แนะนำตั้งกติกา “ก่อนแก้อะไรต้อง backup ก่อนเสมอ”
+
+### 2.4 Migration ที่ต้องรันบน database เดิม
+
+⚠️ `database/schema.sql` เป็น **DROP + CREATE** — ห้ามรันทับ database ที่มีข้อมูล
+การเปลี่ยนโครงสร้างบน DB เดิมให้รันไฟล์ใน `database/migrations/` แทน
+
+| ไฟล์ | ทำอะไร | จำเป็นไหม |
+|---|---|---|
+| `2026-08-04-drop-idempotency-requests.sql` | ลบตาราง `idempotency_requests` ที่ไม่ถูกใช้งาน | ไม่บังคับ — ระบบทำงานได้ปกติถ้ายังไม่ลบ ตารางจะค้างอยู่เฉย ๆ |
+
+```bash
+mysql -u USER -p DBNAME < database/migrations/2026-08-04-drop-idempotency-requests.sql
+```
 
 ---
 
@@ -250,19 +262,19 @@ MAIL_FROM_NAME="Ad Profit"
 พบ cron ในโปรเจกต์นี้ 2 ตัว:
 1) `cron/cleanup-logs.php`
    - ลบไฟล์ในโฟลเดอร์ `logs/` ที่เก่ากว่า 30 วัน
-2) `cron/cleanup-idempotency.php`
-   - ลบรายการหมดอายุในตาราง `idempotency_requests`
+2) `cron/cleanup-password-reset-tokens.php`
+   - ลบ token รีเซ็ตรหัสผ่านที่หมดอายุ
 
 ผลกระทบถ้าไม่ตั้ง cron:
 - `logs/` อาจสะสมไฟล์มากขึ้น (ถ้าคุณเก็บ log ไว้ในโฟลเดอร์นี้)
-- ตาราง `idempotency_requests` อาจโตขึ้นตามเวลา (ขึ้นกับการใช้งาน)
+- ตาราง `password_reset_tokens` และ `auth_rate_limits` อาจโตขึ้นตามเวลา (ขึ้นกับการใช้งาน)
 
 > cron ทั้ง 2 ตัวบังคับให้รันผ่าน CLI เท่านั้น (ถ้าเรียกผ่านเว็บจะได้ `403 Forbidden`)
 
 ตัวอย่างคำสั่ง (ปรับ path และ php binary ให้ตรงโฮสต์):
 ```bash
 php /path/to/project/cron/cleanup-logs.php
-php /path/to/project/cron/cleanup-idempotency.php
+php /path/to/project/cron/cleanup-password-reset-tokens.php
 ```
 
 แนะนำความถี่:

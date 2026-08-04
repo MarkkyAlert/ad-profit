@@ -128,7 +128,6 @@ abstract class IntegrationTestCase extends TestCase
         $tables = [
             'password_reset_tokens',
             'auth_rate_limits',
-            'idempotency_requests',
             'monthly_goals',
             'daily_records',
             'shops',

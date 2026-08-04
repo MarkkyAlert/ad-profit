@@ -53,7 +53,7 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 - goal: เดือน `YYYY-MM`, ต้องมีอย่างน้อย 1 เป้า, ค่า ≥ 0
 - `profit = revenue − ad_cost` (คำนวณ ไม่เก็บ), `ROAS = revenue / ad_cost` (null เมื่อ ad_cost = 0)
 - **Overview (รวมร้าน) ดูได้เมื่อมี ≥ 2 ร้านเท่านั้น** (`can_view`)
-- เปลี่ยน/รีเซ็ตรหัสผ่าน → increment `session_version` (เตะ session อื่น)
+- เปลี่ยน/รีเซ็ตรหัสผ่าน **และเปลี่ยนอีเมล** → increment `session_version` (เตะ session อื่น) — อีเมลคือช่องทางกู้บัญชี จึงถือเป็น credential เหมือนกัน
 
 ## โครงสร้างที่ต้องรู้ (gotchas)
 
@@ -61,7 +61,7 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 - **Frontend เป็น server-render เป็นหลัก:** state-changing = native `<form method="post" action="/api/...">` + `csrf_field()` + hidden `action` → redirect+flash; ปุ่มยืนยัน/loading/กันกดซ้ำ อยู่ใน `includes/footer.php`; **CSRF ไม่ได้ expose เป็น meta/JS**
 - ⚠️ **AJAX มีจุดเดียวที่ตั้งใจ (controlled exception):** `GET api/month-grid.php` — โหลดข้อมูลทั้งเดือนมาเติมตาราง bulk ในหน้า `add-record.php` **read-only ไม่เปลี่ยน state จึงไม่มี CSRF** (auth ผ่าน session เหมือน `*-data.php`) · **การเขียนทุกอย่างยังเป็น form POST + CSRF เหมือนเดิม** · **ห้ามเพิ่มจุด AJAX ใหม่เพราะ "add-record ก็ทำ"** — ถ้าจะเพิ่มต้องเป็นการตัดสินใจที่มีเหตุผลชัดเจนเฉพาะกรณีนั้น
 - **`api/dashboard-data.php`, `overview-data.php`, `annual-data.php` ไม่ถูกเรียกจาก UI** (data page เรียก Service ตรงในเพจ) — อย่าเข้าใจผิดว่าหน้าเว็บ fetch endpoint พวกนี้
-- **`idempotency_requests` + `IdempotencyRequestRepository` ยังไม่ถูกใช้จริง** — มีแค่ cron cleanup กันซ้ำจริงพึ่ง unique key ระดับ DB + row lock
+- **กันกดซ้ำพึ่ง unique key ระดับ DB + row lock เท่านั้น** — ตาราง `idempotency_requests` + repository + cron ถูกลบทิ้งแล้ว (ไม่เคยถูกเรียกจากที่ไหนเลย) ⚠️ ผลข้างเคียงที่ดี: schema ไม่ต้องใช้คอลัมน์ชนิด JSON อีกต่อไป → host ไม่ต้องรองรับ JSON · ⚠️ **การลบซ้ำ (กด back แล้ว submit ใหม่) ยังตอบ error "ไม่พบรายการที่ต้องการลบ" ทั้งที่ลบสำเร็จไปแล้ว** — ถ้าจะแก้ต้องออกแบบ idempotency ใหม่ทั้งชุด
 - **Schema Guard ใน `includes/bootstrap.php`:** ถ้า schema ไม่ตรง (ตาราง/คอลัมน์/index ที่กำหนด) ระบบตอบ 503 / CLI exit(1) ควบคุมด้วย flag `SCHEMA_GUARD_ENABLED` — **เวลาแก้ schema ต้องอัปเดต guard ด้วย**
 - **`database/schema.sql` เป็น DROP + CREATE** — ห้ามรันทับ database จริง; ถ้าจะแก้โครงบน DB ที่มีข้อมูล ใช้ `ALTER` แยกต่างหาก ⚠️ ไฟล์**ขึ้นต้นด้วย `CREATE DATABASE ad_profit; USE ad_profit;` (hardcode ชื่อ DB จริง)** → `mysql < schema.sql` บนเซิร์ฟเวอร์ = **DROP ตารางใน `ad_profit` จริงทันที**; integration test loader (`tests/Integration/IntegrationTestCase.php`) จึง**ตัด 2 บรรทัดนี้ทิ้ง** ให้ DDL ลงเฉพาะ DB ที่ต่ออยู่
 - **Auth/Session:** idle timeout 14400s, absolute 86400s; `requireAuth`/`requireGuest` เป็น guard; `isSessionVersionValid()` เช็ก DB **ทุก request**

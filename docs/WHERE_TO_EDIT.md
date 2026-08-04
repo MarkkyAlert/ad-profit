@@ -174,7 +174,6 @@ define('PASSWORD_MIN_LENGTH', 8);
 - `monthly_goals` = เป้าหมายรายเดือน
 - `password_reset_tokens` = โทเคนรีเซ็ตรหัสผ่าน
 - `auth_rate_limits` = rate limit
-- `idempotency_requests` = idempotency (ไม่ได้ใช้งานในเวอร์ชันปัจจุบัน)
 
 ### 5.2 เพิ่ม column ต้องระวังอะไร
 
