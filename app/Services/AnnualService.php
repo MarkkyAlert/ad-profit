@@ -212,14 +212,12 @@ class AnnualService
                     'actual_revenue' => $monthRevenue,
                     'actual_profit' => $monthProfit,
                     // เป้า 0 หารไม่ได้ → null (ไม่ใช่ 0% ที่จะอ่านว่า "ยังไม่คืบ")
-                    'revenue_progress' => $targetRevenue !== null && $targetRevenue > 0
-                        ? round(($monthRevenue / $targetRevenue) * 100, 1)
-                        : null,
-                    'profit_progress' => $targetProfit !== null && $targetProfit > 0
-                        ? round(($monthProfit / $targetProfit) * 100, 1)
-                        : null,
-                    'revenue_reached' => $targetRevenue !== null ? $monthRevenue >= $targetRevenue : null,
-                    'profit_reached' => $targetProfit !== null ? $monthProfit >= $targetProfit : null,
+                    // สูตรกลางเดียวกับแดชบอร์ด — เดิมที่นี่ใช้ round ทำให้ 99.996% ขึ้นเป็น
+                    // 100.0% คู่กับป้าย "ยังไม่ถึงเป้า" (แดชบอร์ดปัดลงอยู่แล้ว)
+                    'revenue_progress' => GoalService::progressPercent($monthRevenue, $targetRevenue),
+                    'profit_progress' => GoalService::progressPercent($monthProfit, $targetProfit),
+                    'revenue_reached' => GoalService::isReached($monthRevenue, $targetRevenue),
+                    'profit_reached' => GoalService::isReached($monthProfit, $targetProfit),
                 ];
             }
 

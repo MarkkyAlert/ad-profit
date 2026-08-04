@@ -228,7 +228,7 @@ class DashboardService
                 $weekStart = $weekStart->modify('-7 days');
             }
 
-            $weekEnd = $weekStart->modify('+6 days');
+            $weekEnd = $this->clampRangeEndToToday($weekStart->modify('+6 days'), $today);
 
             return [
                 'success' => true,
@@ -258,7 +258,7 @@ class DashboardService
                 $pickedMonth = $monthStart->format('Y-m');
             }
 
-            $monthEnd = $monthStart->modify('last day of this month');
+            $monthEnd = $this->clampRangeEndToToday($monthStart->modify('last day of this month'), $today);
             $previousMonth = $monthStart->modify('-1 month')->format('Y-m');
 
             return [
@@ -281,7 +281,7 @@ class DashboardService
             ? $today->modify('first day of last month')
             : $today->modify('first day of this month');
 
-        $monthEnd = $monthStart->modify('last day of this month');
+        $monthEnd = $this->clampRangeEndToToday($monthStart->modify('last day of this month'), $today);
         $selectedMonth = $monthStart->format('Y-m');
         $previousMonth = $monthStart->modify('-1 month')->format('Y-m');
 
@@ -396,12 +396,16 @@ class DashboardService
         $selectedRevenue = $selected['revenue'];
         $selectedAdCost = $selected['ad_cost'];
         $selectedProfit = $selectedRevenue - $selectedAdCost;
-        $selectedRoas = $selectedAdCost > 0 ? round($selectedRevenue / $selectedAdCost, 2) : null;
+        // เก็บค่าดิบไว้คิด % ด้วย — ปัดก่อนแล้วค่อยหาผลต่างทำให้เปอร์เซ็นต์เพี้ยน
+        // (ROAS 2.005 vs 2.004 เปลี่ยนจริง 0.05% แต่ถ้าปัดเป็น 2.01 vs 2.00 จะขึ้น 0.5%)
+        $selectedRoasExact = $selectedAdCost > 0 ? $selectedRevenue / $selectedAdCost : null;
+        $selectedRoas = $selectedRoasExact === null ? null : round($selectedRoasExact, 2);
 
         $previousRevenue = $previous['revenue'];
         $previousAdCost = $previous['ad_cost'];
         $previousProfit = $previousRevenue - $previousAdCost;
-        $previousRoas = $previousAdCost > 0 ? round($previousRevenue / $previousAdCost, 2) : null;
+        $previousRoasExact = $previousAdCost > 0 ? $previousRevenue / $previousAdCost : null;
+        $previousRoas = $previousRoasExact === null ? null : round($previousRoasExact, 2);
 
         return [
             'enabled' => true,
@@ -412,7 +416,7 @@ class DashboardService
                 'total_revenue' => $this->calculateChangePercent($selectedRevenue, $previousRevenue),
                 'total_ad_cost' => $this->calculateChangePercent($selectedAdCost, $previousAdCost),
                 'profit' => $this->calculateChangePercent($selectedProfit, $previousProfit),
-                'roas' => $this->calculateChangePercent($selectedRoas, $previousRoas),
+                'roas' => $this->calculateChangePercent($selectedRoasExact, $previousRoasExact),
             ],
         ];
     }
@@ -639,8 +643,8 @@ class DashboardService
         // เทียบค่าจริง ไม่ใช่ progress ที่ปัดทศนิยมแล้ว — ไม่งั้น 9,999.60 จาก 10,000
         // จะกลายเป็น 100.0% แล้วบอกว่า "ถึงเป้า" ขณะที่ AnnualService.php:221-222
         // เทียบค่าจริงจึงบอกว่ายังไม่ถึง (ข้อมูลชุดเดียวกัน สองหน้าตอบต่างกัน)
-        $revenueReached = $targetRevenue !== null && $targetRevenue > 0 && $actualRevenue >= $targetRevenue;
-        $profitReached = $targetProfit !== null && $targetProfit > 0 && $actualProfit >= $targetProfit;
+        $revenueReached = GoalService::isReached($actualRevenue, $targetRevenue) === true;
+        $profitReached = GoalService::isReached($actualProfit, $targetProfit) === true;
 
         $configuredReached = [];
         if ($targetRevenue !== null) {
@@ -693,27 +697,30 @@ class DashboardService
      */
     private function calculateGoalPercent(float $actual, ?float $target): ?float
     {
-        if ($target === null || $target <= 0) {
-            return null;
-        }
-
-        return floor(($actual / $target) * 1000) / 10;
+        // สูตรกลาง — หน้ารายปีและไฟล์ Excel ใช้ตัวเดียวกัน
+        return GoalService::progressPercent($actual, $target);
     }
 
     /**
      * วันสุดท้ายที่ใช้เทียบ — เดือนปัจจุบันตัดที่วันนี้ · เดือนที่จบแล้วใช้ทั้งเดือน (null)
      */
+    /**
+     * ตัดปลายช่วงไม่ให้เลย "วันนี้"
+     *
+     * ⚠️ ระบบอนุญาตให้ลงวันล่วงหน้า ถ้าไม่ตัด การ์ดสรุปของ "เดือนนี้" จะรวมยอดของวันที่
+     * ยังมาไม่ถึงเข้าไปด้วย ขณะที่ป้าย "เทียบเดือนก่อน" ใต้การ์ดเดียวกันตัดที่วันนี้อยู่แล้ว
+     * → การ์ดขึ้นกำไร ฿9,000 คู่กับป้าย 0% และ "วันกำไรดีสุด" เป็นวันที่ยังมาไม่ถึง
+     * (ตัดสินแล้ว: นับเฉพาะวันที่ถึงแล้ว) · ช่วงที่ผู้ใช้เลือกเองไม่ถูกตัด
+     */
+    private function clampRangeEndToToday(DateTimeImmutable $rangeEnd, DateTimeImmutable $today): DateTimeImmutable
+    {
+        return $rangeEnd > $today ? $today : $rangeEnd;
+    }
+
     private function resolveComparisonCutoffDay(string $selectedMonth, ?string $today): ?int
     {
-        $todayInput = is_string($today) ? trim($today) : '';
-        $todayObject = $todayInput !== ''
-            ? DateTimeImmutable::createFromFormat('!Y-m-d', $todayInput)
-            : false;
-        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
-            $todayObject = new DateTimeImmutable('today');
-        }
-
-        return $selectedMonth === $todayObject->format('Y-m') ? (int)$todayObject->format('j') : null;
+        // helper กลาง — หน้ารวมร้านใช้ตัวเดียวกัน (เดิมมีแค่ที่นี่ที่ตัดวัน)
+        return resolve_comparison_cutoff_day($selectedMonth, $today);
     }
 
     /**

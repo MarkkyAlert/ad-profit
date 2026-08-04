@@ -191,7 +191,13 @@ final class AnnualServiceGoalTest extends TestCase
         $this->assertSame([], $data['goal_progress']);
     }
 
-    public function testZeroTargetGivesNullProgressButKeepsReachedFlag(): void
+    /**
+     * เป้า 0 = "ยังไม่ได้ตั้งเป้าจริง" ไม่ใช่ "ถึงเป้าแล้ว"
+     *
+     * เดิมหน้ารายปีตอบว่าถึงเป้า (✓ เขียว) ขณะที่แดชบอร์ดตอบว่ายังไม่ถึง สำหรับเป้าเดียวกัน
+     * ตอนนี้ทั้งสองหน้าใช้ `GoalService::isReached()` ตัวเดียวกัน
+     */
+    public function testZeroTargetIsNotCountedAsReached(): void
     {
         $service = $this->makeService(
             $this->totalsFor(2026, [[1, 8000.0, 3000.0]]),
@@ -200,11 +206,10 @@ final class AnnualServiceGoalTest extends TestCase
 
         $progress = $service->buildYearlySummary(1, 1, 2026, self::TODAY)['data']['goal_progress'];
 
-        // เป้า 0 หารไม่ได้ → progress null แต่ยัง "ถึงเป้า" อยู่ดี
-        $this->assertNull($progress[0]['revenue_progress']);
+        $this->assertNull($progress[0]['revenue_progress'], 'เป้า 0 หารไม่ได้ → ไม่มี %');
         $this->assertNull($progress[0]['profit_progress']);
-        $this->assertTrue($progress[0]['revenue_reached']);
-        $this->assertTrue($progress[0]['profit_reached']);
+        $this->assertFalse($progress[0]['revenue_reached']);
+        $this->assertFalse($progress[0]['profit_reached']);
     }
 
     public function testNegativeProfitAgainstGoalStaysNegative(): void

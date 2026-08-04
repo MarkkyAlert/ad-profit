@@ -10,6 +10,37 @@ class GoalService
      */
     public const MAX_AMOUNT = RecordService::MAX_AMOUNT;
 
+    /**
+     * % ความคืบหน้าเทียบเป้า — **ปัดลง** เสมอ
+     *
+     * ⚠️ ต้องใช้ตัวนี้ทุกที่ที่แสดง % เป้า (แดชบอร์ด · หน้ารายปี · ไฟล์ Excel)
+     * `round` ทำให้ 99.996% ขึ้นเป็น 100.0% คู่กับป้าย "ยังไม่ถึงเป้า" ในการ์ดเดียวกัน
+     * เดิมแดชบอร์ดปัดลงแต่หน้ารายปีปัดขึ้น สองหน้าจึงบอกคนละตัวเลขจากข้อมูลชุดเดียวกัน
+     */
+    public static function progressPercent(float $actual, ?float $target): ?float
+    {
+        if ($target === null || $target <= 0) {
+            return null;
+        }
+
+        return floor(($actual / $target) * 1000) / 10;
+    }
+
+    /**
+     * ถึงเป้าแล้วหรือยัง — เทียบค่าจริง ไม่ใช่ % ที่ปัดแล้ว
+     *
+     * เป้า 0 ไม่นับว่า "ถึงเป้า" (ยังไม่ได้ตั้งเป้าจริง) — เดิมหน้ารายปีตอบว่าถึงเป้า
+     * ขณะที่แดชบอร์ดตอบว่ายังไม่ถึง สำหรับเป้าเดียวกัน
+     */
+    public static function isReached(float $actual, ?float $target): ?bool
+    {
+        if ($target === null) {
+            return null;
+        }
+
+        return $target > 0 && $actual >= $target;
+    }
+
     private GoalRepository $goalRepository;
     private ShopRepository $shopRepository;
     private ?PDO $db;

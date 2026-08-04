@@ -13,7 +13,10 @@ class OverviewService
         $this->shopRepository = $shopRepository;
     }
 
-    public function buildOverview(int $userId, string $selectedMonth): array
+    /**
+     * @param string|null $today seam วันนี้ (Y-m-d) — จำเป็นเพราะการเทียบเดือนก่อนต้องตัดวัน
+     */
+    public function buildOverview(int $userId, string $selectedMonth, ?string $today = null): array
     {
         if (!$this->isValidMonth($selectedMonth)) {
             return [
@@ -49,7 +52,7 @@ class OverviewService
             $totals = $this->buildTotals($comparisonRows);
             // วิเคราะห์เพิ่ม (เฉพาะมุมเดือน): สัดส่วนกำไร + เทียบเดือนก่อน
             $comparisonRows = $this->attachProfitShare($comparisonRows, $totals);
-            $comparisonRows = $this->attachProfitMomentum($comparisonRows, $shops, $monthDate);
+            $comparisonRows = $this->attachProfitMomentum($comparisonRows, $shops, $monthDate, $today);
             $barChart = $this->buildBarChart($comparisonRows);
             $sixMonthTrend = $this->buildSixMonthTrend($shops, $selectedMonth);
         } catch (Throwable $exception) {
@@ -176,11 +179,21 @@ class OverviewService
      * @param array<int,array<string,mixed>> $shops
      * @return array<int,array<string,mixed>>
      */
-    private function attachProfitMomentum(array $rows, array $shops, DateTimeImmutable $monthDate): array
-    {
+    private function attachProfitMomentum(
+        array $rows,
+        array $shops,
+        DateTimeImmutable $monthDate,
+        ?string $today = null
+    ): array {
+        $selectedMonth = $monthDate->format('Y-m');
         $previousMonth = $monthDate->modify('-1 month');
         $previousStart = $previousMonth->format('Y-m-01');
-        $previousEnd = $previousMonth->format('Y-m-t');
+
+        // ⭐ เดือนปัจจุบันต้องเทียบกับ "เดือนก่อนถึงวันเดียวกัน" ไม่ใช่ทั้งเดือน
+        // เดิมเทียบทั้งเดือนเสมอ วันที่ 4 ของเดือนจึงขึ้น −87.1% ขณะที่แดชบอร์ดบอก 0%
+        // สำหรับข้อมูลชุดเดียวกัน — helper ตัวเดียวกับที่แดชบอร์ดใช้
+        $cutoffDay = resolve_comparison_cutoff_day($selectedMonth, $today);
+        $previousEnd = comparison_range_end($previousMonth->format('Y-m'), $cutoffDay);
 
         $shopIds = [];
         foreach ($shops as $shop) {
@@ -190,21 +203,24 @@ class OverviewService
             }
         }
 
-        $previousRows = $this->recordRepository->getTotalsByShopIdsAndDateRange($shopIds, $previousStart, $previousEnd);
+        $previousProfitByShopId = $this->sumProfitByShopId($shopIds, $previousStart, $previousEnd);
 
-        $previousProfitByShopId = [];
-        foreach ($previousRows as $previousRow) {
-            $shopId = (int)($previousRow['shop_id'] ?? 0);
-            if ($shopId > 0) {
-                $previousProfitByShopId[$shopId] = (float)($previousRow['total_revenue'] ?? 0)
-                    - (float)($previousRow['total_ad_cost'] ?? 0);
-            }
-        }
+        // กำไรของเดือนที่เลือก "ถึงวันตัด" — ตารางหลักยังโชว์ทั้งเดือนเหมือนเดิม
+        // แต่ตัวเลขที่เอามาเทียบต้องเป็นช่วงเดียวกับฝั่งเดือนก่อน
+        $selectedProfitByShopId = $cutoffDay === null
+            ? null
+            : $this->sumProfitByShopId(
+                $shopIds,
+                $monthDate->format('Y-m-01'),
+                comparison_range_end($selectedMonth, $cutoffDay)
+            );
 
         foreach ($rows as $index => $row) {
             $shopId = (int)($row['shop_id'] ?? 0);
             $previousProfit = $previousProfitByShopId[$shopId] ?? 0.0;
-            $profit = (float)($row['profit'] ?? 0);
+            $profit = $selectedProfitByShopId === null
+                ? (float)($row['profit'] ?? 0)
+                : ($selectedProfitByShopId[$shopId] ?? 0.0);
             $change = $profit - $previousProfit;
 
             $rows[$index]['prev_profit'] = $previousProfit;
@@ -215,6 +231,28 @@ class OverviewService
         }
 
         return $rows;
+    }
+
+    /**
+     * กำไรรวมของแต่ละร้านในช่วงวันที่กำหนด
+     *
+     * @param array<int,int> $shopIds
+     * @return array<int,float>
+     */
+    private function sumProfitByShopId(array $shopIds, string $startDate, string $endDate): array
+    {
+        $totals = $this->recordRepository->getTotalsByShopIdsAndDateRange($shopIds, $startDate, $endDate);
+
+        $profitByShopId = [];
+        foreach ($totals as $row) {
+            $shopId = (int)($row['shop_id'] ?? 0);
+            if ($shopId > 0) {
+                $profitByShopId[$shopId] = (float)($row['total_revenue'] ?? 0)
+                    - (float)($row['total_ad_cost'] ?? 0);
+            }
+        }
+
+        return $profitByShopId;
     }
 
     private function buildTotals(array $rows): array

@@ -34,9 +34,19 @@ function e(?string $value): string
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * เงินบาท — แสดงสตางค์ "เฉพาะตอนที่มีจริง"
+ *
+ * ⚠️ เดิมตัดสตางค์ทิ้งทุกช่อง ทำให้แถวรวมไม่เท่ากับผลบวกของแถวที่ผู้ใช้เห็น
+ * (3 แถว แถวละ ฿100.40 → เห็น ฿100 ×3 แต่แถวรวมขึ้น ฿301)
+ * ตัวเลขกลม ๆ ยังแสดงเหมือนเดิมเพื่อไม่ให้หน้าจอรก
+ */
 function formatMoney(float|int $value): string
 {
-    return '฿' . number_format((float)$value, 0);
+    $amount = (float)$value;
+    $decimals = abs($amount - round($amount)) > 0.0000001 ? 2 : 0;
+
+    return '฿' . number_format($amount, $decimals);
 }
 
 function formatRoas(?float $value): string
@@ -546,6 +556,48 @@ function resolve_calendar_year(mixed $rawYear, mixed $fallbackYear = null): int
  *
  * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
  */
+/**
+ * วันสุดท้ายที่ควรใช้เทียบของเดือนหนึ่ง — เดือนปัจจุบันตัดที่วันนี้ · เดือนที่จบแล้วใช้ทั้งเดือน (null)
+ *
+ * ⚠️ ใช้ร่วมกันระหว่าง `DashboardService` และ `OverviewService` — เดิมมีแค่แดชบอร์ดที่ตัดวัน
+ * หน้ารวมร้านจึงเทียบ "4 วันแรกของเดือนนี้" กับ "ทั้งเดือนก่อน" ได้ −87.1% ขณะที่แดชบอร์ด
+ * บอก 0% สำหรับข้อมูลชุดเดียวกัน (พิสูจน์แล้วว่าเกิดจริง)
+ */
+function resolve_comparison_cutoff_day(string $selectedMonth, ?string $today = null): ?int
+{
+    $todayInput = is_string($today) ? trim($today) : '';
+    $todayObject = $todayInput !== ''
+        ? DateTimeImmutable::createFromFormat('!Y-m-d', $todayInput)
+        : false;
+
+    if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+        $todayObject = new DateTimeImmutable('today');
+    }
+
+    return $selectedMonth === $todayObject->format('Y-m') ? (int)$todayObject->format('j') : null;
+}
+
+/**
+ * วันสุดท้ายของช่วงเทียบในรูป Y-m-d — หดวันตัดให้พอดีกับเดือนที่สั้นกว่า
+ * (ตัดวันที่ 31 กับเดือน ก.พ. ต้องได้ทั้งเดือน ไม่ใช่ช่วงว่าง)
+ */
+function comparison_range_end(string $month, ?int $cutoffDay): string
+{
+    $monthStart = DateTimeImmutable::createFromFormat('!Y-m-d', $month . '-01');
+    if (!$monthStart) {
+        return $month . '-01';
+    }
+
+    $lastDay = (int)$monthStart->format('t');
+    $endDay = $cutoffDay === null ? $lastDay : max(1, min($cutoffDay, $lastDay));
+
+    return $monthStart->setDate(
+        (int)$monthStart->format('Y'),
+        (int)$monthStart->format('n'),
+        $endDay
+    )->format('Y-m-d');
+}
+
 function resolve_calendar_month(mixed $rawMonth, mixed $fallbackMonth = null, ?string $today = null): string
 {
     $normalize = static function (mixed $value): ?string {

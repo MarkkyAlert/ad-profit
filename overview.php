@@ -188,17 +188,22 @@ if ($view === 'day') {
     $yearTotalAdCost = (float)($yearlySummary['total_ad_cost'] ?? 0);
     $hasYearlyData = abs($yearTotalRevenue) > 0.00001 || abs($yearTotalAdCost) > 0.00001;
 
-    // แถวรวม: สัดส่วนบวกกันได้เพราะฐานเดียวกัน (null ทุกแถวเมื่อกำไรรวม ≤ 0)
-    $yearlyDaysTotal = array_sum(array_map(
-        static fn(array $row): int => (int)($row['days_count'] ?? 0),
-        $yearlyShopRows
-    ));
-    $yearlyShareTotal = null;
+    // ⚠️ "วันที่กรอก" ของแถวรวมต้องไม่ใช่ผลบวกข้ามร้าน — 3 ร้านกรอกครบเดือน ม.ค. (31 วัน)
+    // จะได้ 93 วัน ในช่วงที่มีแค่ 31 วัน · ตัวเลขที่มีความหมายคือ "วันมากที่สุดที่ร้านใดร้านหนึ่งกรอก"
+    $yearlyDaysTotal = 0;
+    foreach ($yearlyShopRows as $shopRow) {
+        $yearlyDaysTotal = max($yearlyDaysTotal, (int)($shopRow['days_count'] ?? 0));
+    }
+    // สัดส่วนของทุกร้านรวมกันคือ 100% ตามนิยาม — ห้ามบวกค่าที่ปัดแล้วทีละแถว
+    // (3 ร้านกำไรเท่ากัน → 33.3% ×3 = 99.9% ซึ่งอ่านแล้วเหมือนมีอะไรหาย)
+    $yearlyHasShare = false;
     foreach ($yearlyShopRows as $shopRow) {
         if (isset($shopRow['profit_share']) && $shopRow['profit_share'] !== null) {
-            $yearlyShareTotal = round((float)($yearlyShareTotal ?? 0) + (float)$shopRow['profit_share'], 1);
+            $yearlyHasShare = true;
+            break;
         }
     }
+    $yearlyShareTotal = $yearlyHasShare ? 100.0 : null;
 
     $yearlyBestMonth = is_array($yearlySummary['best_month'] ?? null) ? (array)$yearlySummary['best_month'] : null;
     $yearlyWorstMonth = is_array($yearlySummary['worst_month'] ?? null) ? (array)$yearlySummary['worst_month'] : null;
@@ -893,7 +898,7 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($yearRoas)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($yearProfitMargin)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e($yearlyShareTotal === null ? '—' : formatPercent($yearlyShareTotal)) ?></td>
-                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyDaysTotal > 0 ? $yearlyDaysTotal . ' วัน' : '—') ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyDaysTotal > 0 ? 'สูงสุด ' . $yearlyDaysTotal . ' วัน' : '—') ?></td>
                             </tr>
                         </tfoot>
                     </table>
