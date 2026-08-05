@@ -577,7 +577,7 @@ require __DIR__ . '/includes/header.php';
                 if (!day) {
                     // ตารางเดือนไม่ครอบวันอนาคต — บอกตรง ๆ ว่าตรวจให้ไม่ได้
                     // ดีกว่าปล่อยช่องว่างไว้เฉย ๆ แล้วผู้ใช้กดบันทึกทับของเดิม
-                    if (value > new Date().toISOString().slice(0, 10)) {
+                    if (value > todayIso()) {
                         showBulkNotice('วันที่ ' + value + ' อยู่ในอนาคต — ระบบตรวจข้อมูลเดิมให้ไม่ได้ '
                             + 'ถ้าวันนั้นเคยบันทึกไว้แล้ว การกดบันทึกจะเขียนทับ');
                     }
@@ -1008,6 +1008,18 @@ require __DIR__ . '/includes/header.php';
         const HINT_DEFAULT_TEXT = hint.textContent;
         let pendingRequestId = 0;              // กันผลลัพธ์เก่ามาทับผลลัพธ์ใหม่
 
+        // วันที่ "วันนี้" ตามเวลาของเครื่องผู้ใช้
+        //
+        // ⚠️ ห้ามใช้ `toISOString()` — มันคืนเวลา UTC ประเทศไทยเร็วกว่า 7 ชั่วโมง
+        // ช่วงเที่ยงคืนถึงตี 7 วันที่ UTC จึงเป็น "เมื่อวาน" ผลคือวันนี้ถูกมองว่าเป็น
+        // วันอนาคต แล้วขึ้นคำเตือนผิด ๆ ให้คนที่มาบันทึกยอดตอนดึก
+        const todayIso = () => {
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+
+            return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+        };
+
         const applyDay = (day) => {
             if (day && (day.revenue !== null || day.ad_cost !== null || day.note)) {
                 revenueInput.value = day.revenue === null ? '' : String(day.revenue);
@@ -1043,7 +1055,21 @@ require __DIR__ . '/includes/header.php';
                     return;
                 }
 
-                applyDay(byDate.get(value) || null);
+                const existing = byDate.get(value) || null;
+                applyDay(existing);
+
+                // ⚠️⚠️ วันอนาคตไม่อยู่ในตารางเดือน (ตารางตัดที่วันนี้) ระบบจึงตรวจ
+                // ข้อมูลเดิมของวันนั้นให้ไม่ได้ · เดิมโค้ดล้างทุกช่องแล้วซ่อนป้ายเตือน
+                // ผู้ใช้ที่เคยลงข้อมูลล่วงหน้าไว้จึงเห็นฟอร์มว่างเปล่า เข้าใจว่ายังไม่เคย
+                // บันทึก แล้วพิมพ์ใหม่ทับของเดิม โน้ตหาย ยอดถูกเขียนทับ พร้อมข้อความ "สำเร็จ"
+                //
+                // ตารางกรอกหลายวันเตือนเคสนี้อยู่แล้ว ฟอร์มหลักตกหล่นจุดเดียว
+                if (existing === null && value > todayIso()) {
+                    hint.textContent = 'วันที่ ' + value + ' อยู่ในอนาคต — ระบบตรวจข้อมูลเดิมให้ไม่ได้ '
+                        + 'ถ้าวันนั้นเคยบันทึกไว้แล้ว การกดบันทึกจะเขียนทับ';
+                    hint.classList.remove('hidden');
+                }
+
                 lastAppliedDate = value;
             } catch (error) {
                 if (requestId !== pendingRequestId) {

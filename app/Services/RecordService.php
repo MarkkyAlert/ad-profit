@@ -810,7 +810,8 @@ class RecordService
 
             return [
                 'success' => false,
-                'error' => 'ไม่สามารถแก้ไขรายการได้',
+                // ชนคิวกับอีกหน้าจอ = บอกให้กดใหม่ ไม่ใช่ข้อความลอย ๆ ที่อ่านแล้วนึกว่าระบบพัง
+                'error' => write_failure_message($exception, 'ไม่สามารถแก้ไขรายการได้'),
             ];
         } catch (Throwable $exception) {
             if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
@@ -820,7 +821,8 @@ class RecordService
 
             return [
                 'success' => false,
-                'error' => 'ไม่สามารถแก้ไขรายการได้',
+                // ชนคิวกับอีกหน้าจอ = บอกให้กดใหม่ ไม่ใช่ข้อความลอย ๆ ที่อ่านแล้วนึกว่าระบบพัง
+                'error' => write_failure_message($exception, 'ไม่สามารถแก้ไขรายการได้'),
             ];
         }
 
@@ -1834,7 +1836,7 @@ class RecordService
             error_log('[record] deleteRecord failed: ' . $exception->getMessage());
             return [
                 'success' => false,
-                'error' => 'ไม่สามารถลบรายการได้',
+                'error' => write_failure_message($exception, 'ไม่สามารถลบรายการได้'),
             ];
         }
 

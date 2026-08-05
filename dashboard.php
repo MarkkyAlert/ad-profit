@@ -686,7 +686,7 @@ require __DIR__ . '/includes/header.php';
                     step="0.01"
                     value="<?= e($goalTargetRevenue !== null ? number_format($goalTargetRevenue, 2, '.', '') : '') ?>"
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
-                    placeholder="เว้นว่างได้">
+                    placeholder="เว้นว่าง = คงค่าเดิม">
             </div>
 
             <div>
@@ -699,7 +699,7 @@ require __DIR__ . '/includes/header.php';
                     step="0.01"
                     value="<?= e($goalTargetProfit !== null ? number_format($goalTargetProfit, 2, '.', '') : '') ?>"
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
-                    placeholder="เว้นว่างได้">
+                    placeholder="เว้นว่าง = คงค่าเดิม">
             </div>
 
             <div class="md:col-span-2 flex items-center justify-end gap-2">
