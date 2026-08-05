@@ -39,7 +39,7 @@ class ShopService
      */
     public static function confirmationNameFor(string $shopName): string
     {
-        $name = trim($shopName);
+        $name = trim_unicode_whitespace($shopName);
         $length = function_exists('mb_strlen') ? mb_strlen($name) : strlen($name);
 
         if ($length <= self::CONFIRM_NAME_MAX_LENGTH) {
@@ -50,7 +50,7 @@ class ShopService
             ? mb_substr($name, 0, self::CONFIRM_NAME_MAX_LENGTH)
             : substr($name, 0, self::CONFIRM_NAME_MAX_LENGTH);
 
-        return trim($truncated);
+        return trim_unicode_whitespace($truncated);
     }
 
     public function getShopContext(int $userId, ?int $currentShopId): array
@@ -79,7 +79,7 @@ class ShopService
 
     public function createShop(int $userId, string $name): array
     {
-        $shopName = trim($name);
+        $shopName = trim_unicode_whitespace($name);
 
         if ($shopName === '') {
             return [
@@ -179,7 +179,7 @@ class ShopService
             ];
         }
 
-        $shopName = trim($name);
+        $shopName = trim_unicode_whitespace($name);
         if ($shopName === '') {
             return [
                 'success' => false,
@@ -224,7 +224,7 @@ class ShopService
                 ];
             }
 
-            $existingName = trim((string)($shop['name'] ?? ''));
+            $existingName = trim_unicode_whitespace((string)($shop['name'] ?? ''));
             if ($existingName === $shopName) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                     $this->db->commit();
@@ -382,7 +382,9 @@ class ShopService
             }
 
             // ยืนยันด้วยการพิมพ์ชื่อร้าน — เทียบกับชื่อจากแถวที่ล็อกไว้แล้ว
-            if (trim($confirmName) !== self::confirmationNameFor((string)($shop['name'] ?? ''))) {
+            // ⚠️ เทียบหลังตัดช่องว่างยูนิโค้ดทั้งสองฝั่ง — ร้านที่ถูกสร้างไว้ก่อนแก้เรื่องนี้
+            // (ชื่อยังมี NBSP ติดอยู่) จึงลบได้ทันทีโดยไม่ต้องแก้ข้อมูลเก่า
+            if (trim_unicode_whitespace($confirmName) !== self::confirmationNameFor((string)($shop['name'] ?? ''))) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                     $this->db->rollBack();
                 }

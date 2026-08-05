@@ -116,6 +116,50 @@ final class SharedHelperContractTest extends TestCase
     }
 
     /**
+     * ⭐⭐ ตัดช่องว่างต้องได้ผลเหมือน `.trim()` ของเบราว์เซอร์
+     *
+     * ⚠️ `trim()` ของ PHP ไม่ตัดช่องว่างยูนิโค้ด (NBSP ฯลฯ) แต่เบราว์เซอร์ตัด
+     * ผลคือ: ก๊อปชื่อร้านมาจาก LINE/Word แล้ววาง (ติด NBSP มาโดยมองไม่เห็น)
+     * → กล่องยืนยันตอนลบร้านแสดงชื่อที่เบราว์เซอร์ตัดแล้ว ผู้ใช้พิมพ์ตามที่เห็นเป๊ะ ๆ
+     * ก็ยังไม่ตรงกับที่เก็บไว้ — **ลบร้านนั้นไม่ได้ตลอดกาล** และยังกินโควตา 1 ใน 20
+     *
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function unicodeSpaceProvider(): array
+    {
+        return [
+            'ช่องว่างไม่ตัดคำ (NBSP) ท้ายชื่อ — ติดมาจากการก๊อปวาง' => ["ร้านเสื้อ\u{00A0}", 'ร้านเสื้อ'],
+            'ช่องว่างญี่ปุ่นหน้าชื่อ' => ["\u{3000}ร้านเสื้อ", 'ร้านเสื้อ'],
+            'zero-width ท้ายชื่อ' => ["ร้านเสื้อ\u{FEFF}", 'ร้านเสื้อ'],
+            'ช่องว่างธรรมดายังตัดเหมือนเดิม' => ['  ร้านเสื้อ  ', 'ร้านเสื้อ'],
+            'ช่องว่างยูนิโค้ดล้วน = ค่าว่าง' => ["\u{3000}\u{00A0}", ''],
+            'ช่องว่างกลางชื่อไม่แตะ' => ['ร้าน เสื้อ', 'ร้าน เสื้อ'],
+        ];
+    }
+
+    #[DataProvider('unicodeSpaceProvider')]
+    public function testWhitespaceIsTrimmedTheSameWayTheBrowserDoes(string $input, string $expected): void
+    {
+        $this->assertSame(
+            $expected,
+            trim_unicode_whitespace($input),
+            'ตัดช่องว่างไม่เหมือนเบราว์เซอร์ — ชื่อร้านที่ติดช่องว่างซ่อนอยู่จะลบไม่ได้'
+        );
+    }
+
+    /** ⭐ ชื่อที่ต้องพิมพ์ยืนยันตอนลบร้าน ต้องตรงกับที่เบราว์เซอร์แสดง */
+    public function testTheDeleteConfirmationMatchesWhatTheBrowserShows(): void
+    {
+        $stored = "ร้านเสื้อ\u{00A0}";
+
+        $this->assertSame(
+            'ร้านเสื้อ',
+            \ShopService::confirmationNameFor($stored),
+            'ผู้ใช้พิมพ์ตามที่เห็นบนจอแล้วยังไม่ตรง — ลบร้านนั้นไม่ได้ตลอดกาล'
+        );
+    }
+
+    /**
      * ⭐ เกณฑ์ "มีตัวอย่างพอจะฟันธงไหม" ต้องมากกว่า 1
      *
      * ⚠️ คำว่า `trend_reliable` ไม่ปรากฏในไฟล์เทสต์ไหนเลย — ลดเกณฑ์เหลือ 1

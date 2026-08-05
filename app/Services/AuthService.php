@@ -640,9 +640,19 @@ class AuthService
         if ($this->canUseDatabaseRateLimit()) {
             // ⚠️ คำขอที่ยิงพร้อมกันจำนวนมากทำให้ MySQL ตัดบางตัวทิ้งด้วย deadlock (1213)
             // ซึ่งเป็นสถานการณ์เดียวกับที่ตัวจำกัดนี้มีไว้กัน · ลองใหม่สั้น ๆ ก่อน
+            // ⚠️⚠️ **ห้ามนับซ้ำตอนลองใหม่**
+            //
+            // การจอง 1 ครั้งมี 2 ขั้น: เพิ่มเลข แล้วอ่านเลขที่ได้ · ถ้าขั้นแรกสำเร็จแล้ว
+            // ขั้นที่สองล้ม การวนกลับไปทำใหม่ทั้งคู่จะเพิ่มเลขเป็นครั้งที่สอง
+            // ผู้ใช้ที่พิมพ์รหัสผิดครั้งเดียวจะถูกนับ 2 ครั้ง แล้วชนเพดานเร็วกว่าที่ควรเท่าตัว
+            $marked = false;
+
             for ($attempt = 1; $attempt <= 3; $attempt++) {
                 try {
-                    $this->markFailedAttemptInDatabase($action, $clientIp, $subject);
+                    if (!$marked) {
+                        $this->markFailedAttemptInDatabase($action, $clientIp, $subject);
+                        $marked = true;
+                    }
 
                     return $this->currentAttemptsInDatabase($action, $clientIp, $subject);
                 } catch (Throwable $exception) {
@@ -753,7 +763,7 @@ class AuthService
     }
 
     /** จำนวนครั้งในหน้าต่างปัจจุบัน (0 เมื่อหน้าต่างหมดอายุแล้ว) */
-    private function currentAttemptsInDatabase(string $action, string $clientIp, string $subject = ''): int
+    protected function currentAttemptsInDatabase(string $action, string $clientIp, string $subject = ''): int
     {
         $sql = 'SELECT attempts, TIMESTAMPDIFF(SECOND, started_at, NOW()) AS window_age_seconds
                 FROM auth_rate_limits
@@ -948,7 +958,8 @@ class AuthService
         return (int)RATE_LIMIT_WINDOW_SECONDS;
     }
 
-    private function markFailedAttemptInDatabase(string $action, string $clientIp, string $subject = ''): void
+    /** ⚠️ `protected` เพื่อให้เทสต์ดักนับได้ว่า "ลองใหม่แล้วนับซ้ำไหม" */
+    protected function markFailedAttemptInDatabase(string $action, string $clientIp, string $subject = ''): void
     {
         if (random_int(1, 100) === 1) {
             $this->cleanupStaleRateLimitBucketsInDatabase();

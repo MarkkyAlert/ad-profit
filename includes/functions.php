@@ -257,6 +257,33 @@ function api_respond(array $payload, int $statusCode, string $redirectUrl, bool 
     redirect($redirectUrl);
 }
 
+/**
+ * ตัดช่องว่างหัวท้าย **แบบเดียวกับ `.trim()` ของเบราว์เซอร์**
+ *
+ * ⚠️⚠️ `trim()` ของ PHP ตัดแค่ " \t\n\r\0\x0B" · `.trim()` ของ JavaScript ตัด
+ * ช่องว่างยูนิโค้ดทุกตัวด้วย (NBSP, ช่องว่างญี่ปุ่น, zero-width ฯลฯ)
+ *
+ * ความต่างนี้ทำให้เกิดกับดักจริง: ก๊อปชื่อร้านมาจาก LINE/Word แล้ววาง มักติด NBSP
+ * มาท้ายชื่อโดยมองไม่เห็น · ฝั่งเซิร์ฟเวอร์เก็บไว้ทั้งอย่างนั้น แต่กล่องยืนยันตอนลบร้าน
+ * แสดงชื่อที่เบราว์เซอร์ตัดแล้ว → ผู้ใช้พิมพ์ตามที่เห็นเป๊ะ ๆ ก็ยังไม่ตรง
+ * **ลบร้านนั้นไม่ได้ตลอดกาล** และมันยังกินโควตา 1 ใน 20 ต่อไป
+ *
+ * ชื่อที่เป็นช่องว่างยูนิโค้ดล้วนหนักกว่า: ผ่านด่าน "ห้ามว่าง" ของ PHP ได้
+ * แต่เบราว์เซอร์เห็นเป็นค่าว่างจึงซ่อนช่องให้พิมพ์ทิ้งทั้งอัน
+ */
+function trim_unicode_whitespace(string $value): string
+{
+    $trimmed = preg_replace(
+        '/^[\s\x{00A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]+'
+        . '|[\s\x{00A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]+$/u',
+        '',
+        $value
+    );
+
+    // preg_replace คืน null เมื่อ input ไม่ใช่ UTF-8 ที่ถูกต้อง — ถอยไปใช้ trim ปกติ
+    return is_string($trimmed) ? $trimmed : trim($value);
+}
+
 function resolve_safe_redirect_path(string $fallback, ?string $postRedirectTo = null, ?string $referer = null): string
 {
     $basePath = (string)(parse_url(APP_URL, PHP_URL_PATH) ?? '');

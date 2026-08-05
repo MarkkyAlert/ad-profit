@@ -84,7 +84,21 @@ class ProfileService
                 $startedTransaction = true;
             }
 
-            $request = $this->emailChangeRepository->findByTokenHashForUpdate(hash('sha256', $token));
+            // ⚠️⚠️ **ต้องจองแถว `users` ก่อนแถวคำขอเสมอ** — กฎเดียวกับ `AuthService::resetPassword`
+            //
+            // `changeEmail()` (ตอนขอ) จองแถวผู้ใช้ก่อน ถ้าตอนยืนยันจองสลับกัน
+            // สองทางที่ทำพร้อมกันจะล็อกกันเอง แล้วฐานข้อมูลยกเลิกฝ่ายหนึ่งทิ้ง
+            // (วัดจริงแล้ว: ได้ deadlock 1213) · ผู้ใช้จะเห็นข้อความชี้ผิดสาเหตุว่า
+            // "ลิงก์อาจหมดอายุหรือถูกใช้ไปแล้ว" ทั้งที่ลิงก์ยังดีอยู่
+            //
+            // อ่านแบบไม่ล็อกก่อนเพื่อรู้ว่าเป็นของใคร → จองแถวผู้ใช้ → อ่านซ้ำใต้ล็อก
+            $tokenHash = hash('sha256', $token);
+            $owner = $this->emailChangeRepository->findByTokenHash($tokenHash);
+            if (is_array($owner)) {
+                $this->userRepository->lockForUpdate((int)$owner['user_id']);
+            }
+
+            $request = $this->emailChangeRepository->findByTokenHashForUpdate($tokenHash);
             if ($request === null) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                     $this->db->rollBack();

@@ -53,6 +53,28 @@ class EmailChangeRepository
     }
 
     /**
+     * อ่านแบบไม่ล็อก — ใช้หาว่าคำขอนี้เป็นของใคร ก่อนจะจองแถวผู้ใช้
+     *
+     * ⚠️ ค่าที่ได้จากตรงนี้ใช้ตัดสินอะไรไม่ได้ ใช้แค่หาว่าจะจองแถวไหน
+     * ตัวที่ตัดสินจริงคือการอ่านซ้ำใต้ล็อก (`findByTokenHashForUpdate`)
+     *
+     * @return array<string,mixed>|null
+     */
+    public function findByTokenHash(string $tokenHash): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT id, user_id, new_email
+             FROM email_change_requests
+             WHERE token_hash = :token_hash AND expires_at > NOW()
+             LIMIT 1'
+        );
+        $stmt->execute([':token_hash' => $tokenHash]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    /**
      * อ่านคำขอที่ยังไม่หมดอายุ พร้อมล็อกแถวไว้
      *
      * ⚠️ ล็อกด้วย `FOR UPDATE` — กดลิงก์ซ้ำเร็ว ๆ สองครั้งต้องไม่เปลี่ยนอีเมลสองรอบ
