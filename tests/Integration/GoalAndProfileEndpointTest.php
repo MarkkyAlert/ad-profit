@@ -223,6 +223,53 @@ final class GoalAndProfileEndpointTest extends ControllerTestCase
     }
 
     /**
+     * ⭐⭐ พิมพ์ยืนยันรหัสผ่านไม่ตรงหลายครั้ง **ต้องไม่** ถูกล็อก
+     *
+     * ⚠️ นี่คือ "อีกครึ่ง" ของกติกาที่คอมเมนต์ในโค้ดเขียนไว้ (`api/profile.php`)
+     * ว่านับเฉพาะตอนรหัสผ่านปัจจุบันผิดจริง — แต่ไม่เคยมีเทสต์ไหนตรวจครึ่งนี้เลย
+     * เปลี่ยนเงื่อนไขเป็น "นับทุก failure" แล้วเทสต์ทั้งไฟล์ยังเขียว (พิสูจน์แล้ว)
+     *
+     * ผู้ใช้กรอกรหัสปัจจุบัน **ถูก** ทุกครั้ง แต่พิมพ์ช่องยืนยันไม่ตรง (เกิดบ่อยบนมือถือ)
+     * ไม่ได้เดาอะไรเลยสักครั้ง จึงต้องไม่โดนล็อก 60 วินาที
+     */
+    public function testMistypingTheConfirmationFieldIsNotTreatedAsGuessing(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        for ($attempt = 1; $attempt <= 7; $attempt++) {
+            $status = $this->submit('/api/profile.php', $session, [
+                'action' => 'change_password',
+                'current_password' => 'OldPass123',          // ถูกต้องทุกครั้ง
+                'password' => 'BrandNew456',
+                'password_confirm' => 'พิมพ์ไม่ตรงครั้งที่ ' . $attempt,
+            ])['status'];
+
+            $this->assertNotSame(
+                429,
+                $status,
+                "ครั้งที่ {$attempt}: ถูกล็อกเพราะพิมพ์ยืนยันไม่ตรง ทั้งที่รหัสปัจจุบันถูกทุกครั้ง"
+            );
+        }
+
+        // และต้องยังเปลี่ยนรหัสได้จริงทันทีเมื่อพิมพ์ถูก
+        $ok = $this->submit('/api/profile.php', $session, [
+            'action' => 'change_password',
+            'current_password' => 'OldPass123',
+            'password' => 'BrandNew456',
+            'password_confirm' => 'BrandNew456',
+        ]);
+
+        $this->assertNotSame(429, $ok['status'], 'พิมพ์ถูกแล้วยังถูกล็อกอยู่');
+        $this->assertTrue(
+            password_verify('BrandNew456', (string)$this->pdo
+                ->query("SELECT password_hash FROM users WHERE id = {$userId}")->fetchColumn()),
+            'รหัสผ่านไม่ได้ถูกเปลี่ยนจริง'
+        );
+    }
+
+    /**
      * ⭐ เดารหัสผ่านปัจจุบันรัว ๆ ต้องถูกจำกัด (429) — ตัวจำกัดอยู่ที่ controller ไม่ใช่ Service
      *
      * นับเฉพาะเคสที่ "รหัสผ่านปัจจุบันผิด" ไม่ใช่ทุก validation error

@@ -153,6 +153,74 @@ final class ConfigEnvironmentTest extends TestCase
     }
 
     /**
+     * รัน bootstrap ในโปรเซสใหม่แล้วอ่านค่า ini ที่ตั้งไว้จริง
+     *
+     * ⚠️ ต้องเป็นโปรเซสแยก — `session_start()` เรียกซ้ำในโปรเซสเดียวไม่ได้
+     */
+    private function bootstrapIniValue(string $setting): string
+    {
+        $script = 'require ' . var_export(realpath(__DIR__ . '/../../includes/bootstrap.php'), true)
+            . '; echo "RESULT:", ini_get(' . var_export($setting, true) . ');';
+
+        $command = sprintf(
+            'APP_ENV=production SCHEMA_GUARD_ENABLED=0'
+            . ' DB_HOST=%s DB_PORT=%s DB_NAME=%s DB_USER=%s DB_PASS=%s php -r %s 2>&1',
+            escapeshellarg((string)(getenv('TEST_DB_HOST') ?: '127.0.0.1')),
+            escapeshellarg((string)(getenv('TEST_DB_PORT') ?: '3306')),
+            escapeshellarg((string)(getenv('TEST_DB_NAME') ?: 'ad_profit_test')),
+            escapeshellarg((string)(getenv('TEST_DB_USER') ?: 'root')),
+            escapeshellarg((string)(getenv('TEST_DB_PASS') ?: '')),
+            escapeshellarg($script)
+        );
+
+        $output = (string)shell_exec($command);
+        $this->assertStringContainsString('RESULT:', $output, "bootstrap ไม่ถึงบรรทัดที่วัด:\n" . $output);
+
+        return trim(substr($output, strpos($output, 'RESULT:') + 7));
+    }
+
+    /**
+     * ⭐⭐ ตัวเก็บกวาด session ของ PHP ต้องไม่ลบไฟล์ก่อนที่แอปจะหมดเวลาเอง
+     *
+     * ⚠️ ค่าปริยายของ PHP คือ 1440 วินาที (24 นาที) · ถ้าไม่ตั้งเอง ผู้ใช้จะหลุด
+     * จากระบบตั้งแต่พักไป ~24 นาที ทั้งที่แอปตั้งไว้ 4 ชั่วโมง (บั๊กเดิม พิสูจน์แล้ว)
+     *
+     * ⚠️ `SessionLifetimeTest` จับไม่ได้ เพราะมันปลอมเวลาลงไฟล์ session เอง
+     * ตัวเก็บกวาดของ PHP จึงไม่เคยเข้ามาเกี่ยว — ลบบรรทัดนี้ทิ้งแล้วเทสต์ยังเขียวหมด
+     */
+    public function testPhpDoesNotSweepSessionsBeforeTheAppTimesOut(): void
+    {
+        $lifetime = (int)$this->bootstrapIniValue('session.gc_maxlifetime');
+
+        $this->assertGreaterThan(
+            (int)SESSION_IDLE_TIMEOUT_SECONDS,
+            $lifetime,
+            'PHP จะลบไฟล์ session ทิ้งก่อนที่แอปจะถือว่าหมดเวลา — ผู้ใช้หลุดเร็วกว่าที่ตั้งไว้'
+        );
+        $this->assertGreaterThan(
+            (int)SESSION_ABSOLUTE_TIMEOUT_SECONDS,
+            $lifetime,
+            'สั้นกว่าเวลาหมดอายุแบบเด็ดขาด'
+        );
+    }
+
+    /**
+     * ⭐ หน้าที่ต้องล็อกอินต้องไม่ถูกเก็บไว้ในแคช
+     *
+     * ⚠️ โฮสต์ที่ตั้ง `session.cache_limiter=` ว่างไว้ จะไม่ส่ง `Cache-Control` เลย
+     * ยอดขาย/กำไร/โปรไฟล์จึงถูกเก็บไว้ในเครื่องหรือ proxy ระหว่างทาง
+     * ⚠️ ไม่มีเทสต์ไหนตรวจ header พวกนี้เลย — ลบบรรทัดที่ตั้งค่าแล้วยังเขียวทั้งชุด
+     */
+    public function testPagesBehindLoginAreNotCacheable(): void
+    {
+        $this->assertSame(
+            'nocache',
+            $this->bootstrapIniValue('session.cache_limiter'),
+            'หน้าที่ต้องล็อกอินอาจถูกเก็บไว้ในแคชของเบราว์เซอร์หรือ proxy'
+        );
+    }
+
+    /**
      * ⭐ ไฟล์ log ที่เขียนไม่ได้ ต้องถูกตรวจเจอ ไม่ใช่เขียนลงไปแล้วหายเงียบ
      *
      * ⚠️ เงื่อนไขเดิมถามแค่ว่า **โฟลเดอร์** เขียนได้ไหม · บนโฮสต์จริงไฟล์ log
