@@ -65,6 +65,58 @@ final class ConcurrentWriteLockOrderTest extends IntegrationTestCase
         $this->assertSame(0, $this->countRows('daily_records'));
     }
 
+    /**
+     * ⭐⭐ "เปลี่ยนรหัสเอง" กับ "กดลิงก์รีเซ็ต" ต้องจองแถวเรียงเหมือนกัน
+     *
+     * ⚠️ สองทางนี้แตะข้อมูลชุดเดียวกัน: แถวผู้ใช้ กับ แถวลิงก์รีเซ็ต
+     * หน้าโปรไฟล์จอง **แถวผู้ใช้ก่อน** ถ้าทางลิงก์จองสลับกัน สองทางที่ทำพร้อมกัน
+     * จะล็อกกันเอง แล้วฐานข้อมูลยกเลิกฝ่ายหนึ่งทิ้ง (deadlock) โดยไม่มีฝ่ายไหนลองใหม่
+     *
+     * วัดจริงก่อนแก้: ยิงพร้อมกัน 6 รอบ ฝ่ายที่แพ้ได้ข้อความ "ไม่สามารถรีเซ็ตรหัสผ่านได้"
+     * ซึ่งไม่บอกอะไรเลย · หลังแก้ได้ "ลิงก์หมดอายุแล้ว" หรือ "รหัสปัจจุบันไม่ถูกต้อง"
+     * ซึ่งเป็นความจริงทั้งคู่ (อีกฝ่ายเปลี่ยนไปแล้วจริง ๆ)
+     *
+     * ⚠️ **ตรวจด้วยการจับลำดับการเรียก ไม่ใช่จับล็อกไว้แล้วดูว่าล้มไหม**
+     * การอ่านแถว token ใช้ `JOIN users … FOR UPDATE` ซึ่งล็อกแถวผู้ใช้ไปด้วย
+     * จับแถวไหนไว้ก็ล้มเหมือนกันทั้งสองลำดับ — แยกไม่ออก (ลองแล้ว เทสต์เขียวทั้งคู่)
+     */
+    public function testResettingByLinkLocksTheUserRowFirstLikeTheProfilePageDoes(): void
+    {
+        $userId = $this->createUser();
+        $rawToken = bin2hex(random_bytes(32));
+        (new \PasswordResetRepository($this->pdo))->createToken($userId, hash('sha256', $rawToken), 1);
+
+        $order = [];
+
+        $users = $this->createStub(\UserRepository::class);
+        $users->method('lockForUpdate')->willReturnCallback(
+            static function () use (&$order): void {
+                $order[] = 'ผู้ใช้';
+            }
+        );
+        $users->method('updatePasswordHash')->willReturn(true);
+
+        $tokens = $this->createStub(\PasswordResetRepository::class);
+        $tokens->method('findByTokenHash')->willReturn(['user_id' => $userId, 'email' => 'owner@example.com']);
+        $tokens->method('findByTokenHashForUpdate')->willReturnCallback(
+            static function () use (&$order, $userId): array {
+                $order[] = 'ลิงก์รีเซ็ต';
+
+                return ['id' => 1, 'user_id' => $userId, 'email' => 'owner@example.com'];
+            }
+        );
+        $tokens->method('deleteByUserId')->willReturn(true);
+
+        (new \AuthService($this->pdo, $users, new \ShopRepository($this->pdo), $tokens))
+            ->resetPassword($rawToken, 'BrandNewPass1', 'BrandNewPass1', '203.0.113.99');
+
+        $this->assertSame(
+            ['ผู้ใช้', 'ลิงก์รีเซ็ต'],
+            $order,
+            'จองแถวสลับลำดับกับหน้าโปรไฟล์ — ทำพร้อมกันแล้วจะล็อกกันเองจนฝ่ายหนึ่งล้ม'
+        );
+    }
+
     /** ⭐ บันทึกหลายวัน: เขียนเรียงตามวันที่เสมอ ไม่ว่าจะพิมพ์มาเรียงยังไง */
     public function testBulkSaveWritesInDateOrderRegardlessOfInputOrder(): void
     {

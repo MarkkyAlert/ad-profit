@@ -482,6 +482,25 @@ class AuthService
                 $startedTransaction = true;
             }
 
+            // ⚠️⚠️ **ต้องจองแถว `users` ก่อนแถว token เสมอ**
+            //
+            // หน้าโปรไฟล์ (เปลี่ยนรหัส/อีเมล) จอง `users` ก่อน แล้วค่อยไปแตะ token
+            // ถ้าทางนี้จองสลับกัน สองทางที่ทำพร้อมกันจะล็อกกันเอง แล้วฐานข้อมูล
+            // ยกเลิกฝ่ายหนึ่งทิ้ง (deadlock) โดยไม่มีฝ่ายไหนลองใหม่
+            //
+            // สถานการณ์จริงคือสิ่งที่ระบบเขียนโค้ดล้างลิงก์รีเซ็ตขึ้นมารับมือพอดี:
+            // ผู้ใช้ได้อีเมล "ลืมรหัสผ่าน" ที่ตัวเองไม่ได้ขอ แล้วรีบเข้าหน้าโปรไฟล์
+            // เปลี่ยนรหัสเอง ขณะที่อีกฝ่ายกำลังกดลิงก์ — ฝ่ายหนึ่งจะได้ข้อความว่า
+            // "ไม่สามารถเปลี่ยนรหัสผ่านได้" โดยไม่บอกสาเหตุ ในนาทีที่ต้องการมันที่สุด
+            //
+            // อ่าน token แบบไม่ล็อกก่อนเพื่อรู้ว่าเป็นของใคร → จองแถวผู้ใช้ →
+            // แล้วค่อยอ่านซ้ำแบบล็อก (การอ่านซ้ำใต้ล็อกคือตัวที่ตัดสินจริง
+            // ค่าจากการอ่านรอบแรกใช้แค่หาว่าจะจองแถวไหน)
+            $tokenOwner = $this->passwordResetRepository->findByTokenHash($tokenHash);
+            if (is_array($tokenOwner)) {
+                $this->userRepository->lockForUpdate((int)$tokenOwner['user_id']);
+            }
+
             $tokenRecord = $this->passwordResetRepository->findByTokenHashForUpdate($tokenHash);
             if ($tokenRecord === null) {
                 if ($startedTransaction && $this->db->inTransaction()) {
