@@ -42,13 +42,35 @@ final class PasswordResetInvalidationTest extends IntegrationTestCase
         );
     }
 
+    private ?string $capturedToken = null;
+
     private function makeProfileService(): ProfileService
     {
-        return new ProfileService(
-            new UserRepository($this->pdo),
-            $this->pdo,
-            new PasswordResetRepository($this->pdo)
-        );
+        // ⚠️ ดักลิงก์ยืนยันไว้แทนการส่งอีเมลจริง — การเปลี่ยนอีเมลต้องยืนยันก่อนแล้ว
+        $captured = &$this->capturedToken;
+
+        return new class ($this->pdo, $captured) extends ProfileService {
+            private ?string $captured;
+
+            public function __construct(\PDO $pdo, ?string &$captured)
+            {
+                parent::__construct(
+                    new UserRepository($pdo),
+                    $pdo,
+                    new PasswordResetRepository($pdo),
+                    new \EmailChangeRepository($pdo),
+                    null
+                );
+                $this->captured = &$captured;
+            }
+
+            protected function sendEmailChangeLink(string $newEmail, string $token): bool
+            {
+                $this->captured = $token;
+
+                return true;
+            }
+        };
     }
 
     /** ออก token ให้ user แล้วคืนค่าดิบที่จะอยู่ในลิงก์อีเมล */
@@ -100,7 +122,14 @@ final class PasswordResetInvalidationTest extends IntegrationTestCase
         $userId = $this->createUser('owner@example.com', 'OldPass123');
         $raw = $this->issueToken($userId);
 
-        $changed = $this->makeProfileService()->changeEmail($userId, 'new@example.com', 'OldPass123');
+        // ⚠️ การเปลี่ยนอีเมลต้องยืนยันก่อน — ลิงก์รีเซ็ตเก่าจะถูกล้างตอน "ยืนยัน"
+        // ไม่ใช่ตอน "ขอ" (ตอนขอยังไม่มีอะไรเปลี่ยน จึงยังไม่ต้องล้างอะไร)
+        $service = $this->makeProfileService();
+        $requested = $service->changeEmail($userId, 'new@example.com', 'OldPass123');
+        $this->assertTrue($requested['success'], (string)($requested['error'] ?? ''));
+        $this->assertNotNull($this->capturedToken, 'ไม่ได้ส่งลิงก์ยืนยันออกไป');
+
+        $changed = $service->confirmEmailChange((string)$this->capturedToken);
         $this->assertTrue($changed['success'], (string)($changed['error'] ?? ''));
 
         $this->assertSame(0, $this->countRows('password_reset_tokens'));

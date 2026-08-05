@@ -776,12 +776,16 @@ require __DIR__ . '/includes/header.php';
                 // แสดง "กำไร" ของเดือนดี/แย่สุด (จัดอันดับด้วยกำไร ไม่ใช่รายได้)
                 $bestMonthProfit = $yearlyBestMonth !== null ? (float)($yearlyBestMonth['profit'] ?? 0) : null;
                 $worstMonthProfit = $yearlyWorstMonth !== null ? (float)($yearlyWorstMonth['profit'] ?? 0) : null;
+                // ⚠️ ยังไม่มีเดือนที่จบ ≠ ไม่มีข้อมูล — การ์ดนี้ไม่นับเดือนปัจจุบันที่ยังไม่จบ
+                // ผู้ใช้ที่เพิ่งเริ่มใช้เดือนนี้จะไม่มีเดือนไหนเข้าเกณฑ์เลย · ขีด (–) อ่านได้ว่า
+                // "ข้อมูลหาย" ซึ่งไม่จริงและน่าตกใจ (ข้อความเดียวกับหน้ารายปี)
+                $noFinishedMonthText = 'รอให้จบเดือนก่อน';
                 $bestMonthLabel = $yearlyBestMonth !== null
-                    ? ($thaiMonths[(int)($yearlyBestMonth['month'] ?? 0)] ?? '–')
-                    : '–';
+                    ? ($thaiMonths[(int)($yearlyBestMonth['month'] ?? 0)] ?? $noFinishedMonthText)
+                    : $noFinishedMonthText;
                 $worstMonthLabel = $yearlyWorstMonth !== null
-                    ? ($thaiMonths[(int)($yearlyWorstMonth['month'] ?? 0)] ?? '–')
-                    : '–';
+                    ? ($thaiMonths[(int)($yearlyWorstMonth['month'] ?? 0)] ?? $noFinishedMonthText)
+                    : $noFinishedMonthText;
                 ?>
                 <section class="section-card mt-4 px-4 py-3 sm:px-5">
                     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-400">

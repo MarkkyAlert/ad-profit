@@ -15,7 +15,13 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $userRepository = new UserRepository($pdo);
 // ฉีด PasswordResetRepository เข้ามาด้วย — เปลี่ยนรหัสผ่าน/อีเมลแล้วต้องล้างลิงก์รีเซ็ตที่ค้างอยู่
-$profileService = new ProfileService($userRepository, $pdo, new PasswordResetRepository($pdo));
+$profileService = new ProfileService(
+    $userRepository,
+    $pdo,
+    new PasswordResetRepository($pdo),
+    new EmailChangeRepository($pdo),
+    new EmailService()
+);
 
 $redirectPath = resolve_safe_redirect_path(
     '/profile.php',
@@ -140,27 +146,15 @@ if ($action === 'change_email') {
 
     if (($result['success'] ?? false) === true) {
         $data = is_array($result['data'] ?? null) ? (array)$result['data'] : [];
-        $email = (string)($data['email'] ?? '');
-
-        if ($email !== '') {
-            $_SESSION['email'] = $email;
-        }
 
         $clearProfileRateLimit($rateLimitAction, $userId, $profileClientIp);
 
-        // changeEmail bump session_version ไปแล้ว → ต้องอัปเดตค่าใน session ตาม
-        // ไม่งั้น request ถัดไปไม่ตรงกับ DB แล้วเตะเจ้าของบัญชีออกเอง
-        try {
-            $_SESSION['session_version'] = $userRepository->getSessionVersion($userId);
-        } catch (Throwable $exception) {
-            $_SESSION['session_version'] = max(1, (int)($_SESSION['session_version'] ?? 1)) + 1;
-        }
-
-        session_regenerate_id(true);
-
+        // ⚠️ **อีเมลยังไม่เปลี่ยน** จนกว่าเจ้าของจะกดลิงก์ในกล่องจดหมายใหม่
+        // จึงไม่แตะ `$_SESSION['email']` · ไม่ bump session_version · ไม่เตะ session อื่น
+        // ทั้งหมดนั้นเกิดที่ `verify-email.php` ตอนยืนยันสำเร็จแทน
         $respond([
             'success' => true,
-            'message' => 'เปลี่ยนอีเมลเรียบร้อยแล้ว',
+            'message' => (string)($result['message'] ?? 'ส่งลิงก์ยืนยันไปที่อีเมลใหม่แล้ว'),
             'data' => $data,
         ], 200, $redirectPath);
     }

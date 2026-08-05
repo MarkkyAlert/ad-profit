@@ -18,15 +18,22 @@ final class ProfileServiceCredentialTest extends TestCase
 {
     private const CURRENT_PASSWORD = 'current-password';
 
-    private function makeService(?UserRepository $userRepository = null): ProfileService
-    {
+    private function makeService(
+        ?UserRepository $userRepository = null,
+        ?\EmailChangeRepository $changeRepository = null
+    ): ProfileService {
         $pdo = $this->createStub(PDO::class);
         $pdo->method('inTransaction')->willReturn(true);
         $pdo->method('beginTransaction')->willReturn(true);
         $pdo->method('commit')->willReturn(true);
         $pdo->method('rollBack')->willReturn(true);
 
-        return new ProfileService($userRepository ?? $this->makeUserRepository(), $pdo);
+        return new ProfileService(
+            $userRepository ?? $this->makeUserRepository(),
+            $pdo,
+            null,
+            $changeRepository
+        );
     }
 
     private function makeUserRepository(): UserRepository
@@ -84,7 +91,14 @@ final class ProfileServiceCredentialTest extends TestCase
     }
 
     /** เปลี่ยนอีเมลสำเร็จต้องเตะ session อื่น — อีเมลเป็นช่องทางกู้บัญชี */
-    public function testSuccessfulEmailChangeBumpsSessionVersion(): void
+    /**
+     * ⭐⭐ แค่ "ขอ" เปลี่ยนอีเมล ต้องยังไม่แตะอะไรเลย
+     *
+     * ⚠️ เดิมเมธอดนี้เปลี่ยนอีเมลทันที · ตอนนี้แค่บันทึกคำขอแล้วส่งลิงก์ไปกล่องจดหมายใหม่
+     * ถ้าเผลอเตะ session ตั้งแต่ตอนขอ ผู้ใช้ที่พิมพ์อีเมลผิดจะหลุดจากระบบทันที
+     * ทั้งที่อีเมลยังไม่เปลี่ยน — และเข้าใหม่ไม่ได้ถ้าจำรหัสไม่ได้
+     */
+    public function testMerelyRequestingAnEmailChangeTouchesNothing(): void
     {
         $userRepository = $this->createMock(UserRepository::class);
         $userRepository->method('findById')->willReturn([
@@ -93,12 +107,17 @@ final class ProfileServiceCredentialTest extends TestCase
             'password_hash' => password_hash(self::CURRENT_PASSWORD, PASSWORD_DEFAULT),
         ]);
         $userRepository->method('findByEmail')->willReturn(null);
-        $userRepository->method('updateEmail')->willReturn(true);
-        $userRepository->expects($this->once())->method('incrementSessionVersion')->with(1);
+        $userRepository->expects($this->never())->method('updateEmail');
+        $userRepository->expects($this->never())->method('incrementSessionVersion');
 
-        $result = $this->makeService($userRepository)->changeEmail(1, 'new@example.com', self::CURRENT_PASSWORD);
+        $changeRepository = $this->createStub(\EmailChangeRepository::class);
+        $changeRepository->method('isReady')->willReturn(true);
+        $changeRepository->method('createRequest')->willReturn(true);
 
-        $this->assertTrue($result['success']);
+        $result = $this->makeService($userRepository, $changeRepository)
+            ->changeEmail(1, 'new@example.com', self::CURRENT_PASSWORD);
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
     }
 
     /** เปลี่ยนอีเมลไม่สำเร็จต้องไม่เตะใครออก */

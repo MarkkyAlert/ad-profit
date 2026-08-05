@@ -14,14 +14,21 @@ class ProfileService
     private ?PDO $db;
     private ?PasswordResetRepository $passwordResetRepository;
 
+    private ?EmailChangeRepository $emailChangeRepository;
+    private ?EmailService $emailService;
+
     public function __construct(
         UserRepository $userRepository,
         ?PDO $db = null,
-        ?PasswordResetRepository $passwordResetRepository = null
+        ?PasswordResetRepository $passwordResetRepository = null,
+        ?EmailChangeRepository $emailChangeRepository = null,
+        ?EmailService $emailService = null
     ) {
         $this->userRepository = $userRepository;
         $this->db = $db;
         $this->passwordResetRepository = $passwordResetRepository;
+        $this->emailChangeRepository = $emailChangeRepository;
+        $this->emailService = $emailService;
     }
 
     /**
@@ -34,6 +41,105 @@ class ProfileService
      * ⚠️ คู่กับ `AuthService::resetPassword` ที่ลบ token ทิ้งอยู่แล้ว — แก้ที่หนึ่งต้องดูอีกที่
      * ล้มเหลวไม่ควรทำให้การเปลี่ยนรหัสผ่านล้มตาม (บันทึก log แล้วไปต่อ)
      */
+    /** ส่งลิงก์ยืนยัน — แยกออกมาเพื่อให้เทสต์แทนที่ได้โดยไม่ต้องมีระบบอีเมลจริง */
+    protected function sendEmailChangeLink(string $newEmail, string $token): bool
+    {
+        if ($this->emailService === null) {
+            error_log('[profile] no email service configured — cannot send the verification link');
+
+            return false;
+        }
+
+        return $this->emailService->sendEmailChangeVerification(
+            $newEmail,
+            app_url('/verify-email.php?token=' . urlencode($token))
+        );
+    }
+
+    /**
+     * ⭐ ยืนยันลิงก์แล้วค่อยเปลี่ยนอีเมลจริง
+     *
+     * ⚠️ เช็ก "อีเมลนี้ถูกใช้ไปแล้วหรือยัง" **ซ้ำอีกครั้งตรงนี้** — ระหว่างที่ลิงก์รออยู่
+     * อาจมีคนอื่นสมัครด้วยอีเมลนั้นไปแล้ว
+     *
+     * @return array{success:bool,error?:string,data?:array<string,mixed>}
+     */
+    public function confirmEmailChange(string $token): array
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return ['success' => false, 'error' => 'ลิงก์ยืนยันอีเมลไม่ถูกต้อง'];
+        }
+
+        if ($this->emailChangeRepository === null || !$this->emailChangeRepository->isReady()) {
+            error_log('[profile] confirmEmailChange called but the pending-request table is missing');
+
+            return ['success' => false, 'error' => 'ระบบเปลี่ยนอีเมลยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแล'];
+        }
+
+        $startedTransaction = false;
+        try {
+            if ($this->db instanceof PDO && !$this->db->inTransaction()) {
+                $this->db->beginTransaction();
+                $startedTransaction = true;
+            }
+
+            $request = $this->emailChangeRepository->findByTokenHashForUpdate(hash('sha256', $token));
+            if ($request === null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return ['success' => false, 'error' => 'ลิงก์ยืนยันอีเมลไม่ถูกต้องหรือหมดอายุแล้ว'];
+            }
+
+            $userId = (int)$request['user_id'];
+            $newEmail = (string)$request['new_email'];
+
+            $owner = $this->userRepository->findByEmail($newEmail);
+            if ($owner !== null && (int)$owner['id'] !== $userId) {
+                $this->emailChangeRepository->deleteByUserId($userId);
+
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+
+                return ['success' => false, 'error' => 'อีเมลนี้ถูกใช้งานแล้ว กรุณาใช้อีเมลอื่น'];
+            }
+
+            if (!$this->userRepository->updateEmail($userId, $newEmail)) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return ['success' => false, 'error' => 'ไม่สามารถเปลี่ยนอีเมลได้'];
+            }
+
+            // อีเมลคือช่องทางกู้บัญชี — เปลี่ยนแล้วต้องเตะ session อื่นเหมือนตอนเปลี่ยนรหัสผ่าน
+            $this->userRepository->incrementSessionVersion($userId);
+
+            // ลิงก์รีเซ็ตที่ส่งไปอีเมล "เดิม" ต้องใช้ไม่ได้อีก
+            $this->revokePasswordResetTokens($userId);
+
+            // ใช้ลิงก์แล้วต้องใช้ซ้ำไม่ได้
+            $this->emailChangeRepository->deleteByUserId($userId);
+
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->commit();
+            }
+
+            return ['success' => true, 'data' => ['email' => $newEmail, 'user_id' => $userId]];
+        } catch (Throwable $exception) {
+            if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
+            error_log('[profile] confirmEmailChange failed: ' . $exception->getMessage());
+
+            return ['success' => false, 'error' => write_failure_message($exception, 'ไม่สามารถเปลี่ยนอีเมลได้')];
+        }
+    }
+
     private function revokePasswordResetTokens(int $userId): void
     {
         if ($this->passwordResetRepository === null) {
@@ -240,8 +346,36 @@ class ProfileService
                 ];
             }
 
-            $updated = $this->userRepository->updateEmail($userId, $normalizedEmail);
-            if (!$updated) {
+            // ⚠️⚠️ **ยังไม่เขียนอีเมลใหม่ลง `users` ตรงนี้**
+            //
+            // เดิมเปลี่ยนทันที · พิมพ์ผิดตัวเดียว (`@gmial.com`) ระบบขึ้นว่าสำเร็จ แต่วันไหน
+            // หลุดจากระบบจะเข้าไม่ได้อีกเลย และ "ลืมรหัสผ่าน" จะส่งไปกล่องจดหมายที่ไม่มีจริง
+            // = **บัญชีหายถาวร กู้คืนไม่ได้** (ไม่มีชั้นไหนกันเลยสักชั้น)
+            //
+            // ตอนนี้เก็บเป็น "คำขอที่รอยืนยัน" แล้วส่งลิงก์ไปที่อีเมลใหม่
+            // อีเมลจะเปลี่ยนจริงเมื่อกดลิงก์นั้นเท่านั้น (`confirmEmailChange()`)
+            if ($this->emailChangeRepository === null || !$this->emailChangeRepository->isReady()) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                error_log('[profile] email change requested but the pending-request table is missing');
+
+                return [
+                    'success' => false,
+                    'error' => 'ระบบเปลี่ยนอีเมลยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแล',
+                ];
+            }
+
+            $token = bin2hex(random_bytes(32));
+            $created = $this->emailChangeRepository->createRequest(
+                $userId,
+                $normalizedEmail,
+                hash('sha256', $token),
+                (int)PASSWORD_RESET_TOKEN_TTL_HOURS
+            );
+
+            if (!$created) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                     $this->db->rollBack();
                 }
@@ -252,22 +386,23 @@ class ProfileService
                 ];
             }
 
-            // อีเมลคือช่องทางกู้บัญชี — เปลี่ยนแล้วต้องเตะ session อื่นเหมือนตอนเปลี่ยนรหัสผ่าน
-            // ไม่งั้นคนที่ยึด session ไว้ได้ เปลี่ยนอีเมลแล้วยังค้างอยู่ในบัญชีต่อไป
-            $this->userRepository->incrementSessionVersion($userId);
-
-            // ลิงก์รีเซ็ตที่ส่งไปอีเมล "เดิม" ต้องใช้ไม่ได้อีก
-            $this->revokePasswordResetTokens($userId);
-
             if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                 $this->db->commit();
             }
 
+            // ⚠️ ส่งอีเมล **หลัง** commit — ถ้าส่งก่อนแล้วการบันทึกล้ม ผู้ใช้จะได้ลิงก์
+            // ที่ใช้ไม่ได้ · ส่งไม่สำเร็จยังบอกผู้ใช้ตามจริงได้ เพราะคำขอถูกบันทึกแล้ว
+            $sent = $this->sendEmailChangeLink($normalizedEmail, $token);
+
             return [
                 'success' => true,
                 'data' => [
-                    'email' => $normalizedEmail,
+                    'pending_email' => $normalizedEmail,
+                    'email_sent' => $sent,
                 ],
+                'message' => $sent
+                    ? 'ส่งลิงก์ยืนยันไปที่ ' . $normalizedEmail . ' แล้ว — อีเมลจะเปลี่ยนเมื่อคุณกดลิงก์นั้น'
+                    : 'บันทึกคำขอแล้ว แต่ส่งอีเมลยืนยันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
             ];
         } catch (PDOException $exception) {
             if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {

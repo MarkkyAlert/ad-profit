@@ -87,10 +87,12 @@ composer install --no-dev --optimize-autoloader
 |---|---|---|
 | `2026-08-04-drop-idempotency-requests.sql` | ลบตาราง `idempotency_requests` ที่ไม่ถูกใช้งาน | ไม่บังคับ — ระบบทำงานได้ปกติถ้ายังไม่ลบ ตารางจะค้างอยู่เฉย ๆ |
 | `2026-08-05-shop-name-collation.sql` | เปลี่ยนกติกาเทียบชื่อร้านให้แยกอิโมจิได้ | **บังคับ** — ไม่รัน = แอปตอบ 503 ทั้งระบบ (Schema Guard ปฏิเสธการบูต) |
+| `2026-08-05-email-change-requests.sql` | ตารางเก็บคำขอเปลี่ยนอีเมลที่รอยืนยัน | **จำเป็นถ้าจะให้เปลี่ยนอีเมลได้** — ไม่รัน = แอปยังทำงานปกติ แต่กดเปลี่ยนอีเมลแล้วขึ้นว่า "ระบบเปลี่ยนอีเมลยังไม่พร้อมใช้งาน" |
 
 ```bash
 mysql -u USER -p DBNAME < database/migrations/2026-08-04-drop-idempotency-requests.sql
 mysql -u USER -p DBNAME < database/migrations/2026-08-05-shop-name-collation.sql
+mysql -u USER -p DBNAME < database/migrations/2026-08-05-email-change-requests.sql
 ```
 
 ⚠️ **ไฟล์ที่สองบังคับ** — ก่อนแก้ ระบบมองว่าอิโมจิทุกตัวเป็นชื่อเดียวกัน ผู้ใช้ที่มี

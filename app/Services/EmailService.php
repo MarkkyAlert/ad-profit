@@ -69,6 +69,38 @@ class EmailService
         return $this->send($toEmail, $subject, $htmlBody, $textBody);
     }
 
+    /**
+     * ลิงก์ยืนยันอีเมลใหม่ — ส่งไปที่ **อีเมลใหม่** เท่านั้น
+     *
+     * ⚠️ ถ้าผู้ใช้พิมพ์อีเมลผิด จดหมายฉบับนี้จะไม่ถึงใคร → อีเมลไม่เปลี่ยน
+     * ซึ่งคือสิ่งที่ต้องการ (บัญชีไม่หาย)
+     */
+    public function sendEmailChangeVerification(string $toEmail, string $verifyLink): bool
+    {
+        if (!$this->isEnabled()) {
+            error_log('[email] Email sending is disabled or not configured');
+
+            return false;
+        }
+
+        $hours = max(1, (int)PASSWORD_RESET_TOKEN_TTL_HOURS);
+        $safeLink = htmlspecialchars($verifyLink, ENT_QUOTES, 'UTF-8');
+        $safeEmail = htmlspecialchars($toEmail, ENT_QUOTES, 'UTF-8');
+
+        $htmlBody = '<p>มีการขอเปลี่ยนอีเมลของบัญชี ' . APP_NAME . ' มาเป็น <strong>' . $safeEmail . '</strong></p>'
+            . '<p>กดลิงก์ด้านล่างเพื่อยืนยัน — <strong>อีเมลจะยังไม่เปลี่ยนจนกว่าคุณจะกดลิงก์นี้</strong></p>'
+            . '<p><a href="' . $safeLink . '">' . $safeLink . '</a></p>'
+            . '<p>ลิงก์นี้ใช้ได้ ' . $hours . ' ชั่วโมง</p>'
+            . '<p>ถ้าคุณไม่ได้เป็นคนขอ ไม่ต้องทำอะไร อีเมลของบัญชีจะยังเป็นอันเดิม</p>';
+
+        $textBody = "มีการขอเปลี่ยนอีเมลของบัญชี " . APP_NAME . " มาเป็น {$toEmail}\n\n"
+            . "กดลิงก์เพื่อยืนยัน (อีเมลจะยังไม่เปลี่ยนจนกว่าจะกดลิงก์นี้):\n{$verifyLink}\n\n"
+            . "ลิงก์นี้ใช้ได้ {$hours} ชั่วโมง\n"
+            . "ถ้าคุณไม่ได้เป็นคนขอ ไม่ต้องทำอะไร อีเมลของบัญชีจะยังเป็นอันเดิม\n";
+
+        return $this->send($toEmail, 'ยืนยันอีเมลใหม่ - ' . APP_NAME, $htmlBody, $textBody);
+    }
+
     private function send(string $to, string $subject, string $htmlBody, string $textBody = ''): bool
     {
         if (!class_exists(PHPMailer::class)) {

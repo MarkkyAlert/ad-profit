@@ -295,8 +295,16 @@ final class GoalAndProfileEndpointTest extends ControllerTestCase
             ->query("SELECT password_hash FROM users WHERE id = {$userId}")->fetchColumn()));
     }
 
-    /** ⭐ เปลี่ยนอีเมลสำเร็จ ต้องเข้า DB จริงและเตะ session อื่นออก (อีเมลคือช่องทางกู้บัญชี) */
-    public function testChangingTheEmailUpdatesItAndBumpsTheSessionVersion(): void
+    /**
+     * ⭐⭐ กดบันทึกอีเมลใหม่แล้ว **ยังไม่เปลี่ยน** จนกว่าจะกดลิงก์ยืนยัน
+     *
+     * ⚠️ เดิมเปลี่ยนทันที · พิมพ์ผิดตัวเดียวแล้วบัญชีหายถาวร (เข้าไม่ได้ + กู้ไม่ได้)
+     * ตอนนี้ endpoint แค่บันทึกคำขอและส่งลิงก์ไปกล่องจดหมายใหม่
+     *
+     * ⚠️ ต้องไม่เตะ session ตั้งแต่ตอนนี้ด้วย — คนที่พิมพ์อีเมลผิดจะหลุดจากระบบทันที
+     * ทั้งที่อีเมลยังไม่เปลี่ยน แล้วเข้าใหม่ไม่ได้ถ้าจำรหัสผ่านไม่ได้
+     */
+    public function testSubmittingANewEmailOnlyRequestsTheChange(): void
     {
         $userId = $this->createUser('owner@example.com', 'OldPass123');
         $shopId = $this->createShop($userId);
@@ -311,12 +319,20 @@ final class GoalAndProfileEndpointTest extends ControllerTestCase
         ]);
 
         $this->assertSame(200, $response['status'], (string)$response['body']);
-        $this->assertSame('moved@example.com', (string)$this->pdo
-            ->query("SELECT email FROM users WHERE id = {$userId}")->fetchColumn());
-        $this->assertGreaterThan(
+        $this->assertSame(
+            'owner@example.com',
+            (string)$this->pdo->query("SELECT email FROM users WHERE id = {$userId}")->fetchColumn(),
+            'อีเมลถูกเปลี่ยนทันทีทั้งที่ยังไม่ได้ยืนยัน — พิมพ์ผิดแล้วบัญชีหายถาวร'
+        );
+        $this->assertSame(
             $versionBefore,
             (int)$this->pdo->query("SELECT session_version FROM users WHERE id = {$userId}")->fetchColumn(),
-            'เปลี่ยนอีเมลแล้วอุปกรณ์อื่นยังใช้ต่อได้'
+            'เตะผู้ใช้ออกตั้งแต่ยังไม่ได้ยืนยัน — คนที่พิมพ์อีเมลผิดจะเข้าบัญชีตัวเองไม่ได้'
+        );
+        $this->assertSame(
+            1,
+            $this->countRows('email_change_requests'),
+            'ไม่ได้บันทึกคำขอไว้ — ลิงก์ยืนยันจะใช้ไม่ได้'
         );
     }
 

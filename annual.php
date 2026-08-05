@@ -131,14 +131,21 @@ $monthLabel = static function (array $row) use ($thaiMonths): string {
 };
 
 // แสดง "กำไร" ของเดือนดี/แย่สุด (จัดอันดับด้วยกำไรแล้ว ไม่ใช่รายได้)
-$bestMonthText = '–';
+// ⚠️ ยังไม่มีเดือนที่จบ ≠ ไม่มีข้อมูล
+//
+// การ์ดนี้ไม่นับเดือนปัจจุบันที่ยังไม่จบ (เทียบยอดสะสมกับเดือนที่กรอกครบไม่ได้)
+// ผู้ใช้ที่เพิ่งเริ่มใช้เดือนนี้จึงไม่มีเดือนไหนเข้าเกณฑ์เลย · ขีด (–) อ่านได้ว่า
+// "ไม่มีข้อมูล" หรือ "ข้อมูลที่กรอกหายไป" ซึ่งทั้งคู่ไม่จริงและน่าตกใจ
+$noFinishedMonthText = 'รอให้จบเดือนก่อน';
+
+$bestMonthText = $noFinishedMonthText;
 $bestMonthProfit = null;
 if ($bestMonth !== null) {
     $bestMonthProfit = (float)($bestMonth['profit'] ?? 0);
     $bestMonthText = $monthLabel($bestMonth) . ' (' . formatMoney($bestMonthProfit) . ')';
 }
 
-$worstMonthText = '–';
+$worstMonthText = $noFinishedMonthText;
 $worstMonthProfit = null;
 if ($worstMonth !== null) {
     $worstMonthProfit = (float)($worstMonth['profit'] ?? 0);

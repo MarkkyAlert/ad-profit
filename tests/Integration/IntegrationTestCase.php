@@ -206,6 +206,7 @@ abstract class IntegrationTestCase extends TestCase
     private function truncateAll(): void
     {
         $tables = [
+            'email_change_requests',
             'password_reset_tokens',
             'auth_rate_limits',
             'monthly_goals',
