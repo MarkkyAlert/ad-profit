@@ -54,7 +54,11 @@ class AnnualService
         $endMonth = sprintf('%04d-%02d', $year, max(1, $lastMonth));
 
         try {
-            $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $startMonth, $endMonth);
+            $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange(
+                $shopId,
+                $startMonth,
+                $endMonth
+            );
         } catch (Throwable $exception) {
             error_log('[annual] buildYearlySummary failed: ' . $exception->getMessage());
             return [
@@ -204,20 +208,31 @@ class AnnualService
                 $targetRevenue = $goal['target_revenue'] !== null ? (float)$goal['target_revenue'] : null;
                 $targetProfit = $goal['target_profit'] !== null ? (float)$goal['target_profit'] : null;
 
+                // ⚠️⚠️ การ์ดเป้าหมายต้องนับ "ถึงวันนี้" เท่านั้น เหมือนแดชบอร์ด
+                //
+                // ระบบให้ลงข้อมูลวันล่วงหน้าได้ · ถ้านับทั้งเดือน หน้านี้กับไฟล์ Excel
+                // จะขึ้น "✓ ถึงเป้าแล้ว 100%" ขณะที่แดชบอร์ดขึ้น "40% ยังไม่ถึงเป้า"
+                // จากข้อมูลชุดเดียวกันเดือนเดียวกัน (เกิดขึ้นจริง)
+                //
+                // ⚠️ ตัดเฉพาะตรงนี้ ไม่ใช่ทั้งเมธอด — ยอดรวมรายปีกับตารางรายเดือน
+                // **ตั้งใจ**นับแถวล่วงหน้าของเดือนนี้ เพื่อให้แผ่น "รายวัน" กับ
+                // "รายเดือน" ในไฟล์ Excel เดียวกันบวกได้เท่ากัน (XlsxAnnualParityTest)
+                [$goalRevenue, $goalProfit] = $this->totalsUpTo($monthlyTotals, $shopId, $monthKey, $todayObject);
+
                 $goalProgress[] = [
                     'month' => $month,
                     'month_key' => $monthKey,
                     'target_revenue' => $targetRevenue,
                     'target_profit' => $targetProfit,
-                    'actual_revenue' => $monthRevenue,
-                    'actual_profit' => $monthProfit,
+                    'actual_revenue' => $goalRevenue,
+                    'actual_profit' => $goalProfit,
                     // เป้า 0 หารไม่ได้ → null (ไม่ใช่ 0% ที่จะอ่านว่า "ยังไม่คืบ")
                     // สูตรกลางเดียวกับแดชบอร์ด — เดิมที่นี่ใช้ round ทำให้ 99.996% ขึ้นเป็น
                     // 100.0% คู่กับป้าย "ยังไม่ถึงเป้า" (แดชบอร์ดปัดลงอยู่แล้ว)
-                    'revenue_progress' => GoalService::progressPercent($monthRevenue, $targetRevenue),
-                    'profit_progress' => GoalService::progressPercent($monthProfit, $targetProfit),
-                    'revenue_reached' => GoalService::isReached($monthRevenue, $targetRevenue),
-                    'profit_reached' => GoalService::isReached($monthProfit, $targetProfit),
+                    'revenue_progress' => GoalService::progressPercent($goalRevenue, $targetRevenue),
+                    'profit_progress' => GoalService::progressPercent($goalProfit, $targetProfit),
+                    'revenue_reached' => GoalService::isReached($goalRevenue, $targetRevenue),
+                    'profit_reached' => GoalService::isReached($goalProfit, $targetProfit),
                 ];
             }
 
@@ -510,6 +525,56 @@ class AnnualService
     /**
      * แปลง seam $today เป็น DateTimeImmutable — รูปแบบผิด/ไม่ส่ง = วันนี้จริง
      */
+    /**
+     * ยอดของเดือนหนึ่ง "นับถึงวันนี้" — ใช้กับการ์ดเป้าหมายเท่านั้น
+     *
+     * เดือนที่จบไปแล้วคืนยอดเต็มเดือนตามเดิม · เดือนปัจจุบันยิง query เพิ่ม 1 ครั้ง
+     * เพื่อตัดวันที่ยังมาไม่ถึงออก · เดือนอนาคตไม่มีทางเข้ามาถึงตรงนี้ (ลูปหยุดที่เดือนนี้)
+     *
+     * @param array<int,array<string,mixed>> $monthlyTotals แถวเต็มเดือนที่ดึงมาแล้ว
+     * @param int $shopId ร้านที่กำลังดูอยู่
+     * @return array{0:float,1:float} [รายได้, กำไร]
+     */
+    private function totalsUpTo(
+        array $monthlyTotals,
+        int $shopId,
+        string $monthKey,
+        DateTimeImmutable $todayObject
+    ): array
+    {
+        $fullMonth = null;
+        foreach ($monthlyTotals as $row) {
+            if ((string)($row['month_key'] ?? '') === $monthKey) {
+                $fullMonth = $row;
+            }
+        }
+
+        $revenue = (float)($fullMonth['total_revenue'] ?? 0);
+        $adCost = (float)($fullMonth['total_ad_cost'] ?? 0);
+
+        if ($monthKey !== $todayObject->format('Y-m')) {
+            return [$revenue, $revenue - $adCost];
+        }
+
+        try {
+            $upToToday = $this->recordRepository->getMonthlyTotalsByMonthRange(
+                $shopId,
+                $monthKey,
+                $monthKey,
+                $todayObject->format('Y-m-d')
+            );
+        } catch (Throwable $exception) {
+            error_log('[annual] totalsUpTo failed: ' . $exception->getMessage());
+            return [$revenue, $revenue - $adCost];
+        }
+
+        $row = $upToToday[0] ?? null;
+        $cutRevenue = (float)($row['total_revenue'] ?? 0);
+        $cutAdCost = (float)($row['total_ad_cost'] ?? 0);
+
+        return [$cutRevenue, $cutRevenue - $cutAdCost];
+    }
+
     private function resolveToday(?string $today): DateTimeImmutable
     {
         $todayInput = is_string($today) ? trim($today) : '';

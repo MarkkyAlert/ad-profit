@@ -467,7 +467,14 @@ class DashboardService
         $startMonth = $startMonthStart->format('Y-m');
         $endMonth = $endMonthStart->format('Y-m');
 
-        $rows = $this->recordRepository->getMonthlyTotalsByMonthRange($shopId, $startMonth, $endMonth);
+        $rows = $this->recordRepository->getMonthlyTotalsByMonthRange(
+            $shopId,
+            $startMonth,
+            $endMonth,
+            // ⚠️ แท่งสุดท้ายของกราฟคือเดือนนี้ ต้องตัดวันเหมือนการ์ดสรุปที่อยู่เหนือมัน
+            // ไม่งั้นการ์ดขึ้น ฿4,000 แต่แท่งในกราฟบนจอเดียวกันสูง ฿10,000
+            $endDate->format('Y-m-d')
+        );
         $mappedRows = [];
 
         foreach ($rows as $row) {

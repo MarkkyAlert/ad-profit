@@ -238,8 +238,24 @@ class RecordRepository
         return $record ?: null;
     }
 
-    public function getMonthlyTotalsByMonthRange(int $shopId, string $startMonth, string $endMonth): array
-    {
+    /**
+     * @param string|null $notAfterDate ตัดไม่ให้เลยวันนี้ (Y-m-d) — ผู้เรียกเป็นคนส่งมา
+     *
+     * ⚠️⚠️ ระบบอนุญาตให้ลงข้อมูลวันล่วงหน้า ยอดของ "เดือนนี้" จึงรวมวันที่ยังมาไม่ถึง
+     * ถ้าไม่ตัด · เกิดขึ้นจริง: แดชบอร์ดบอก "ทำได้ ฿4,000 จาก ฿10,000 (40%)" ขณะที่
+     * หน้ารายปีกับไฟล์ Excel บอก "✓ ถึงเป้าแล้ว 100%" เดือนเดียวกัน ข้อมูลชุดเดียวกัน
+     * (แดชบอร์ดตัดวันอยู่แล้ว ที่อื่นไม่ได้ตัด)
+     *
+     * รับเป็นพารามิเตอร์ ไม่ใช่ให้ repository อ่านวันนี้เอง เพราะ service ทุกตัวมี
+     * seam `$today` ให้เทสต์ล็อกวันได้ — ถ้าอ่านเองจะมีบางส่วนอ้างวันจริงขณะที่ส่วนอื่น
+     * ใช้วันที่เทสต์กำหนด แล้วเทสต์เรื่องวันที่จะพิสูจน์อะไรไม่ได้เลย
+     */
+    public function getMonthlyTotalsByMonthRange(
+        int $shopId,
+        string $startMonth,
+        string $endMonth,
+        ?string $notAfterDate = null
+    ): array {
         $startDate = $startMonth . '-01';
         $endDateObject = DateTime::createFromFormat('Y-m-d', $endMonth . '-01');
         if (!$endDateObject) {
@@ -247,6 +263,10 @@ class RecordRepository
         }
 
         $endDate = $endDateObject->format('Y-m-t');
+
+        if ($notAfterDate !== null && $notAfterDate < $endDate) {
+            $endDate = $notAfterDate;
+        }
 
         $sql = "SELECT DATE_FORMAT(record_date, '%Y-%m') AS month_key,
                        SUM(revenue) AS total_revenue,

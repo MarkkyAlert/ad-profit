@@ -68,7 +68,38 @@ final class FutureRowsConsistencyTest extends TestCase
                     : [['shop_id' => 1, 'total_revenue' => $revenue, 'total_ad_cost' => 0.0, 'days_count' => $days]];
             }
         );
-        $repository->method('getMonthlyTotalsByMonthRange')->willReturn([]);
+        // ⚠️⚠️ เดิม stub ตัวนี้คืน `[]` เสมอ — หน้ารายปี ไฟล์ Excel และกราฟ 6 เดือน
+        // ล้วนใช้ query นี้ เทสต์ทั้งไฟล์จึงมองไม่เห็นว่าสามที่นั้นนับวันอนาคตอยู่
+        // (เทสต์ชื่อ "รายการล่วงหน้าต้องไม่ทำให้ตัวเลขขัดกันเอง" แต่ครอบแค่ 2 จาก 5 จุด)
+        $repository->method('getMonthlyTotalsByMonthRange')->willReturnCallback(
+            static function (
+                int $shopId,
+                string $startMonth,
+                string $endMonth,
+                ?string $notAfterDate = null
+            ) use ($rows): array {
+                $start = $startMonth . '-01';
+                $end = date('Y-m-t', (int)strtotime($endMonth . '-01'));
+                if ($notAfterDate !== null && $notAfterDate < $end) {
+                    $end = $notAfterDate;
+                }
+
+                $totals = [];
+                foreach ($rows as $row) {
+                    if ($row['record_date'] < $start || $row['record_date'] > $end) {
+                        continue;
+                    }
+                    $key = substr((string)$row['record_date'], 0, 7);
+                    $totals[$key] ??= ['month_key' => $key, 'total_revenue' => 0.0, 'total_ad_cost' => 0.0, 'days_count' => 0];
+                    $totals[$key]['total_revenue'] += $row['revenue'];
+                    $totals[$key]['total_ad_cost'] += $row['ad_cost'];
+                    $totals[$key]['days_count']++;
+                }
+                ksort($totals);
+
+                return array_values($totals);
+            }
+        );
         $repository->method('getMonthlyTotalsByShopIdsAndMonthRange')->willReturn([]);
 
         return $repository;
@@ -90,6 +121,11 @@ final class FutureRowsConsistencyTest extends TestCase
             'target_revenue' => 10000.0,
             'target_profit' => null,
         ]);
+        // ⚠️ หน้ารายปีใช้เมธอดนี้ ไม่ใช่ `findByShopAndMonth` — เดิมไม่ได้ stub ไว้
+        // การ์ดเป้าหมายของหน้ารายปีจึงว่างเปล่าในเทสต์ และไม่มีใครเห็นว่ามันขัดกับแดชบอร์ด
+        $repository->method('getByShopAndMonthRange')->willReturn([
+            ['goal_month' => '2026-08', 'target_revenue' => 10000.0, 'target_profit' => null],
+        ]);
 
         return $repository;
     }
@@ -101,6 +137,75 @@ final class FutureRowsConsistencyTest extends TestCase
     {
         return (new DashboardService($this->recordRepository(), $this->shopRepository(), $this->goalRepository()))
             ->buildDashboard(1, 1, $rangeType, null, null, $month, self::TODAY)['data'];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function annual(): array
+    {
+        return (new \AnnualService($this->recordRepository(), $this->shopRepository(), $this->goalRepository()))
+            ->buildYearlySummary(1, 1, 2026, self::TODAY)['data'];
+    }
+
+    /**
+     * ⭐⭐ การ์ดเป้าหมายของหน้ารายปี (และไฟล์ Excel) ต้องบอกตรงกับแดชบอร์ด
+     *
+     * ⚠️ เกิดขึ้นจริง: แดชบอร์ดบอก "ทำได้ ฿4,000 จาก ฿10,000 (40%) ยังไม่ถึงเป้า"
+     * ขณะที่หน้ารายปีบอก "✓ ถึงเป้าแล้ว 100%" เดือนเดียวกัน ข้อมูลชุดเดียวกัน
+     * เพราะหน้ารายปีนับรวมวันที่ 20 ส.ค. ซึ่งยังมาไม่ถึง
+     *
+     * ⚠️ เทียบ **การ์ดเป้าหมาย** เท่านั้น ไม่ใช่ตารางรายเดือน — ตารางรายเดือนกับ
+     * ยอดรวมทั้งปี **ตั้งใจ** นับแถวล่วงหน้าของเดือนนี้ เพื่อให้แผ่น "รายวัน" กับ
+     * "รายเดือน" ในไฟล์ Excel เดียวกันบวกได้เท่ากัน (XlsxAnnualParityTest ล็อกไว้)
+     */
+    public function testTheAnnualGoalCardAgreesWithTheDashboard(): void
+    {
+        $dashboardGoal = (array)$this->dashboard()['goal'];
+
+        $annualGoal = null;
+        foreach ((array)($this->annual()['goal_progress'] ?? []) as $row) {
+            if ((string)($row['month_key'] ?? '') === '2026-08') {
+                $annualGoal = $row;
+            }
+        }
+
+        $this->assertNotNull($annualGoal, 'หน้ารายปีไม่มีการ์ดเป้าหมายของเดือนนี้');
+        $this->assertSame(
+            (float)$dashboardGoal['actual_revenue'],
+            (float)$annualGoal['actual_revenue'],
+            'การ์ดเป้าหมายสองหน้านับวันไม่เท่ากัน'
+        );
+        $this->assertSame(
+            (bool)$dashboardGoal['revenue_reached'],
+            (bool)$annualGoal['revenue_reached'],
+            'หน้าหนึ่งบอกถึงเป้าแล้ว อีกหน้าบอกยังไม่ถึง'
+        );
+        $this->assertFalse(
+            (bool)$annualGoal['revenue_reached'],
+            'ยังทำได้แค่ ฿4,000 จาก ฿10,000 แต่บอกว่าถึงเป้าแล้ว'
+        );
+    }
+
+    /**
+     * ⭐ กราฟ 6 เดือนกับการ์ดสรุปอยู่บนจอเดียวกัน ต้องบอกตรงกัน
+     *
+     * ⚠️ เกิดขึ้นจริง: การ์ดขึ้น ฿4,000 แต่แท่งสุดท้ายของกราฟสูง ฿10,000
+     */
+    public function testTheSixMonthChartAgreesWithTheSummaryCard(): void
+    {
+        $data = $this->dashboard();
+        $cardRevenue = (float)$data['summary']['total_revenue'];
+
+        $chart = (array)($data['charts']['six_months'] ?? []);
+        $index = array_search('2026-08', (array)($chart['months'] ?? []), true);
+
+        $this->assertIsInt($index, 'ไม่มีแท่งของเดือนนี้ในกราฟ 6 เดือน');
+        $this->assertSame(
+            $cardRevenue,
+            (float)$chart['revenue'][$index],
+            'แท่งสุดท้ายของกราฟนับวันไม่เท่าการ์ดสรุปที่อยู่เหนือมัน'
+        );
     }
 
     /** ⭐ การ์ดสรุปกับการ์ดเป้าหมายต้องนับช่วงเดียวกัน */
