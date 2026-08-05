@@ -36,7 +36,9 @@ final class RecordServiceWeekdayContextTest extends IntegrationTestCase
         $this->createRecord($shopId, '2026-08-24', 900.0, 300.0);   // จันทร์ = target
         $this->createRecord($shopId, '2026-08-04', 5000.0, 100.0);  // อังคาร
 
-        $data = $this->makeService()->getWeekdayContext($userId, $shopId, '2026-08-24')['data'];
+        // ⚠️ ต้องปักวันเอง — ไม่งั้นผลขึ้นกับนาฬิกาเครื่อง (จันทร์ 10/17/24 เป็นวันอนาคต
+        // เมื่อรันก่อนวันนั้น และการ์ดนี้ไม่นับวันที่ยังมาไม่ถึงเป็นฐานเทียบ)
+        $data = $this->makeService()->getWeekdayContext($userId, $shopId, '2026-08-24', '2026-08-31')['data'];
 
         $this->assertTrue($data['has_data']);
         $this->assertTrue($data['comparable']);
@@ -119,6 +121,41 @@ final class RecordServiceWeekdayContextTest extends IntegrationTestCase
         $this->assertSame(0, $dataA['sample_count']);
         $this->assertFalse($dataA['comparable']);
         $this->assertNull($dataA['avg_revenue']);
+    }
+
+    /**
+     * ⭐⭐ การ์ดนี้ต้องไม่เอาวันที่ยังมาไม่ถึงมาเป็นฐานเทียบ
+     *
+     * ⚠️ เกิดขึ้นจริง: วันนี้ ศ. 7 ส.ค. · กรอกจริง จ.3 ส.ค. กำไร ฿1,000
+     * ลงล่วงหน้าไว้ จ.10, 17, 24 ส.ค. วันละ ฿9,000 →
+     *   การ์ด → "เฉลี่ยจันทร์ของเดือนนี้ ฿9,000" + ป้าย "ต่ำกว่าจันทร์ปกติของเดือนนี้"
+     *   ตารางใต้มันในหน้าเดียวกัน → "จันทร์ ฿1,000 จาก 1 วัน"
+     * การ์ดฟันธงว่าวันนั้นทำได้แย่ โดยเทียบกับวันที่ยังไม่เกิดขึ้น
+     */
+    public function testTheComparisonIgnoresDaysThatHaveNotArrivedYet(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $this->createRecord($shopId, '2026-08-03', 1000.0, 0.0);   // จันทร์ที่ผ่านมาแล้ว
+        $this->createRecord($shopId, '2026-08-10', 9000.0, 0.0);   // จันทร์ในอนาคต
+        $this->createRecord($shopId, '2026-08-17', 9000.0, 0.0);   // จันทร์ในอนาคต
+        $this->createRecord($shopId, '2026-08-24', 9000.0, 0.0);   // จันทร์ในอนาคต
+
+        // วันนี้ศุกร์ 7 ส.ค. → จันทร์ล่าสุดที่ผ่านมาแล้วคือ 3 ส.ค.
+        $data = $this->makeService()->getWeekdayContext($userId, $shopId, '2026-08-03', '2026-08-07')['data'];
+
+        $this->assertSame('2026-08-03', $data['target_date']);
+        $this->assertSame(
+            0,
+            $data['sample_count'],
+            'เอาจันทร์ที่ยังมาไม่ถึงมานับเป็นฐานเทียบ'
+        );
+        $this->assertFalse(
+            $data['comparable'],
+            'บอกว่าเทียบได้ ทั้งที่ยังไม่มีจันทร์อื่นที่ผ่านมาแล้วเลย'
+        );
+        $this->assertNull($data['avg_revenue'], 'มีค่าเฉลี่ยจากวันที่ยังไม่เกิดขึ้น');
     }
 
     public function testEmptyShopHasNoData(): void

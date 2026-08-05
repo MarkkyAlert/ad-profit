@@ -73,7 +73,7 @@ final class RecordServiceWeekdayContextTest extends TestCase
             ['2026-08-04', 5000.0, 100.0],  // อังคาร — ต้องไม่ถูกนับ
         ]);
 
-        $result = $service->getWeekdayContext(1, 1, '2026-08-24');
+        $result = $service->getWeekdayContext(1, 1, '2026-08-24', '2026-08-31');
 
         $this->assertTrue($result['success']);
         $data = $result['data'];
@@ -126,7 +126,8 @@ final class RecordServiceWeekdayContextTest extends TestCase
             ['2026-08-24', 900.0, 300.0],
         ]);
 
-        $data = $service->getWeekdayContext(1, 1, '2026-08-24')['data'];
+        // ⚠️ ปักวันเอง — จันทร์ 10/24 ส.ค. เป็นวันอนาคตถ้าอิงนาฬิกาเครื่อง
+        $data = $service->getWeekdayContext(1, 1, '2026-08-24', '2026-08-31')['data'];
 
         $this->assertSame(2, $data['sample_count']);
         $this->assertSame(1500.0, $data['avg_revenue']);

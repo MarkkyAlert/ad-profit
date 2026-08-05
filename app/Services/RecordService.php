@@ -1206,7 +1206,22 @@ class RecordService
         $dateObject = $dateObject->setTime(0, 0, 0);
         $weekday = (int)$dateObject->format('N');
         $monthStart = $dateObject->format('Y-m-01');
-        $monthEnd = $dateObject->format('Y-m-t');
+
+        // ⚠️⚠️ ต้องจบที่วันนี้ ไม่ใช่สิ้นเดือน — ระบบให้ลงข้อมูลวันล่วงหน้าได้
+        //
+        // ตาราง "กำไรเฉลี่ยตามวัน" ที่อยู่ใต้การ์ดนี้ในหน้าเดียวกันใช้ช่วงที่จบที่วันนี้
+        // (`resolveWeekdayWindow()`) · ถ้าการ์ดไล่ทั้งเดือน สองบรรทัดบนจอเดียวกัน
+        // จะใช้คำว่า "เดือนนี้" เหมือนกันแต่คนละฐาน
+        //
+        // วัดจริง: วันนี้ ศ. 7 ส.ค. · กรอกจริง จ.3 ส.ค. ฿1,000 · ลงล่วงหน้าไว้
+        // จ.10, 17, 24 วันละ ฿9,000 →
+        //   การ์ด  : "เฉลี่ยจันทร์ของเดือนนี้ ฿9,000" + ป้าย "ต่ำกว่าจันทร์ปกติ"
+        //   ตาราง  : "จันทร์ ฿1,000 จาก 1 วัน"
+        // การ์ดฟันธงว่าวันนั้นแย่ โดยเทียบกับวันที่ยังมาไม่ถึง
+        $monthEnd = min(
+            $dateObject->format('Y-m-t'),
+            $this->resolveToday($today)
+        );
 
         try {
             $monthRecords = $this->recordRepository->getByDateRange($shopId, $monthStart, $monthEnd);
