@@ -1730,11 +1730,51 @@ class RecordService
             ];
         }
 
+        // ⚠️⚠️ วันล่วงหน้าที่ **มีข้อมูลอยู่แล้ว** ต้องส่งกลับไปด้วย (แยกคีย์)
+        //
+        // ตารางกรอกหลายวันไม่ควรมีแถวของวันที่ยังมาไม่ถึง (`days` จึงตัดที่วันนี้เหมือนเดิม)
+        // แต่ **ฟอร์มกรอกวันเดียว** ต้องเติมค่าเดิมได้ทุกวันที่มีข้อมูล ไม่งั้น:
+        //   ผู้ใช้ลงข้อมูลล่วงหน้าไว้ 31 ส.ค. → กลับมาเลือกวันนั้น → ฟอร์มว่างเปล่า
+        //   → พิมพ์แค่ยอดแล้วกดบันทึก → **โน้ตเดิมหายไป** พร้อมข้อความ "สำเร็จ"
+        // (คำเตือนอย่างเดียวไม่พอ — ข้อมูลมีให้ใช้อยู่แล้ว แค่ไม่ได้ส่งมา)
+        $futureDays = [];
+        $monthEnd = $monthStart->modify('last day of this month')->format('Y-m-d');
+
+        if ($cutoffDate < $monthEnd) {
+            try {
+                $futureRecords = $this->recordRepository->getByDateRange(
+                    $shopId,
+                    $cutoffObject->modify('+1 day')->format('Y-m-d'),
+                    $monthEnd
+                );
+            } catch (Throwable $exception) {
+                error_log('[record] buildEditableMonthGrid future days failed: ' . $exception->getMessage());
+                $futureRecords = [];
+            }
+
+            foreach ($futureRecords as $record) {
+                $dateKey = trim((string)($record['record_date'] ?? ''));
+                if ($dateKey === '') {
+                    continue;
+                }
+
+                $futureDays[] = [
+                    'date' => $dateKey,
+                    'has_record' => true,
+                    'revenue' => (float)($record['revenue'] ?? 0),
+                    'ad_cost' => (float)($record['ad_cost'] ?? 0),
+                    'note' => (string)($record['note'] ?? ''),
+                ];
+            }
+        }
+
         return [
             'success' => true,
             'data' => [
                 'month' => $selectedMonthKey,
                 'days' => $days,
+                // เฉพาะวันล่วงหน้าที่มีข้อมูลจริง — ไม่ใช่ทุกวันที่เหลือของเดือน
+                'future_days_with_records' => $futureDays,
             ],
         ];
     }

@@ -299,6 +299,14 @@ require __DIR__ . '/includes/header.php';
         const byDate = new Map();
         const days = (payload.data && payload.data.days) ? payload.data.days : [];
         days.forEach((day) => { byDate.set(day.date, day); });
+
+        // ⚠️ วันล่วงหน้าที่มีข้อมูลอยู่แล้ว มาแยกคีย์ — ต้องรวมเข้าแผนที่ด้วย
+        // ไม่งั้นเลือกวันนั้นในฟอร์มแล้วช่องว่างเปล่า พิมพ์ทับแล้วโน้ตเดิมหาย
+        // (ตารางกรอกหลายวันยังไม่มีแถวของวันอนาคตเหมือนเดิม เพราะอ่านจาก `days`)
+        const futureDays = (payload.data && payload.data.future_days_with_records)
+            ? payload.data.future_days_with_records
+            : [];
+        futureDays.forEach((day) => { byDate.set(day.date, day); });
         monthDataCache.set(month, byDate);
 
         return byDate;

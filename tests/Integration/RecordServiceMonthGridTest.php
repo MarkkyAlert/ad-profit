@@ -76,6 +76,50 @@ final class RecordServiceMonthGridTest extends IntegrationTestCase
         $this->assertNull($byDate['2026-06-01']['revenue']);
     }
 
+    /**
+     * ⭐⭐ วันล่วงหน้าที่มีข้อมูลอยู่แล้ว ต้องส่งกลับไปให้ฟอร์มเติมค่าเดิมได้
+     *
+     * ⚠️ ตารางกรอกหลายวันไม่ควรมีแถวของวันที่ยังมาไม่ถึง (`days` ตัดที่วันนี้)
+     * แต่ฟอร์มกรอกวันเดียวต้องเติมค่าเดิมได้ทุกวันที่มีข้อมูล ไม่งั้น:
+     *   ลงข้อมูลล่วงหน้าไว้ → กลับมาเลือกวันนั้น → ฟอร์มว่างเปล่า → พิมพ์แค่ยอด
+     *   แล้วกดบันทึก → **โน้ตเดิมหายไป** พร้อมข้อความ "บันทึกข้อมูลเรียบร้อยแล้ว"
+     *
+     * คำเตือนอย่างเดียวไม่พอ — ข้อมูลมีให้ใช้อยู่แล้ว แค่ไม่ได้ส่งมา
+     */
+    public function testFutureDaysThatAlreadyHaveDataAreSentBackSeparately(): void
+    {
+        $userId = $this->createUser('owner@example.com');
+        $shopId = $this->createShop($userId);
+        $this->createRecord($shopId, '2026-08-02', 1000.0, 100.0);
+        $this->createRecord($shopId, '2026-08-30', 5000.0, 1000.0, 'สรุปแคมเปญ: ห้ามลืม');
+
+        $data = $this->makeService()->buildEditableMonthGrid($userId, $shopId, '2026-08', self::TODAY)['data'];
+
+        // ตารางกรอกหลายวันยังไม่มีแถวของวันอนาคตเหมือนเดิม
+        $gridDates = array_column($data['days'], 'date');
+        $this->assertNotContains('2026-08-30', $gridDates, 'ตารางกรอกหลายวันมีแถวของวันที่ยังมาไม่ถึง');
+        $this->assertLessThanOrEqual(self::TODAY, (string)max($gridDates));
+
+        // แต่ฟอร์มวันเดียวต้องเติมค่าเดิมของวันนั้นได้
+        $future = $data['future_days_with_records'] ?? [];
+        $this->assertCount(1, $future, 'ไม่ได้ส่งวันล่วงหน้าที่มีข้อมูลกลับมา — โน้ตจะหายตอนบันทึกทับ');
+        $this->assertSame('2026-08-30', $future[0]['date']);
+        $this->assertSame('สรุปแคมเปญ: ห้ามลืม', $future[0]['note']);
+        $this->assertSame(5000.0, $future[0]['revenue']);
+    }
+
+    /** ⭐ วันล่วงหน้าที่ยังไม่มีข้อมูล ต้องไม่ถูกส่งมา (ไม่ใช่ทุกวันที่เหลือของเดือน) */
+    public function testEmptyFutureDaysAreNotSentBack(): void
+    {
+        $userId = $this->createUser('owner@example.com');
+        $shopId = $this->createShop($userId);
+        $this->createRecord($shopId, '2026-08-02', 1000.0, 100.0);
+
+        $data = $this->makeService()->buildEditableMonthGrid($userId, $shopId, '2026-08', self::TODAY)['data'];
+
+        $this->assertSame([], $data['future_days_with_records'] ?? null);
+    }
+
     public function testRejectsShopOfAnotherUser(): void
     {
         $ownerId = $this->createUser('owner@example.com');
