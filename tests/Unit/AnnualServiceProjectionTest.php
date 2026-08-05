@@ -183,9 +183,11 @@ final class AnnualServiceProjectionTest extends TestCase
         $recordRepository->method('getMonthlyTotalsByMonthRange')->willReturnCallback(
             static function (int $shopId, string $start, string $end): array {
                 $rows = [
-                    ['month_key' => '2026-06', 'total_revenue' => 3000.0, 'total_ad_cost' => 1000.0, 'days_count' => 28],
-                    ['month_key' => '2026-07', 'total_revenue' => 4000.0, 'total_ad_cost' => 1000.0, 'days_count' => 28],
-                    ['month_key' => '2026-08', 'total_revenue' => 5000.0, 'total_ad_cost' => 1000.0, 'days_count' => 28],
+                    // ⚠️ วันนี้คือ 15 ส.ค. — ส.ค. จึงกรอกได้มากสุด 15 วัน
+                    // (ของเดิมใส่ 28 วัน ซึ่งเป็นไปไม่ได้จริง)
+                    ['month_key' => '2026-06', 'total_revenue' => 3000.0, 'total_ad_cost' => 1000.0, 'days_count' => 30],
+                    ['month_key' => '2026-07', 'total_revenue' => 4000.0, 'total_ad_cost' => 1000.0, 'days_count' => 31],
+                    ['month_key' => '2026-08', 'total_revenue' => 2000.0, 'total_ad_cost' => 1000.0, 'days_count' => 15],
                 ];
 
                 return array_values(array_filter(
@@ -202,16 +204,31 @@ final class AnnualServiceProjectionTest extends TestCase
 
         $summary = $service->buildYearlySummary(1, 1, 2026, self::TODAY)['data']['summary'];
 
-        // กำไร 2000 + 3000 + 4000 = 9000 · avg 3000
+        // กำไรที่ทำได้จริง 2000 + 3000 + 1000 = 6000
+        $actualProfit = 6000.0;
+
+        // ⚠️ ส.ค. กรอก 15 จาก 31 วัน = ยังไม่ถึงครึ่งเดือน จึง **ไม่เข้าฐานคำนวณ**
+        // (เดือนที่กรอกน้อยเกินไปไม่ใช่ตัวแทนของเดือนนั้น) → ฐาน = มิ.ย. + ก.ค.
+        // เดือนปัจจุบันจะเข้าฐานเมื่อผ่านครึ่งเดือน และตอนนั้นต้องถูกเทียบเป็น
+        // "ถ้าทำแบบนี้ทั้งเดือน" ก่อน ไม่งั้นค่าเฉลี่ยร่วงทันทีในวันที่ข้ามครึ่งเดือน
+        $average = (2000.0 + 3000.0) / 2;
+        $lowest = 2000.0;
+
         // เหลือ ก.ย.–ธ.ค. = 4 เดือนเต็ม + เศษของ ส.ค. อีก 16/31 (วันนี้คือ 15 ส.ค.)
         $effectiveMonths = 4 + 16 / 31;
 
         $this->assertTrue($summary['projection']['available']);
-        $this->assertSame(9000.0, $summary['profit']);
-        $this->assertSame(3000.0, $summary['projection']['avg_recent']);
+        $this->assertSame($actualProfit, $summary['profit']);
+        $this->assertSame(round($average, 2), $summary['projection']['avg_recent']);
         $this->assertSame(4, $summary['projection']['months_remaining']);
-        $this->assertSame(round(9000.0 + $effectiveMonths * 3000.0, 2), $summary['projection']['projection_mid']);
-        $this->assertSame(round(9000.0 + $effectiveMonths * 2000.0, 2), $summary['projection']['projection_low']);
+        $this->assertSame(
+            round($actualProfit + $effectiveMonths * $average, 2),
+            $summary['projection']['projection_mid']
+        );
+        $this->assertSame(
+            round($actualProfit + $effectiveMonths * $lowest, 2),
+            $summary['projection']['projection_low']
+        );
     }
 
     public function testPastYearSummaryHasNoProjection(): void

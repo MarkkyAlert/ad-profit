@@ -48,8 +48,10 @@ final class AnnualServiceProjectionCurrentMonthTest extends TestCase
     /** ⭐ ต้นเดือน ส.ค. → ยังเหลืออีก 27 จาก 31 วันของเดือนนี้ที่ต้องนับ */
     public function testRemainderOfTheCurrentMonthCountsTowardTheProjection(): void
     {
-        // 3 เดือนล่าสุดกำไรเดือนละ 2000 เท่ากันหมด → avg = 2000
-        $months = $this->monthRows([[6, 2000.0, 30], [7, 2000.0, 31], [8, 2000.0, 31]]);
+        // ⚠️ วันนี้คือ 4 ส.ค. — ส.ค. จึงกรอกได้มากสุด 4 วัน
+        // (ของเดิมใส่ 31 วันคู่กับวันที่ 4 ซึ่งเป็นไปไม่ได้จริง เคสที่พังจริงจึงไม่เคยถูกแตะ)
+        // ส.ค. กรอก 4 วัน = ไม่ถึงครึ่งเดือน → ไม่เข้าฐานคำนวณ · ฐาน = มิ.ย. + ก.ค. → avg 2000
+        $months = $this->monthRows([[6, 2000.0, 30], [7, 2000.0, 31], [8, 258.06, 4]]);
 
         $projection = $this->makeService()
             ->calculateYearEndProjection($months, 6000.0, 8, true, 2026, '2026-08-04');
@@ -80,7 +82,8 @@ final class AnnualServiceProjectionCurrentMonthTest extends TestCase
      */
     public function testDecemberStillProjectsTheRestOfTheMonth(): void
     {
-        $months = $this->monthRows([[10, 2000.0, 31], [11, 2000.0, 30], [12, 2000.0, 31]]);
+        // ⚠️ วันนี้คือ 10 ธ.ค. — ธ.ค. กรอกได้มากสุด 10 วัน (ไม่ถึงครึ่ง → ไม่เข้าฐาน)
+        $months = $this->monthRows([[10, 2000.0, 31], [11, 2000.0, 30], [12, 645.16, 10]]);
 
         $projection = $this->makeService()
             ->calculateYearEndProjection($months, 20000.0, 12, true, 2026, '2026-12-10');
@@ -112,5 +115,47 @@ final class AnnualServiceProjectionCurrentMonthTest extends TestCase
 
         $this->assertGreaterThanOrEqual(0.0, $projection['current_month_remaining_ratio']);
         $this->assertLessThan(1.0, $projection['current_month_remaining_ratio']);
+    }
+
+    /**
+     * ⭐⭐ ประมาณการต้องไม่กระโดดตอนเดือนปัจจุบันผ่านครึ่งเดือน
+     *
+     * ⚠️ เกิดขึ้นจริง: ร้านทำกำไรวันละ ฿1,000 เท่ากันเป๊ะ กรอกครบทุกวัน
+     *   15 ส.ค. → ฿362,484 – ฿367,000
+     *   16 ส.ค. → ฿299,742 – ฿367,000   ← ขอบล่างหายไป ฿62,742 ข้ามคืน
+     * ผู้ใช้แค่บันทึกวันธรรมดาอีก 1 วัน ไม่มีอะไรแย่ลงเลย
+     *
+     * สาเหตุ: เดือนปัจจุบันเข้าฐานคำนวณตอนกรอกถึงครึ่งเดือน แต่เข้าไปด้วยกำไร
+     * "ครึ่งเดือน" ปนกับเดือนอื่นที่เป็นกำไร "เต็มเดือน"
+     *
+     * ⚠️ เทสต์เดิมในไฟล์นี้ใช้ `days_count = 31` ของเดือน ส.ค. คู่กับ `$today` วันที่ 4
+     * ซึ่งเป็นไปไม่ได้จริง เคสนี้จึงไม่เคยถูกแตะ
+     */
+    public function testTheProjectionDoesNotJumpWhenTheCurrentMonthPassesHalfway(): void
+    {
+        // พ.ค.–ก.ค. กรอกครบ กำไรวันละ 1,000 · ส.ค. กรอกถึงวันปัจจุบัน
+        $before = $this->monthRows([
+            [5, 31000.0, 31], [6, 30000.0, 30], [7, 31000.0, 31], [8, 15000.0, 15],
+        ]);
+        $after = $this->monthRows([
+            [5, 31000.0, 31], [6, 30000.0, 30], [7, 31000.0, 31], [8, 16000.0, 16],
+        ]);
+
+        $service = $this->makeService();
+        $onThe15th = $service->calculateYearEndProjection($before, 15000.0, 8, true, 2026, '2026-08-15');
+        $onThe16th = $service->calculateYearEndProjection($after, 16000.0, 8, true, 2026, '2026-08-16');
+
+        $this->assertTrue($onThe15th['available'] ?? false);
+        $this->assertTrue($onThe16th['available'] ?? false);
+
+        $drop = (float)$onThe15th['projection_low'] - (float)$onThe16th['projection_low'];
+
+        // บันทึกเพิ่มอีก 1 วันที่ผลงานเท่าเดิม ขอบล่างต้องไม่ร่วง
+        // เผื่อไว้ 5% ของขอบล่าง — ความต่างที่เหลือมาจากจำนวนวันที่เหลือลดลง 1 วัน ซึ่งถูกต้อง
+        $this->assertLessThan(
+            (float)$onThe15th['projection_low'] * 0.05,
+            abs($drop),
+            'บันทึกวันธรรมดาอีก 1 วันแล้วประมาณการกระโดด'
+        );
     }
 }
