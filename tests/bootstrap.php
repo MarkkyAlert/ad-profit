@@ -42,11 +42,13 @@ if (!defined('LOGIN_ACCOUNT_MAX_ATTEMPTS')) {
 if (!defined('LOGIN_ACCOUNT_WINDOW_SECONDS')) {
     define('LOGIN_ACCOUNT_WINDOW_SECONDS', 900);
 }
-// ⚠️ ย่อเพดานเวลารอในเทสต์ — ของจริงคือ 3000 มิลลิวินาที ซึ่งจะทำให้ชุดเทสต์ช้ามาก
-// แต่ต้อง **ไม่เล็กเกินไป** ด้วย: การจับเวลามีความคลาดเคลื่อนราว ±50 มิลลิวินาที
-// ถ้าตั้ง 60 ความคลาดเคลื่อนจะกลบสิ่งที่วัด แล้วเทสต์จะเดี๋ยวเขียวเดี๋ยวแดงเอง
+// ⚠️ ย่อเพดานเวลารอในเทสต์ — ของจริงคือ 1500 มิลลิวินาที
+// เทสต์ทุกตัวที่ตรวจ "ทางไหนหน่วงบ้าง" ใช้ตัวดักแทนนาฬิกา ค่านี้จึงเล็กได้
+// เหลือแค่ `testTheDelayActuallyWaits` ที่วัดเวลาจริง ซึ่งวัดเฉพาะเมธอดที่หน่วง
+// (ภาระของเครื่องทำให้ช้าลงได้ แต่เร็วขึ้นไม่ได้ จึงไม่มีทางแดงเพราะเครื่องช้า)
+// ⚠️ ต้อง **ไม่เป็น 0** ไม่งั้นเทสต์นั้นจะผ่านแม้ถอด usleep ออก
 if (!defined('LOGIN_ACCOUNT_MAX_DELAY_MS')) {
-    define('LOGIN_ACCOUNT_MAX_DELAY_MS', 400);
+    define('LOGIN_ACCOUNT_MAX_DELAY_MS', 50);
 }
 if (!defined('SESSION_IDLE_TIMEOUT_SECONDS')) {
     define('SESSION_IDLE_TIMEOUT_SECONDS', 14400);

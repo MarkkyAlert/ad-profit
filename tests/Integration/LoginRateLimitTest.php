@@ -27,13 +27,6 @@ final class LoginRateLimitTest extends IntegrationTestCase
 {
     private const OFFICE_IP = '198.51.100.7';
 
-    /**
-     * เส้นแบ่ง "โดนหน่วง" กับ "ไม่โดนหน่วง"
-     *
-     * ⚠️ ต้องเผื่อความคลาดเคลื่อนของการจับเวลา (~±50 มิลลิวินาที) แต่ต้องไม่เผื่อจน
-     * เทสต์ผ่านทั้งที่ไม่มีการหน่วงเลย — 60% ของเวลาหน่วงจริงห่างจากทั้งสองฝั่งพอ
-     */
-    private const THROTTLE_THRESHOLD_MS = LOGIN_ACCOUNT_MAX_DELAY_MS * 0.6;
 
     protected function setUp(): void
     {
@@ -48,6 +41,29 @@ final class LoginRateLimitTest extends IntegrationTestCase
             session_start(['use_cookies' => '0', 'cache_limiter' => '']);
         }
         $_SESSION = [];
+    }
+
+    /**
+     * AuthService ที่บันทึกว่า "ถูกสั่งให้หน่วงกี่มิลลิวินาที" แทนการรอจริง
+     *
+     * ทำให้ตรวจได้ว่าทางไหนเรียกการหน่วงบ้างและด้วยค่าเท่าไร โดยไม่ต้องพึ่งนาฬิกา
+     */
+    private function spyingService()
+    {
+        return new class (
+            $this->pdo,
+            new UserRepository($this->pdo),
+            new ShopRepository($this->pdo),
+            new PasswordResetRepository($this->pdo)
+        ) extends AuthService {
+            /** @var list<int> */
+            public array $throttleDelays = [];
+
+            protected function applyAccountThrottleDelay(int $attempts): void
+            {
+                $this->throttleDelays[] = $this->accountThrottleDelayMilliseconds($attempts);
+            }
+        };
     }
 
     private function service(): AuthService
@@ -72,31 +88,6 @@ final class LoginRateLimitTest extends IntegrationTestCase
     private function wasThrottled(array $result): bool
     {
         return str_contains((string)($result['error'] ?? ''), 'บ่อยเกินไป');
-    }
-
-    /** เวลาที่ใช้ล็อกอิน 1 ครั้ง (มิลลิวินาที) */
-    private function timeLogin(AuthService $service, string $email, string $password, string $ip): float
-    {
-        $startedAt = microtime(true);
-        $service->login($email, $password, $ip);
-
-        return (microtime(true) - $startedAt) * 1000;
-    }
-
-    /**
-     * เวลาพื้นฐานของการล็อกอินที่ไม่โดนหน่วง
-     *
-     * ⚠️ ต้องวัดจริง ไม่ใช่ตั้งเป็นตัวเลขตายตัว — การตรวจรหัสผ่านกินเวลาหลักร้อย
-     * มิลลิวินาทีอยู่แล้ว ถ้าเทียบกับเลขตายตัวเล็ก ๆ เทสต์จะผ่านแม้ถอดการหน่วงออก
-     */
-    private function baselineLoginMilliseconds(AuthService $service): float
-    {
-        // ⚠️ ต้องยิงทิ้ง 1 ครั้งก่อนจับเวลา — ครั้งแรกของโปรเซสต้องสร้าง hash หลอก
-        // (ตัวที่ใช้เผาเวลาให้เท่ากับการ verify จริง) ซึ่งกินเวลาหลายร้อยมิลลิวินาที
-        // ถ้าไม่ยิงทิ้งก่อน "เวลาพื้นฐาน" จะสูงกว่าความจริงจนกลบเวลาหน่วงมิด
-        $this->timeLogin($service, 'baseline-warmup@example.com', 'เดา', '192.0.2.2');
-
-        return $this->timeLogin($service, 'baseline-probe@example.com', 'เดา', '192.0.2.1');
     }
 
     private function accountAttempts(): int
@@ -234,15 +225,21 @@ final class LoginRateLimitTest extends IntegrationTestCase
     }
 
     /**
-     * ⭐⭐ ไล่เดาบัญชีเดียวจาก **หลายเครื่อง** ต้องช้าลงเรื่อย ๆ
+     * ⭐⭐ ไล่เดาบัญชีเดียวจาก **หลายเครื่อง** ต้องถูกหน่วง
      *
      * bucket อีก 2 ตัวผูกกับ IP ทั้งคู่ คนร้ายที่หมุนเปลี่ยน IP จึงเลี่ยงได้หมด
      * (แต่ละ IP ใหม่เริ่มนับ 0) · bucket ต่อบัญชีนับรวมทุกเครื่อง
+     *
+     * ⚠️⚠️ พิสูจน์ด้วยการ **ดักดูว่าถูกเรียกไหม** ไม่ใช่จับเวลา
+     * เวอร์ชันแรกจับเวลาล็อกอินทั้งกระบวนการแล้วเทียบกับเวลาปกติ — ผ่านตอนรัน
+     * ไฟล์เดียว แต่แดงตอนรันทั้งชุด เพราะเวลาตรวจรหัสผ่านแกว่งเป็นหลักวินาที
+     * เมื่อเครื่องมีภาระ ขณะที่สิ่งที่วัดคือ 0.4 วินาที · เทสต์ที่เดี๋ยวเขียวเดี๋ยวแดง
+     * แย่กว่าไม่มีเทสต์ เพราะทำให้คนเลิกเชื่อสีแดง
      */
     public function testGuessingOneAccountFromManyMachinesGetsSlower(): void
     {
         $this->makeUser('victim@example.com');
-        $service = $this->service();
+        $service = $this->spyingService();
 
         // เดาจาก IP ใหม่ทุกครั้ง — bucket ที่ผูกกับ IP จึงไม่มีวันชนเพดาน
         for ($attempt = 1; $attempt <= (int)LOGIN_ACCOUNT_MAX_ATTEMPTS; $attempt++) {
@@ -250,18 +247,41 @@ final class LoginRateLimitTest extends IntegrationTestCase
             $this->assertFalse($result['success'] ?? false);
         }
 
-        $baselineMs = $this->baselineLoginMilliseconds($service);
-        $throttledMs = $this->timeLogin($service, 'victim@example.com', 'เดา', '198.51.100.200');
-
-        $this->assertGreaterThan(
-            0,
-            $this->accountAttempts(),
-            'ไม่มี bucket ต่อบัญชีเลย — การไล่เดาจากหลายเครื่องไม่ถูกนับ'
+        $this->assertSame(
+            array_fill(0, (int)LOGIN_ACCOUNT_MAX_ATTEMPTS, 0),
+            $service->throttleDelays,
+            'ยังไม่เกินเพดานแต่โดนหน่วงแล้ว'
         );
+
+        $service->throttleDelays = [];
+        $service->login('victim@example.com', 'เดา', '198.51.100.200');
+
+        $this->assertSame(
+            [(int)LOGIN_ACCOUNT_MAX_DELAY_MS],
+            $service->throttleDelays,
+            'เกินเพดานต่อบัญชีแล้วแต่ไม่ถูกหน่วง — ไล่เดาจากหลายเครื่องได้ฟรี'
+        );
+    }
+
+    /**
+     * ⭐ การหน่วงต้องรออยู่จริง ไม่ใช่คำนวณเลขไว้เฉย ๆ
+     *
+     * วัดเฉพาะเมธอดที่หน่วง (ไม่มีอย่างอื่นปน) — ภาระของเครื่องทำให้ช้าลงได้
+     * แต่ทำให้เร็วขึ้นไม่ได้ เทสต์นี้จึงไม่มีทางแดงเพราะเครื่องช้า
+     */
+    public function testTheDelayActuallyWaits(): void
+    {
+        $service = $this->service();
+        $apply = new \ReflectionMethod(AuthService::class, 'applyAccountThrottleDelay');
+
+        $startedAt = microtime(true);
+        $apply->invoke($service, (int)LOGIN_ACCOUNT_MAX_ATTEMPTS + 1);
+        $elapsedMs = (microtime(true) - $startedAt) * 1000;
+
         $this->assertGreaterThanOrEqual(
-            self::THROTTLE_THRESHOLD_MS,
-            $throttledMs - $baselineMs,
-            'เกินเพดานต่อบัญชีแล้วแต่ตอบเร็วเท่าเดิม — การหน่วงไม่ได้ทำงาน'
+            (int)LOGIN_ACCOUNT_MAX_DELAY_MS * 0.9,
+            $elapsedMs,
+            'คำนวณเวลาหน่วงไว้แต่ไม่ได้รอจริง'
         );
     }
 
@@ -342,27 +362,35 @@ final class LoginRateLimitTest extends IntegrationTestCase
     }
 
     /**
-     * ⭐ อีเมลที่ไม่มีบัญชีต้องตอบช้าเท่ากับอีเมลที่มีบัญชี
+     * ⭐ อีเมลที่ไม่มีบัญชีต้องถูกหน่วงเท่ากับอีเมลที่มีบัญชี
      *
      * ถ้าไม่เท่ากัน คนร้ายจับเวลาก็รู้ได้ว่าอีเมลไหนมีบัญชีอยู่จริง — ซึ่งเป็นสิ่งที่
      * ข้อความ "อีเมลหรือรหัสผ่านไม่ถูกต้อง" (ตอบเหมือนกันทุกกรณี) ตั้งใจปิดไว้
      */
     public function testAnUnknownEmailIsThrottledJustLikeARealOne(): void
     {
-        $service = $this->service();
+        $this->makeUser('real@example.com');
+        $service = $this->spyingService();
 
-        for ($attempt = 1; $attempt <= (int)LOGIN_ACCOUNT_MAX_ATTEMPTS; $attempt++) {
-            $service->login('ghost@example.com', 'เดา', '203.0.113.' . $attempt);
+        foreach (['real@example.com', 'ghost@example.com'] as $email) {
+            for ($attempt = 1; $attempt <= (int)LOGIN_ACCOUNT_MAX_ATTEMPTS; $attempt++) {
+                $service->login($email, 'เดา', '203.0.113.' . $attempt);
+            }
         }
 
-        $baselineMs = $this->baselineLoginMilliseconds($service);
-        $ghostMs = $this->timeLogin($service, 'ghost@example.com', 'เดา', '198.51.100.201');
+        $service->throttleDelays = [];
+        $service->login('real@example.com', 'เดา', '198.51.100.210');
+        $realDelays = $service->throttleDelays;
 
-        $this->assertGreaterThanOrEqual(
-            self::THROTTLE_THRESHOLD_MS,
-            $ghostMs - $baselineMs,
-            'อีเมลที่ไม่มีบัญชีตอบเร็วกว่า — จับเวลาแล้วรู้ได้ว่าอีเมลไหนมีอยู่จริง'
+        $service->throttleDelays = [];
+        $service->login('ghost@example.com', 'เดา', '198.51.100.211');
+
+        $this->assertSame(
+            $realDelays,
+            $service->throttleDelays,
+            'อีเมลที่ไม่มีบัญชีถูกหน่วงไม่เท่ากัน — จับเวลาแล้วรู้ได้ว่าอีเมลไหนมีอยู่จริง'
         );
+        $this->assertNotSame([], $realDelays, 'ไม่มีการหน่วงเลยทั้งสองทาง — เทียบแล้วไม่ได้พิสูจน์อะไร');
     }
 
     /** ⭐ ขอลิงก์รีเซ็ตรหัสผ่านซ้ำ ๆ ต้องถูกกัน (เพดานแค่ 1 ครั้งต่อหน้าต่าง) */

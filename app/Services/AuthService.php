@@ -674,7 +674,7 @@ class AuthService
      * ⚠️ ต้องมีเพดานเวลารอ — ไม่งั้นการยิงจำนวนมากจะทำให้ PHP ค้างรอกันเต็มเครื่อง
      * (กลายเป็นคนร้ายล่มเว็บได้ด้วยการเดารหัส ซึ่งแย่กว่าเดิม)
      */
-    private function accountThrottleDelayMilliseconds(int $attempts, ?int $maxDelayMs = null): int
+    protected function accountThrottleDelayMilliseconds(int $attempts, ?int $maxDelayMs = null): int
     {
         $over = $attempts - $this->getMaxAttemptsForAction(self::LOGIN_ACCOUNT_ACTION);
         if ($over <= 0) {
@@ -694,8 +694,15 @@ class AuthService
         return (int)min($maxDelay, self::THROTTLE_BASE_DELAY_MS * (2 ** ($over - 1)));
     }
 
-    /** หน่วงจริง — แยกจากการคำนวณเพื่อให้เทสต์ตรวจตัวเลขได้โดยไม่ต้องรอ */
-    private function applyAccountThrottleDelay(int $attempts): void
+    /**
+     * หน่วงจริง — แยกจากการคำนวณเพื่อให้เทสต์ตรวจตัวเลขได้โดยไม่ต้องรอ
+     *
+     * ⚠️ `protected` เพื่อให้เทสต์สืบทอดแล้วดักดูว่า "ทางไหนเรียกมันบ้าง" ได้
+     * การพิสูจน์ด้วยการจับเวลาล็อกอินทั้งกระบวนการใช้ไม่ได้ - สัญญาณคือ 400ms
+     * แต่เวลาตรวจรหัสผ่านแกว่งเป็นหลักวินาทีเมื่อเครื่องมีภาระ เทสต์จึงเดี๋ยวเขียว
+     * เดี๋ยวแดง (เกิดขึ้นจริง: ผ่านตอนรันไฟล์เดียว แดงตอนรันทั้งชุด)
+     */
+    protected function applyAccountThrottleDelay(int $attempts): void
     {
         $delayMs = $this->accountThrottleDelayMilliseconds($attempts);
         if ($delayMs > 0) {
