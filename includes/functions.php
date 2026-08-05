@@ -298,7 +298,15 @@ function resolve_safe_redirect_path(string $fallback, ?string $postRedirectTo = 
     }
 
     foreach ($candidates as $candidateRaw) {
-        $candidate = trim($candidateRaw);
+        // ⚠️⚠️ ต้องลบแท็บ/ขึ้นบรรทัด **ทั้งสตริง** ไม่ใช่แค่หัวท้าย
+        //
+        // ตามสเปกของเบราว์เซอร์ อักขระ TAB / LF / CR ถูก **ลบทิ้งก่อนแปลง URL**
+        // ค่าอย่าง `/<TAB>/evil.com` จึงกลายเป็น `//evil.com` = พาออกนอกเว็บได้
+        // (วัดจริง: `new URL("/\t/evil.example", …)` ได้ `https://evil.example/`)
+        //
+        // `trim()` ตัดแค่หัวท้าย แท็บที่อยู่ *หลัง* เครื่องหมาย `/` จึงรอดด่านไปได้
+        // — เป็นช่องเดิมกับสแลชกลับหัว แค่เปลี่ยนตัวอักษร
+        $candidate = trim(str_replace(["\t", "\n", "\r"], '', $candidateRaw));
         if ($candidate === '') {
             continue;
         }

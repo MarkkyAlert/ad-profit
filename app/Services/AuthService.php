@@ -507,8 +507,9 @@ class AuthService
                     $this->db->rollBack();
                 }
 
-                $this->markFailedAttempt('reset_password', $clientIp, $rateLimitSubject);
-
+                // ⚠️ ไม่ต้องนับซ้ำ — จองคิวไปแล้วที่หัวเมธอด
+                // เดิมนับ 2 ครั้งต่อการกด 1 ครั้ง · กดลิงก์ที่หมดอายุ 3 ครั้งก็ชนเพดาน 5
+                // ทั้งที่ควรกดได้ 5 ครั้ง (วัดจริง: ตัวนับขึ้นเป็น 2, 4, 6)
                 return [
                     'success' => false,
                     'error' => 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว',

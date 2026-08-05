@@ -393,6 +393,30 @@ final class LoginRateLimitTest extends IntegrationTestCase
         $this->assertNotSame([], $realDelays, 'ไม่มีการหน่วงเลยทั้งสองทาง — เทียบแล้วไม่ได้พิสูจน์อะไร');
     }
 
+    /**
+     * ⭐⭐ กดลิงก์ที่หมดอายุ ต้องถูกนับครั้งละ 1 ไม่ใช่ 2
+     *
+     * ⚠️ เดิม `resetPassword()` เรียกทั้ง `reserveAttempt()` ที่หัวเมธอด **และ**
+     * `markFailedAttempt()` อีกครั้งในกิ่ง "ลิงก์ไม่ถูกต้อง" → นับ 2 ครั้งต่อการกด 1 ครั้ง
+     * ผู้ใช้ที่กดลิงก์เก่าในอีเมล (ซึ่งหมดอายุไปแล้ว) จะชนเพดานตั้งแต่ครั้งที่ 3
+     * ทั้งที่เพดานคือ 5 · ถังนี้ผูกกับ IP ล้วน ออฟฟิศจึงแชร์โควตากันทั้งตึก
+     */
+    public function testAnExpiredLinkCountsOncePerClick(): void
+    {
+        $this->makeUser('owner@example.com');
+        $service = $this->service();
+
+        for ($click = 1; $click <= 3; $click++) {
+            $service->resetPassword('ลิงก์ที่ใช้ไม่ได้', 'NewPass12345', 'NewPass12345', '203.0.113.88');
+        }
+
+        $attempts = (int)$this->pdo
+            ->query("SELECT attempts FROM auth_rate_limits WHERE action_type = 'reset_password' LIMIT 1")
+            ->fetchColumn();
+
+        $this->assertSame(3, $attempts, 'กด 3 ครั้งถูกนับ ' . $attempts . ' ครั้ง — ชนเพดานเร็วกว่าที่ควร');
+    }
+
     /** ⭐ ขอลิงก์รีเซ็ตรหัสผ่านซ้ำ ๆ ต้องถูกกัน (เพดานแค่ 1 ครั้งต่อหน้าต่าง) */
     public function testRepeatedPasswordResetRequestsAreThrottled(): void
     {

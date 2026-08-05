@@ -91,6 +91,12 @@ final class SharedHelperContractTest extends TestCase
             'โดเมนเต็ม' => ['https://evil.example.com/steal'],
             'ไม่ระบุโปรโตคอล' => ['//evil.example.com/steal'],
             'สแลชกลับหัว (เบราว์เซอร์อ่านเหมือน //)' => ['/\\evil.example.com/steal'],
+            // ⚠️ เบราว์เซอร์ **ลบแท็บ/ขึ้นบรรทัดทิ้งก่อนแปลง URL** ตามสเปก
+            // `/<TAB>/evil.com` จึงกลายเป็น `//evil.com` = ออกนอกเว็บได้
+            // (วัดจริง: new URL("/\t/evil.example") → https://evil.example/)
+            'แท็บคั่นกลาง' => ["/\t/evil.example.com/steal"],
+            'แท็บคั่นกลาง + สแลชกลับหัว' => ["/\t\\evil.example.com/steal"],
+            'ขึ้นบรรทัดคั่นกลาง' => ["/\n/evil.example.com/steal"],
             'โปรโตคอลแปลก' => ['javascript:alert(1)'],
         ];
     }
