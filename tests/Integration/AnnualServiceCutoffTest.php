@@ -33,7 +33,8 @@ final class AnnualServiceCutoffTest extends IntegrationTestCase
         $shopId = $this->createShop($userId);
 
         $this->createRecord($shopId, '2026-01-10', 5000.0, 1000.0);   // +4000
-        $this->createRecord($shopId, '2026-08-10', 3000.0, 2500.0);   // +500
+        $this->createRecord($shopId, '2026-07-10', 2000.0, 1000.0);   // +1000 (เดือนที่จบแล้ว)
+        $this->createRecord($shopId, '2026-08-10', 3000.0, 2500.0);   // +500 (เดือนปัจจุบัน ยังไม่จบ)
 
         $data = $this->makeService()->buildYearlySummary($userId, $shopId, 2026, self::TODAY)['data'];
 
@@ -44,8 +45,10 @@ final class AnnualServiceCutoffTest extends IntegrationTestCase
         $this->assertTrue($data['has_data']);
 
         // worst ต้องเป็นเดือนที่มีข้อมูลจริง ไม่ใช่เดือนอนาคต
-        $this->assertSame(8, $data['summary']['worst_month']['month']);
-        $this->assertSame(500.0, $data['summary']['worst_month']['profit']);
+        // ⚠️ และต้องไม่ใช่เดือนปัจจุบันที่ยังไม่จบด้วย — ส.ค. กำไรน้อยสุด (฿500) ก็จริง
+        // แต่ยังกรอกไม่ครบเดือน เทียบยอดสะสมกับเดือนที่จบแล้วไม่ได้
+        $this->assertSame(7, $data['summary']['worst_month']['month']);
+        $this->assertSame(1000.0, $data['summary']['worst_month']['profit']);
         $this->assertSame(1, $data['summary']['best_month']['month']);
         $this->assertSame(4000.0, $data['summary']['best_month']['profit']);
     }

@@ -192,12 +192,27 @@ class AnnualService
                     $lossMonths++;
                 }
 
-                if ($bestMonth === null || $monthProfit > (float)$bestMonth['profit']) {
-                    $bestMonth = $monthRow;
-                }
+                // ⚠️⚠️ เดือนปัจจุบันที่ยังไม่จบ **ไม่เข้าแข่ง**
+                //
+                // การ์ดนี้เทียบด้วยยอดสะสม เดือนที่เพิ่งกรอกไป 3 วันจึงชนะเดือนที่กรอกครบ
+                // 31 วันเสมอ · ร้านที่ทำกำไรวันละ ฿1,000 เท่ากันทุกเดือนจะเห็นว่า
+                // "เดือนแย่สุด = เดือนนี้" ตลอดต้นเดือน ทั้งที่ตารางในหน้าเดียวกันแสดง
+                // กำไรต่อวันของเดือนนี้เท่ากับเดือนอื่นเป๊ะ
+                //
+                // ยังไม่จบเดือน = ยังตัดสินไม่ได้ ไม่ใช่ "แย่" — หลักเดียวกับที่หน้ารวมร้าน
+                // ดันร้านที่ยังไม่มีข้อมูลไปท้ายตาราง แทนที่จะให้ขึ้นอันดับ 1 ด้วยกำไร 0
+                $isUnfinishedCurrentMonth = $month === $lastMonth
+                    && $todayObject->format('Y-m') === $monthKey
+                    && (int)$todayObject->format('j') < (int)$todayObject->format('t');
 
-                if ($worstMonth === null || $monthProfit < (float)$worstMonth['profit']) {
-                    $worstMonth = $monthRow;
+                if (!$isUnfinishedCurrentMonth) {
+                    if ($bestMonth === null || $monthProfit > (float)$bestMonth['profit']) {
+                        $bestMonth = $monthRow;
+                    }
+
+                    if ($worstMonth === null || $monthProfit < (float)$worstMonth['profit']) {
+                        $worstMonth = $monthRow;
+                    }
                 }
             }
 

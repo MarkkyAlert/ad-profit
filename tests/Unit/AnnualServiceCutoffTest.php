@@ -81,13 +81,17 @@ final class AnnualServiceCutoffTest extends TestCase
         $service = $this->makeService($this->totalsFor(2026, [
             [1, 5000.0, 1000.0],   // +4000
             [6, 9000.0, 1000.0],   // +8000
-            [8, 3000.0, 2500.0],   // +500  ← แย่สุดในบรรดาเดือนที่มีข้อมูล
+            [7, 4000.0, 3000.0],   // +1000 ← แย่สุดในบรรดาเดือนที่ **จบแล้ว**
+            [8, 3000.0, 2500.0],   // +500  ← เดือนปัจจุบัน ยังกรอกไม่ครบเดือน
         ]));
 
         $summary = $service->buildYearlySummary(1, 1, 2026, self::TODAY)['data']['summary'];
 
         $this->assertSame(6, $summary['best_month']['month']);
-        $this->assertSame(8, $summary['worst_month']['month']);
+
+        // ⚠️ ส.ค. กำไรน้อยสุดก็จริง แต่เป็นเดือนปัจจุบันที่ยังไม่จบ
+        // เทียบยอดสะสมกับเดือนที่จบแล้วไม่ได้ — ยังไม่จบ = ยังตัดสินไม่ได้ ไม่ใช่ "แย่"
+        $this->assertSame(7, $summary['worst_month']['month']);
         $this->assertLessThanOrEqual(8, $summary['worst_month']['month']);   // ไม่ใช่เดือนอนาคต
     }
 

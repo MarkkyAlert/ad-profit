@@ -212,15 +212,18 @@ final class OverviewAnnualServiceAnalysisTest extends TestCase
     public function testFutureMonthIsNeverBestOrWorst(): void
     {
         $service = $this->makeService($this->totalsFor(2026, [
-            [1, 8, 3000.0, 1000.0],
+            [1, 7, 3000.0, 1000.0],    // ก.ค. จบเดือนแล้ว = เดือนเดียวที่เข้าแข่งได้
+            [1, 8, 5000.0, 1000.0],    // ส.ค. = เดือนปัจจุบัน ยังไม่จบ
             // ธ.ค. เกิน cutoff แม้มีเรคอร์ดล่วงหน้า
             [1, 12, 90000.0, 0.0],
         ]));
 
         $summary = $service->buildYearlyOverview(1, 2026, self::TODAY)['data']['summary'];
 
-        $this->assertSame(8, $summary['best_month']['month']);
-        $this->assertSame(8, $summary['worst_month']['month']);
+        // ⚠️ เดือนปัจจุบันที่ยังไม่จบก็ไม่เข้าแข่งเหมือนกัน — เทียบด้วยยอดสะสม
+        // เดือนที่เพิ่งกรอกไม่กี่วันจึงชนะเดือนที่กรอกครบเสมอ
+        $this->assertSame(7, $summary['best_month']['month'], 'หยิบเดือนที่ยังไม่จบหรือเดือนอนาคตมาเป็นเดือนดีสุด');
+        $this->assertSame(7, $summary['worst_month']['month'], 'หยิบเดือนที่ยังไม่จบหรือเดือนอนาคตมาเป็นเดือนแย่สุด');
     }
 
     public function testMonthsAreStillRankedWithinCutoffForPastYear(): void

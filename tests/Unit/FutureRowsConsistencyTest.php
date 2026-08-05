@@ -212,6 +212,46 @@ final class FutureRowsConsistencyTest extends TestCase
     }
 
     /**
+     * ⭐ การ์ด "เดือนกำไรแย่สุด" ต้องไม่หยิบเดือนปัจจุบันที่ยังไม่จบ
+     *
+     * ⚠️ เกิดขึ้นจริง: ร้านทำกำไรวันละ ฿1,000 เท่ากันทุกวันตั้งแต่ ม.ค. ถึงวันนี้
+     * การ์ดขึ้นว่า "เดือนแย่สุด: ส.ค. (฿3,000)" เพราะเพิ่งกรอกไป 3 วัน
+     * ขณะที่ตารางในหน้าเดียวกันแสดงกำไรต่อวันของ ส.ค. เท่ากับเดือนอื่นเป๊ะ
+     *
+     * ยังไม่จบเดือน = ยังตัดสินไม่ได้ ไม่ใช่ "แย่"
+     *
+     * ⚠️ ต้องสร้างข้อมูลเองที่นี่ ไม่ใช้ชุดที่ใช้ร่วมกัน — ชุดนั้น ส.ค. มียอดสูงกว่า
+     * เดือนอื่นอยู่แล้ว เดือนปัจจุบันจึงไม่มีทางเป็น "แย่สุด" ไม่ว่าโค้ดจะถูกหรือผิด
+     */
+    public function testTheWorstMonthCardSkipsTheUnfinishedCurrentMonth(): void
+    {
+        $records = $this->createStub(RecordRepository::class);
+        $records->method('getMonthlyTotalsByMonthRange')->willReturn([
+            // ม.ค.–ก.ค. กรอกครบ กำไรวันละ 1,000
+            ['month_key' => '2026-05', 'total_revenue' => 31000.0, 'total_ad_cost' => 0.0, 'days_count' => 31],
+            ['month_key' => '2026-06', 'total_revenue' => 30000.0, 'total_ad_cost' => 0.0, 'days_count' => 30],
+            ['month_key' => '2026-07', 'total_revenue' => 31000.0, 'total_ad_cost' => 0.0, 'days_count' => 31],
+            // ส.ค. วันนี้คือวันที่ 4 → กรอกได้ 4 วัน · ยอดสะสมน้อยสุดโดยธรรมชาติ
+            ['month_key' => '2026-08', 'total_revenue' => 4000.0, 'total_ad_cost' => 0.0, 'days_count' => 4],
+        ]);
+
+        $summary = (new \AnnualService($records, $this->shopRepository(), $this->createStub(GoalRepository::class)))
+            ->buildYearlySummary(1, 1, 2026, self::TODAY)['data']['summary'];
+
+        $this->assertNotNull($summary['worst_month'] ?? null, 'ไม่มีการ์ดเดือนแย่สุด');
+        $this->assertNotSame(
+            '2026-08',
+            (string)($summary['worst_month']['month_key'] ?? ''),
+            'หยิบเดือนปัจจุบันที่กรอกไปแค่ 4 วันมาเป็นเดือนแย่สุด'
+        );
+        $this->assertSame(
+            '2026-06',
+            (string)($summary['worst_month']['month_key'] ?? ''),
+            'ควรเป็น มิ.ย. ซึ่งเป็นเดือนที่จบแล้วและยอดต่ำสุดในบรรดาเดือนที่จบ'
+        );
+    }
+
+    /**
      * ⭐⭐ แท็บ "รายวัน" กับแท็บ "เดือน" ของหน้ารวมร้าน ต้องบอกยอดเท่ากัน
      *
      * ⚠️ เกิดขึ้นจริง: กดสลับแท็บเฉย ๆ ยอดรวมเปลี่ยนจาก ฿8,000 เป็น ฿14,000
