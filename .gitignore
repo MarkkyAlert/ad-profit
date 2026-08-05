@@ -43,3 +43,7 @@ database/*.sql
 !database/sample_data.sql
 !database/migrations/
 !database/migrations/*.sql
+
+# ตัวกันการเข้าถึงผ่านเว็บต้องขึ้นเซิร์ฟเวอร์ไปด้วยเสมอ แม้เนื้อในโฟลเดอร์จะไม่ขึ้น
+!logs/.htaccess
+!uploads/.htaccess

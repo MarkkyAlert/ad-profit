@@ -312,15 +312,23 @@ final class LoginRateLimitTest extends IntegrationTestCase
             );
         }
 
-        $this->assertGreaterThan(
-            0,
-            $delayOf->invoke($service, $cap + 1),
-            'เกินเพดานแล้วยังไม่หน่วงเลย'
+        // ⚠️ ต้องส่งเพดานสูง ๆ เข้าไปเอง ไม่งั้นเพดานที่เทสต์ตั้งไว้ (400) จะกลบ
+        // การคูณสองทุกครั้ง แล้วเทสต์จะผ่านแม้สูตรถูกเปลี่ยนเป็น `max` (พิสูจน์แล้ว)
+        $roomy = 1000000;
+        $this->assertSame(500, $delayOf->invoke($service, $cap + 1, $roomy), 'ครั้งแรกที่เกินต้องหน่วง 500ms');
+        $this->assertSame(1000, $delayOf->invoke($service, $cap + 2, $roomy), 'ครั้งถัดไปต้องเป็นสองเท่า');
+        $this->assertSame(2000, $delayOf->invoke($service, $cap + 3, $roomy), 'ครั้งถัดไปต้องเป็นสองเท่าอีก');
+
+        // ⭐ ช่วงที่ "เพดาน" เป็นตัวตัดสินจริง (ไม่ใช่ทางลัด `$over >= 20`)
+        $this->assertSame(
+            1500,
+            $delayOf->invoke($service, $cap + 10, 1500),
+            'เพดานไม่ได้ตัด — สูตรคูณสองจะพาเวลาหน่วงพุ่งเป็นนาที/ชั่วโมง'
         );
-        $this->assertLessThanOrEqual(
-            (int)LOGIN_ACCOUNT_MAX_DELAY_MS,
-            $delayOf->invoke($service, $cap + 500),
-            'เวลาหน่วงไม่มีเพดาน — ยิงเยอะ ๆ แล้ว PHP จะค้างรอกันจนเว็บล่ม'
+        $this->assertSame(
+            1500,
+            $delayOf->invoke($service, $cap + 500, 1500),
+            'เกินไปไกลมากแล้วยังไม่ถูกเพดานตัด'
         );
     }
 

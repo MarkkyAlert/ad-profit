@@ -87,6 +87,8 @@ final class MoneyInputParsingTest extends TestCase
             'ตัวคั่นปนกันมั่ว' => ['1.2.3'],
             'ขึ้นต้นด้วยตัวคั่น' => ['.5.5'],
             'สัญกรณ์วิทยาศาสตร์' => ['1e3'],
+            'กำกวม: จุด + 000 (ยุโรปแปลว่าหนึ่งพัน)' => ['1.000'],
+            'กำกวม: จุด + 500' => ['2.500'],
             'ลบสองตัว' => ['--5'],
             'ไม่ใช่ตัวเลข' => ['abc'],
             'ตัวเลขปนตัวอักษร' => ['12abc'],
@@ -102,6 +104,45 @@ final class MoneyInputParsingTest extends TestCase
         $this->assertNull(
             $this->csvParse($typed),
             "CSV ยอมรับค่าที่ควรปฏิเสธ: {$typed}"
+        );
+
+        // ⚠️⚠️ ทางที่ 3: ตารางกรอกหลายวัน — เดิมเทสต์นี้ยิงแค่ 2 ทาง ทั้งที่ชื่อเมธอด
+        // บอกว่า "ทุกทาง" · ทางนี้ใช้ `is_numeric()` ซึ่งหลวมกว่ามาก จึงบันทึก
+        // `1.000` เป็น ฿1.00 และ `1e3` เป็น ฿1,000 พร้อมข้อความ "สำเร็จ" (วัดจริงแล้ว)
+        $this->assertFalse(
+            $this->bulkGridAccepts($typed),
+            "ตารางกรอกหลายวันยอมรับค่าที่ควรปฏิเสธ: {$typed}"
+        );
+    }
+
+    /**
+     * ยิงค่าเข้าทาง "ตารางกรอกหลายวัน" แบบเดียวกับที่ `api/records.php` ทำ
+     *
+     * ⚠️ controller ส่งค่าที่ parse ไม่ผ่านมาเป็น **สตริงดิบ** (เพื่อให้ service
+     * รายงานเลขแถวได้) — ต้องจำลองพฤติกรรมนั้นให้ตรง ไม่งั้นเทสต์จะไม่แตะด่านจริง
+     */
+    private function bulkGridAccepts(string $typed): bool
+    {
+        $parsed = parse_decimal_input($typed, true);
+        $cellValue = ($parsed['valid'] ?? false) === true ? $parsed['value'] : $typed;
+
+        $shopRepository = $this->createStub(ShopRepository::class);
+        $shopRepository->method('userCanAccessShop')->willReturn(true);
+
+        $service = new RecordService($this->createStub(RecordRepository::class), $shopRepository);
+
+        $result = $service->upsertManyRecords(1, 1, [[
+            'row_number' => 1,
+            'record_date' => '2026-01-15',
+            'revenue' => $cellValue,
+            'ad_cost' => '0',
+            'note' => null,
+        ]]);
+
+        // ปฏิเสธที่ด่านตัวเลข = สิ่งที่ต้องการ · ผ่านด่านแล้วไปตายที่ DB ไม่นับว่าปฏิเสธ
+        return !str_contains(
+            (string)($result['error'] ?? ''),
+            'กรุณากรอกรายได้และค่าแอดให้ถูกต้อง'
         );
     }
 

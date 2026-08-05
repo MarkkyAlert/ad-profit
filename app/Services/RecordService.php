@@ -546,7 +546,21 @@ class RecordService
         foreach ($filledRows as $row) {
             $rowNumber = (int)$row['row_number'];
 
-            if (!is_numeric($row['revenue']) || !is_numeric($row['ad_cost'])) {
+            // ⚠️⚠️ ต้องใช้กติกากลาง (`parse_decimal_input` → `normalize_money_string`)
+            // ไม่ใช่ `is_numeric()`
+            //
+            // `is_numeric()` รับค่าที่กติกากลาง **ตั้งใจปฏิเสธเพราะอ่านได้สองแบบ**:
+            //   `1.000` → ผ่าน แล้วบันทึกเป็น ฿1.00 (ผู้ใช้ที่ใช้รูปแบบยุโรปหมายถึงหนึ่งพัน)
+            //   `1e3`   → ผ่าน แล้วบันทึกเป็น ฿1,000
+            // ฟอร์มเดี่ยวกับการนำเข้า CSV ปฏิเสธทั้งคู่ · ตารางกรอกหลายวันกลับบันทึกให้
+            // พร้อมข้อความ "สำเร็จ" — ยอดผิดพันเท่าโดยไม่มีอะไรเตือน (วัดจริงแล้ว)
+            //
+            // controller ส่งค่าที่ parse ไม่ผ่านมาเป็น "สตริงดิบ" เพื่อให้รายงานเลขแถวได้
+            // ตรงนี้จึงเป็นด่านจริง และต้องเข้มเท่ากติกากลาง ไม่ใช่หลวมกว่า
+            $revenueParsed = parse_decimal_input($row['revenue']);
+            $adCostParsed = parse_decimal_input($row['ad_cost']);
+
+            if (($revenueParsed['valid'] ?? false) !== true || ($adCostParsed['valid'] ?? false) !== true) {
                 return [
                     'success' => false,
                     'error' => 'แถวที่ ' . $rowNumber . ': กรุณากรอกรายได้และค่าแอดให้ถูกต้อง',
@@ -555,8 +569,8 @@ class RecordService
 
             $validation = $this->validateRecordPayload(
                 (string)$row['record_date'],
-                (float)$row['revenue'],
-                (float)$row['ad_cost'],
+                (float)$revenueParsed['value'],
+                (float)$adCostParsed['value'],
                 $row['note']
             );
 

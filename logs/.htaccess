@@ -1,0 +1,9 @@
+# โฟลเดอร์นี้ไม่มีอะไรที่เบราว์เซอร์ต้องโหลดเลย — ปิดทั้งหมด
+# (หน้าเว็บที่รากโปรเจกต์กับ api/ เท่านั้นที่เปิดให้เข้าถึง)
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

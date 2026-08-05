@@ -674,14 +674,18 @@ class AuthService
      * ⚠️ ต้องมีเพดานเวลารอ — ไม่งั้นการยิงจำนวนมากจะทำให้ PHP ค้างรอกันเต็มเครื่อง
      * (กลายเป็นคนร้ายล่มเว็บได้ด้วยการเดารหัส ซึ่งแย่กว่าเดิม)
      */
-    private function accountThrottleDelayMilliseconds(int $attempts): int
+    private function accountThrottleDelayMilliseconds(int $attempts, ?int $maxDelayMs = null): int
     {
         $over = $attempts - $this->getMaxAttemptsForAction(self::LOGIN_ACCOUNT_ACTION);
         if ($over <= 0) {
             return 0;
         }
 
-        $maxDelay = (int)LOGIN_ACCOUNT_MAX_DELAY_MS;
+        // ⚠️ รับเพดานเข้ามาได้ เพื่อให้เทสต์เห็น "กติกาคูณสอง" จริง ๆ
+        // เพดานที่เทสต์ใช้ (400) ต่ำกว่าค่าตั้งต้น (500) การคูณสองจึงถูกเพดานกลบทุกครั้ง
+        // เทสต์เลยผ่านแม้เปลี่ยน `min` เป็น `max` ซึ่งจะทำให้ผิดครั้งที่ 39 หน่วงนาน
+        // 36 ชั่วโมง (พิสูจน์แล้วว่าเทสต์ชุดเดิมเขียวหมดกับสูตรที่พังแบบนั้น)
+        $maxDelay = $maxDelayMs ?? (int)LOGIN_ACCOUNT_MAX_DELAY_MS;
         if ($over >= 20) {
             // 2 ** 20 ก็เกินเพดานไปไกลแล้ว ไม่ต้องคิดต่อให้เลขล้น
             return $maxDelay;

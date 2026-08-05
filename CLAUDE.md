@@ -42,6 +42,15 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
 - redirect ที่รับค่าจาก user ต้องผ่าน `resolve_safe_redirect_path`
 - **ใช้ shared component เดิม ห้ามสร้างใหม่:** helper ใน `includes/functions.php` (csrf, validation, format, flash, response), guard ใน `includes/auth.php`, `db()` ใน `includes/database.php`
 
+## การเข้าถึงผ่านเว็บ (สำคัญมาก)
+
+- ⚠️⚠️ **รากโปรเจกต์ = `public_html/` บน Hostinger** ทุกไฟล์จึงเสิร์ฟผ่านเว็บโดยปริยาย · เดิม **ไม่มี `.htaccess` เลยสักไฟล์** → `https://โดเมน/.env` ให้รหัสฐานข้อมูลกับรหัสอีเมลไปตรง ๆ (พิสูจน์แล้วว่า `database/schema.sql` · `composer.json` · `CLAUDE.md` โหลดได้จริง)
+  · ตัวกันหลักอยู่ใน **`.htaccess` ที่ราก** — ปิดไฟล์ที่ขึ้นต้นด้วยจุด · ปิดตามนามสกุล (`env sql json lock md log …`) · ปิดโฟลเดอร์ภายในทั้งหมดด้วย `RewriteRule`
+  · ⚠️ **ห้ามพึ่ง `.htaccess` ในแต่ละโฟลเดอร์อย่างเดียว** — `vendor/` `logs/` `uploads/` ถูก .gitignore ไฟล์ข้างในจึงอาจไม่ขึ้นเซิร์ฟเวอร์ (`.gitignore` มี `!logs/.htaccess` / `!uploads/.htaccess` กันไว้แล้ว แต่ `vendor/` ยังพึ่งกฎที่รากอย่างเดียว)
+  · ⚠️ **โปรเจกต์นี้ไม่มีไฟล์ static ที่หน้าเว็บต้องโหลดเลย** (Tailwind/Chart.js มาจาก CDN) การปิด `.json`/`.xml` จึงปลอดภัย — ถ้าอนาคตเพิ่มไฟล์ที่เบราว์เซอร์ต้องโหลด ต้องยกเว้นในกฎ
+  · `WebExposureTest` กวาดโฟลเดอร์จริงมาเทียบกับกฎ เพิ่มโฟลเดอร์ใหม่แล้วลืมปิด = เทสต์แดงทันที
+  · ⚠️ **เทสต์ตรวจได้แค่ "กฎในไฟล์" ไม่ใช่พฤติกรรมจริง** (`php -S` ไม่อ่าน `.htaccess` · nginx ก็ไม่อ่าน) — **หลัง deploy ต้องเปิด `https://โดเมน/.env` ดูด้วยตาว่าได้ 403**
+
 ## Business rules ที่ต้องรักษา
 
 - ผู้ใช้เห็นเฉพาะข้อมูลตัวเอง — ทุก Service ต้อง scope ด้วย user แต่วิธีต่างกัน:

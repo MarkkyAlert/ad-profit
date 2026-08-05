@@ -166,8 +166,13 @@ if (!defined('LOGIN_ACCOUNT_WINDOW_SECONDS')) {
 // = คนร้ายล่มเว็บได้ด้วยการเดารหัส ซึ่งแย่กว่าปัญหาที่ตั้งใจแก้
 // 1.5 วินาที ทำให้การไล่เดาช้าลง ~3 เท่าของเวลา `password_verify()` โดยที่
 // worker ยังไม่ถูกยึดนานเกินไป · **อย่าขึ้นเป็นหลายวินาทีโดยไม่ได้วัดจำนวน worker ก่อน**
+//
+// ⚠️ ต้องมี **เพดานบน** ด้วย — `config_positive_int()` รับจำนวนเต็มบวกอะไรก็ได้
+// พิมพ์ศูนย์เกินไปตัวเดียว (`15000`) = หน่วง 15 วินาทีต่อการพิมพ์รหัสผิด 1 ครั้ง
+// ซึ่งทะลุ `max_execution_time` ของโฮสต์ → ทุกคนที่พิมพ์รหัสผิดได้หน้า error 500
+// แทนข้อความ "อีเมลหรือรหัสผ่านไม่ถูกต้อง" · ท่าเดียวกับ `max(4, …)` ของ PASSWORD_MIN_LENGTH
 if (!defined('LOGIN_ACCOUNT_MAX_DELAY_MS')) {
-    define('LOGIN_ACCOUNT_MAX_DELAY_MS', config_positive_int('LOGIN_ACCOUNT_MAX_DELAY_MS', 1500));
+    define('LOGIN_ACCOUNT_MAX_DELAY_MS', min(5000, config_positive_int('LOGIN_ACCOUNT_MAX_DELAY_MS', 1500)));
 }
 
 if (!defined('PASSWORD_MIN_LENGTH')) {
