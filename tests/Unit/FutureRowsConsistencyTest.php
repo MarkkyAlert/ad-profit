@@ -6,6 +6,7 @@ namespace Tests\Unit;
 
 use DashboardService;
 use GoalRepository;
+use OverviewDailyService;
 use OverviewService;
 use PHPUnit\Framework\TestCase;
 use RecordRepository;
@@ -101,6 +102,29 @@ final class FutureRowsConsistencyTest extends TestCase
             }
         );
         $repository->method('getMonthlyTotalsByShopIdsAndMonthRange')->willReturn([]);
+        $repository->method('getDailyTotalsByShopIdsAndDateRange')->willReturnCallback(
+            static function (array $shopIds, string $start, string $end) use ($rows): array {
+                $daily = [];
+                foreach ($rows as $row) {
+                    if ($row['record_date'] < $start || $row['record_date'] > $end) {
+                        continue;
+                    }
+                    $date = (string)$row['record_date'];
+                    $daily[$date] ??= [
+                        'record_date' => $date,
+                        'total_revenue' => 0.0,
+                        'total_ad_cost' => 0.0,
+                        'shops_count' => 1,
+                    ];
+                    $daily[$date]['total_revenue'] += $row['revenue'];
+                    $daily[$date]['total_ad_cost'] += $row['ad_cost'];
+                }
+                ksort($daily);
+
+                return array_values($daily);
+            }
+        );
+        $repository->method('getFirstRecordDateByShopIds')->willReturn([1 => '2026-07-01']);
 
         return $repository;
     }
@@ -184,6 +208,43 @@ final class FutureRowsConsistencyTest extends TestCase
         $this->assertFalse(
             (bool)$annualGoal['revenue_reached'],
             'ยังทำได้แค่ ฿4,000 จาก ฿10,000 แต่บอกว่าถึงเป้าแล้ว'
+        );
+    }
+
+    /**
+     * ⭐⭐ แท็บ "รายวัน" กับแท็บ "เดือน" ของหน้ารวมร้าน ต้องบอกยอดเท่ากัน
+     *
+     * ⚠️ เกิดขึ้นจริง: กดสลับแท็บเฉย ๆ ยอดรวมเปลี่ยนจาก ฿8,000 เป็น ฿14,000
+     * และรายการวันสุดท้ายเป็นวันที่ยังมาไม่ถึง — เพราะแท็บรายวันไล่ทั้งเดือนเสมอ
+     * ขณะที่แท็บเดือนตัดที่วันนี้ (คลาสนั้นไม่มี seam วันที่เลยด้วยซ้ำ)
+     */
+    public function testBothOverviewTabsReportTheSameTotal(): void
+    {
+        // หน้ารวมร้านเปิดได้เมื่อมี ≥ 2 ร้านเท่านั้น
+        $shops = $this->createStub(ShopRepository::class);
+        $shops->method('userCanAccessShop')->willReturn(true);
+        $shops->method('listByUserId')->willReturn([
+            ['id' => 1, 'name' => 'ร้านหนึ่ง'],
+            ['id' => 2, 'name' => 'ร้านสอง'],
+        ]);
+
+        $monthTab = (new OverviewService($this->recordRepository(), $shops))
+            ->buildOverview(1, '2026-08', self::TODAY)['data'];
+        $dayTab = (new OverviewDailyService($this->recordRepository(), $shops))
+            ->buildDailyOverview(1, '2026-08', self::TODAY)['data'];
+
+        $this->assertSame(
+            (float)$monthTab['comparison']['totals']['total_revenue'],
+            (float)$dayTab['summary']['total_revenue'],
+            'สองแท็บของหน้าเดียวกันบอกยอดรวมไม่เท่ากัน'
+        );
+
+        $dates = array_column((array)($dayTab['days'] ?? []), 'record_date');
+        $this->assertNotSame([], $dates, 'ไม่มีแถวรายวันเลย — เทียบแล้วไม่ได้พิสูจน์อะไร');
+        $this->assertLessThanOrEqual(
+            self::TODAY,
+            (string)max($dates),
+            'ตารางรายวันโชว์วันที่ยังมาไม่ถึง'
         );
     }
 

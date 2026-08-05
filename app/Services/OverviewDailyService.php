@@ -13,7 +13,16 @@ class OverviewDailyService
         $this->shopRepository = $shopRepository;
     }
 
-    public function buildDailyOverview(int $userId, string $selectedMonth): array
+    /**
+     * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์ (ไม่ส่ง = วันนี้จริง)
+     *
+     * ⚠️ เดิมคลาสนี้ **ไม่มี seam วันที่เลย** และไล่ทั้งเดือนด้วย `Y-m-t` เสมอ
+     * ระบบให้ลงข้อมูลวันล่วงหน้าได้ แท็บ "รายวัน" จึงรวมวันที่ยังมาไม่ถึง
+     * ขณะที่แท็บ "เดือน" ของหน้าเดียวกันตัดที่วันนี้ — กดสลับแท็บเฉย ๆ แล้วยอดรวม
+     * เปลี่ยนจาก ฿8,000 เป็น ฿14,000 (วัดจริงแล้ว) และรายการวันสุดท้ายเป็นวันที่
+     * ยังมาไม่ถึง
+     */
+    public function buildDailyOverview(int $userId, string $selectedMonth, ?string $today = null): array
     {
         if (!$this->isValidMonth($selectedMonth)) {
             return [
@@ -66,7 +75,13 @@ class OverviewDailyService
         }
 
         $startDate = $monthDate->format('Y-m-01');
-        $endDate = $monthDate->format('Y-m-t');
+
+        // ⚠️ ใช้คู่ helper เดียวกับแท็บ "เดือน" (`OverviewService`) และแดชบอร์ด
+        // ไม่ใช่เขียนกติกาตัดวันขึ้นมาใหม่ — ไม่งั้นสองแท็บของหน้าเดียวกันเพี้ยนอีก
+        $endDate = comparison_range_end(
+            $monthDate->format('Y-m'),
+            resolve_comparison_cutoff_day($monthDate->format('Y-m'), $today)
+        );
 
         try {
             $dailyTotals = $this->recordRepository->getDailyTotalsByShopIdsAndDateRange($shopIds, $startDate, $endDate);
