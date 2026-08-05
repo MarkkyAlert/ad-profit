@@ -427,15 +427,28 @@ class AuthService
         }
 
         if ($token === '') {
-            $this->markFailedAttempt('reset_password', $clientIp, $rateLimitSubject);
+            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ (เดิมนับ 2 ครั้งต่อการกด 1 ครั้ง)
             return [
                 'success' => false,
                 'error' => 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง',
             ];
         }
 
+        // ⚠️⚠️ กรอกฟอร์มผิด **ไม่ใช่** ความพยายามรีเซ็ต ต้องคืนโควตาที่จองไว้
+        //
+        // เดิมนับทุกการกดส่ง ผู้ใช้ที่พิมพ์ช่องยืนยันไม่ตรงกัน 5 ครั้ง (เกิดบ่อยมาก
+        // บนมือถือ) จะถูกกันด้วยข้อความ "ลองรีเซ็ตรหัสผ่านบ่อยเกินไป" ทั้งที่ยังไม่ได้
+        // รีเซ็ตอะไรสำเร็จสักครั้ง แล้วต้องรอเต็มนาทีทั้งที่ลิงก์ยังใช้ได้อยู่ (วัดจริงแล้ว)
+        //
+        // ⚠️ ถังนี้ผูกกับ IP ล้วน ออฟฟิศ/เน็ตมือถือที่ใช้ IP ร่วมกันจึงแชร์โควตากันทั้งตึก
+        // ยิ่งต้องไม่เอาความผิดพลาดในการพิมพ์ไปกินโควตาของคนอื่น
+        //
+        // หลักนี้ระบบทำถูกอยู่แล้วที่อื่น — `register()` มี "ไม่ต้องนับซ้ำ" กำกับทุกทาง
+        // ที่ล้มเพราะกรอกฟอร์มผิด และ `api/profile.php` นับเฉพาะตอนรหัสปัจจุบันผิดจริง
         $passwordError = validate_password_length($newPassword);
         if ($passwordError !== null) {
+            $this->releaseAttempt('reset_password', $clientIp, $rateLimitSubject);
+
             return [
                 'success' => false,
                 'error' => $passwordError,
@@ -443,6 +456,8 @@ class AuthService
         }
 
         if ($newPassword !== $passwordConfirm) {
+            $this->releaseAttempt('reset_password', $clientIp, $rateLimitSubject);
+
             return [
                 'success' => false,
                 'error' => 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน',

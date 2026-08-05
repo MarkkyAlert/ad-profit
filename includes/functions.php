@@ -295,7 +295,13 @@ function resolve_safe_redirect_path(string $fallback, ?string $postRedirectTo = 
             continue;
         }
 
-        if (str_starts_with($candidate, '//')) {
+        // ⚠️⚠️ ต้องกันสแลชกลับหัวด้วย ไม่ใช่แค่ `//`
+        //
+        // เบราว์เซอร์ตีความสแลชกลับหัวเหมือนสแลชปกติในตำแหน่งนี้
+        // ค่าอย่างเช่น `/\evil.com/x` จึงพาผู้ใช้ออกนอกเว็บได้เหมือน `//evil.com/x`
+        //
+        // แปลงสแลชกลับหัวเป็นสแลชปกติก่อนตรวจ ครอบทั้ง 4 แบบในทีเดียว
+        if (str_starts_with(str_replace('\\', '/', $candidate), '//')) {
             continue;
         }
 

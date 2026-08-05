@@ -482,13 +482,50 @@ final class BrowserScriptParityTest extends ControllerTestCase
             $shared .= "\n" . implode("\n", $sharedBlocks[1]);
         }
 
-        $scope = $source . "\n" . $shared;
-        preg_match_all('/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/', $scope, $declared);
-        preg_match_all('/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/', $scope, $functions);
-        $known = array_flip(array_merge($declared[1], $functions[1]));
+        // ⚠️⚠️ **ต้องดูทีละก้อน `<script>` ตามลำดับ ไม่ใช่เอาทุกก้อนมาต่อกัน**
+        //
+        // เวอร์ชันแรกต่อทุกก้อนเป็นสตริงเดียวแล้วเก็บชื่อที่ประกาศจากทั้งก้อน ผลคือชื่อที่
+        // ประกาศใน **ก้อนหลัง** ถูกนับว่า "มีนิยามแล้ว" สำหรับจุดเรียกใน **ก้อนก่อนหน้า**
+        // ซึ่งเบราว์เซอร์ไม่คิดแบบนั้น — จุดเรียกจะได้ ReferenceError ทันที
+        //
+        // เกิดขึ้นจริง: ย้าย `todayIso` ไปประกาศใน IIFE ของก้อนล่าง คำเตือน "วันอนาคต"
+        // ของตารางกรอกหลายวัน (อยู่ก้อนบน) พังทั้งหมด แล้วขึ้นข้อความผิดว่า
+        // "โหลดข้อมูลเดิมไม่สำเร็จ" แทน เพราะ error ถูกกลืนด้วย catch · เทสต์ยังเขียว
+        //
+        // กติกาของ JS: ตัวแปรระดับบนสุดของก้อนก่อนหน้า มองเห็นได้จากก้อนถัดไป
+        // แต่ **ก้อนถัดไปมองย้อนกลับไม่ได้**
+        //
+        // ⚠️ ยังไม่ครอบกรณี "ก้อนเดียวกันแต่คนละ IIFE" — ต้องมีตัวแยก scope จริงถึงจะทำได้
+        preg_match_all('/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/', $shared, $sharedFunctions);
+        preg_match_all('/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/', $shared, $sharedDeclared);
+        $known = array_flip(array_merge($sharedDeclared[1], $sharedFunctions[1]));
 
-        // เก็บชื่อที่ถูก "เรียกแบบฟังก์ชัน" — เฉพาะที่ไม่ได้ตามหลังจุด (ไม่ใช่ method ของ object)
-        preg_match_all('/(?<![\w$.])([a-z_$][\w$]*)\s*\(/', $source, $called);
+        $called = [1 => []];
+        $visibleWhenCalled = [];
+        foreach ($blocks[1] as $rawBlock) {
+            $block = (string)preg_replace('/<\?[=php].*?\?' . '>/s', '0', $rawBlock);
+            $block = self::stripCommentsAndStrings($block);
+
+            // จุดเรียกในก้อนนี้ ต้องหานิยามได้จากก้อนนี้หรือก้อนก่อนหน้าเท่านั้น
+            preg_match_all('/(?<![\w$.])([a-z_$][\w$]*)\s*\(/', $block, $blockCalls);
+            $called[1] = array_merge($called[1], $blockCalls[1]);
+
+            // ชื่อที่ก้อนนี้ประกาศ — เพิ่มเข้าคลังหลังจากเก็บจุดเรียกของก้อนนี้แล้ว
+            preg_match_all('/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/', $block, $blockDeclared);
+            preg_match_all('/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/', $block, $blockFunctions);
+            foreach (array_merge($blockDeclared[1], $blockFunctions[1]) as $name) {
+                $known[$name] = true;
+            }
+
+            // ⚠️ เก็บ "สิ่งที่ก้อนนี้มองเห็นได้" ไว้ ณ ตอนนั้น — ก้อนหลังประกาศเพิ่ม
+            // ไม่ทำให้ก้อนนี้มองเห็นย้อนหลัง
+            // ⚠️ ถ้ามีจุดเรียก **ที่ไหนก็ได้** ที่มองไม่เห็นนิยาม ต้องถือว่าพัง
+            // เขียนเป็น `= isset(...)` เฉย ๆ ไม่ได้ — จุดเรียกในก้อนหลัง (ซึ่งมองเห็น)
+            // จะไปลบผลของก้อนหน้า (ซึ่งมองไม่เห็น) ทิ้ง แล้วเทสต์กลับมาเขียวอีก
+            foreach (array_unique($blockCalls[1]) as $name) {
+                $visibleWhenCalled[$name] = ($visibleWhenCalled[$name] ?? true) && isset($known[$name]);
+            }
+        }
 
         // ของที่เบราว์เซอร์/ภาษามีให้อยู่แล้ว หรือเป็นคีย์เวิร์ด
         $builtIns = array_flip([
@@ -502,7 +539,7 @@ final class BrowserScriptParityTest extends ControllerTestCase
 
         $missing = [];
         foreach (array_unique($called[1]) as $name) {
-            if (isset($known[$name]) || isset($builtIns[$name])) {
+            if (($visibleWhenCalled[$name] ?? false) || isset($builtIns[$name])) {
                 continue;
             }
 

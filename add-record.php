@@ -252,6 +252,25 @@ require __DIR__ . '/includes/header.php';
     // ⚠️ แอปนี้เป็น server-render + form POST เป็นหลัก — นี่เป็นข้อยกเว้นที่ตั้งใจ
     //    GET api/month-grid.php อ่านอย่างเดียว ไม่เปลี่ยน state จึงไม่ต้องมี CSRF
     //    (auth ผ่าน session cookie) · การบันทึกยังเป็น form POST + CSRF เหมือนเดิม
+    // วันที่ "วันนี้" ตามเวลาของเครื่องผู้ใช้
+    //
+    // ⚠️ ห้ามใช้ `toISOString()` — มันคืนเวลา UTC ประเทศไทยเร็วกว่า 7 ชั่วโมง
+    // ช่วงเที่ยงคืนถึงตี 7 วันที่ UTC จึงเป็น "เมื่อวาน" ผลคือวันนี้ถูกมองว่าเป็น
+    // วันอนาคต แล้วขึ้นคำเตือนผิด ๆ ให้คนที่มาบันทึกยอดตอนดึก
+    //
+    // ⚠️⚠️ **ต้องประกาศตรงนี้ (นอก IIFE และในก้อน <script> แรก)** เพราะถูกเรียกจาก
+    // 3 ที่ที่อยู่คนละ IIFE และคนละก้อน <script> · เคยประกาศไว้ใน IIFE เดียวแล้ว
+    // จุดเรียกในก้อนอื่นได้ ReferenceError ทันที คำเตือน "วันอนาคต" ของตารางกรอก
+    // หลายวันจึงหายไปทั้งหมด โดยขึ้นข้อความผิดว่า "โหลดข้อมูลเดิมไม่สำเร็จ" แทน
+    // (error ถูกกลืนด้วย catch) — ตัวตรวจ JS จับไม่ได้เพราะมันเอาทุกก้อนมาต่อกัน
+    // เป็นสตริงเดียวแล้วไม่รู้จัก scope
+    const todayIso = () => {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+
+        return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+    };
+
     // ประกาศนอก IIFE เพราะใช้ 2 ที่: ตารางกรอกหลายวัน และฟอร์มหลัก (เติมค่าเดิม)
     const MONTH_GRID_URL = <?= json_encode(
         app_url('/api/month-grid.php'),
@@ -974,15 +993,10 @@ require __DIR__ . '/includes/header.php';
             return;
         }
 
-        const today = new Date();
-        const todayIso = [
-            today.getFullYear(),
-            String(today.getMonth() + 1).padStart(2, '0'),
-            String(today.getDate()).padStart(2, '0'),
-        ].join('-');
-
+        // ⚠️ ใช้ helper กลางตัวเดียวกับที่อื่น — เดิมมีชื่อ `todayIso` ซ้ำกันแต่เป็น
+        // คนละชนิด (ที่นี่เป็นสตริง อีกที่เป็นฟังก์ชัน) อ่านแล้วสับสนและแก้ผิดได้ง่าย
         const sync = () => {
-            warning.classList.toggle('hidden', !(dateInput.value && dateInput.value > todayIso));
+            warning.classList.toggle('hidden', !(dateInput.value && dateInput.value > todayIso()));
         };
 
         dateInput.addEventListener('change', sync);
@@ -1007,18 +1021,6 @@ require __DIR__ . '/includes/header.php';
         let lastAppliedDate = dateInput.value; // ค่าที่เซิร์ฟเวอร์เติมมาให้ตอนโหลดหน้า
         const HINT_DEFAULT_TEXT = hint.textContent;
         let pendingRequestId = 0;              // กันผลลัพธ์เก่ามาทับผลลัพธ์ใหม่
-
-        // วันที่ "วันนี้" ตามเวลาของเครื่องผู้ใช้
-        //
-        // ⚠️ ห้ามใช้ `toISOString()` — มันคืนเวลา UTC ประเทศไทยเร็วกว่า 7 ชั่วโมง
-        // ช่วงเที่ยงคืนถึงตี 7 วันที่ UTC จึงเป็น "เมื่อวาน" ผลคือวันนี้ถูกมองว่าเป็น
-        // วันอนาคต แล้วขึ้นคำเตือนผิด ๆ ให้คนที่มาบันทึกยอดตอนดึก
-        const todayIso = () => {
-            const now = new Date();
-            const pad = (n) => String(n).padStart(2, '0');
-
-            return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
-        };
 
         const applyDay = (day) => {
             if (day && (day.revenue !== null || day.ad_cost !== null || day.note)) {
