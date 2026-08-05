@@ -17,6 +17,22 @@ class AuthService
      */
     private const REGISTER_IP_ACTION = 'register_ip';
 
+    /**
+     * bucket ที่ผูกกับ **อีเมลอย่างเดียว** — ไม่สนใจว่ามาจากเครื่องไหน
+     *
+     * bucket อีก 2 ตัวผูกกับ IP ทั้งคู่ คนร้ายที่หมุนเปลี่ยน IP ไปเรื่อย ๆ จึงไล่เดา
+     * บัญชีเดียวได้ไม่จำกัด (แต่ละ IP ใหม่เริ่มนับ 0)
+     *
+     * ⚠️⚠️ ตัวนี้ **ห้ามปฏิเสธคำขอ** — ให้หน่วงเวลาอย่างเดียว
+     * ถ้าปฏิเสธ คนร้ายจะพิมพ์รหัสผิดรัว ๆ เพื่อล็อกบัญชีของเหยื่อไม่ให้เข้าใช้เองได้
+     * (เปลี่ยนจากช่องโหว่หนึ่งไปเป็นอีกช่องโหว่หนึ่ง) · การหน่วงทำให้การไล่เดาแพงขึ้น
+     * มากโดยที่เจ้าของบัญชีที่พิมพ์รหัส **ถูก** ยังเข้าได้เสมอ
+     */
+    private const LOGIN_ACCOUNT_ACTION = 'login_account';
+
+    /** เวลารอตั้งต้นเมื่อเกินเพดานครั้งแรก (คูณสองไปเรื่อย ๆ จนถึงเพดาน) */
+    private const THROTTLE_BASE_DELAY_MS = 500;
+
     /** cache ของ dummy hash ต่อ process — คิดครั้งเดียวแล้วใช้ซ้ำ */
     private static ?string $dummyPasswordHash = null;
 
@@ -187,10 +203,18 @@ class AuthService
             ];
         }
 
+        // bucket ต่อบัญชี (ไม่ผูกกับ IP) — จองก่อนตรวจเหมือนตัวอื่น แต่ผลของมันคือ
+        // **เวลาที่ต้องรอ** ไม่ใช่การปฏิเสธ · คำนวณไว้ก่อน ใช้ก็ต่อเมื่อรหัสผิดจริง
+        // (รหัสถูก = ไม่ต้องรอ แล้วล้าง bucket ทิ้ง)
+        $accountThrottleAttempts = $this->reserveAttempt(self::LOGIN_ACCOUNT_ACTION, '', $normalizedEmail);
+
         $user = $this->userRepository->findByEmail($normalizedEmail);
         if ($user === null) {
             // เผาเวลาเท่ากับการ verify จริง ไม่งั้นเวลาตอบบอกได้ว่าอีเมลไหนมีในระบบ
             password_verify($password, self::dummyPasswordHash());
+            // ⚠️ ต้องหน่วงเท่ากับทางที่ "รหัสผิด" เป๊ะ ๆ ไม่งั้นเวลาที่ใช้ตอบจะบอกได้
+            // ว่าอีเมลนี้มีบัญชีอยู่จริงไหม (ซึ่งเป็นสิ่งที่ข้อความตอบกลับตั้งใจปิดไว้)
+            $this->applyAccountThrottleDelay($accountThrottleAttempts);
             // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจรหัสผ่าน
             return [
                 'success' => false,
@@ -200,6 +224,8 @@ class AuthService
 
         $passwordHash = (string)($user['password_hash'] ?? '');
         if (!password_verify($password, $passwordHash)) {
+            $this->applyAccountThrottleDelay($accountThrottleAttempts);
+
             return [
                 'success' => false,
                 'error' => 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -263,6 +289,9 @@ class AuthService
         // → คืนเฉพาะครั้งที่สำเร็จ ความพยายามที่ล้มเหลวยังนับอยู่ครบเหมือนเดิม
         $this->releaseAttempt(self::LOGIN_IP_ACTION, $clientIp);
         $this->clearRateLimit('login', $clientIp, $normalizedEmail);
+        // รหัสถูก = ไม่ใช่การไล่เดา → ล้างประวัติของบัญชีนี้ทิ้ง เจ้าของบัญชีที่เพิ่งพิมพ์
+        // ผิดไปหลายครั้งจึงกลับมาเร็วเหมือนเดิมทันที ไม่ต้องรอให้หน้าต่างหมดอายุ
+        $this->clearRateLimit(self::LOGIN_ACCOUNT_ACTION, '', $normalizedEmail);
         // ไม่ล้าง bucket ของ IP — ไม่งั้นล็อกอินสำเร็จ 1 บัญชีจะล้างประวัติการเดาบัญชีอื่นทิ้ง
 
         return [
@@ -636,6 +665,40 @@ class AuthService
         }
     }
 
+    /**
+     * เวลาที่ต้องรอ (มิลลิวินาที) เมื่อบัญชีนี้ถูกลองรหัสผิดเกินเพดาน
+     *
+     * ยังไม่เกินเพดาน = ไม่รอเลย (ผู้ใช้ทั่วไปที่พิมพ์ผิดไม่กี่ครั้งไม่รู้สึกอะไร)
+     * เกินแล้วรอเพิ่มเป็นเท่าตัวไปเรื่อย ๆ จนถึงเพดานเวลารอ
+     *
+     * ⚠️ ต้องมีเพดานเวลารอ — ไม่งั้นการยิงจำนวนมากจะทำให้ PHP ค้างรอกันเต็มเครื่อง
+     * (กลายเป็นคนร้ายล่มเว็บได้ด้วยการเดารหัส ซึ่งแย่กว่าเดิม)
+     */
+    private function accountThrottleDelayMilliseconds(int $attempts): int
+    {
+        $over = $attempts - $this->getMaxAttemptsForAction(self::LOGIN_ACCOUNT_ACTION);
+        if ($over <= 0) {
+            return 0;
+        }
+
+        $maxDelay = (int)LOGIN_ACCOUNT_MAX_DELAY_MS;
+        if ($over >= 20) {
+            // 2 ** 20 ก็เกินเพดานไปไกลแล้ว ไม่ต้องคิดต่อให้เลขล้น
+            return $maxDelay;
+        }
+
+        return (int)min($maxDelay, self::THROTTLE_BASE_DELAY_MS * (2 ** ($over - 1)));
+    }
+
+    /** หน่วงจริง — แยกจากการคำนวณเพื่อให้เทสต์ตรวจตัวเลขได้โดยไม่ต้องรอ */
+    private function applyAccountThrottleDelay(int $attempts): void
+    {
+        $delayMs = $this->accountThrottleDelayMilliseconds($attempts);
+        if ($delayMs > 0) {
+            usleep($delayMs * 1000);
+        }
+    }
+
     /** deadlock (1213) / รอล็อกนานเกินไป (1205) — ลองใหม่ได้ ไม่ใช่ระบบพัง */
     private function isRetryableLockError(Throwable $exception): bool
     {
@@ -660,7 +723,7 @@ class AuthService
             return 0;
         }
 
-        return (int)$row['window_age_seconds'] >= RATE_LIMIT_WINDOW_SECONDS
+        return (int)$row['window_age_seconds'] >= $this->getWindowSecondsForAction($action)
             ? 0
             : (int)$row['attempts'];
     }
@@ -719,7 +782,7 @@ class AuthService
         $startedAt = (int)($bucket['started_at'] ?? $now);
         $attempts = max(0, (int)($bucket['attempts'] ?? 0));
 
-        if (($now - $startedAt) >= RATE_LIMIT_WINDOW_SECONDS) {
+        if (($now - $startedAt) >= $this->getWindowSecondsForAction($action)) {
             $startedAt = $now;
             $attempts = 0;
         }
@@ -803,7 +866,7 @@ class AuthService
         }
 
         $windowAge = $row['window_age_seconds'] ?? null;
-        if ($windowAge === null || (int)$windowAge >= RATE_LIMIT_WINDOW_SECONDS) {
+        if ($windowAge === null || (int)$windowAge >= $this->getWindowSecondsForAction($action)) {
             // started_at เสีย (NULL) หรือหน้าต่างหมดอายุ → เริ่มนับใหม่
             $this->resetRateLimitWindowInDatabase($action, $clientIp, $key);
             return false;
@@ -818,7 +881,26 @@ class AuthService
             return 1;
         }
 
+        if ($action === self::LOGIN_ACCOUNT_ACTION) {
+            return (int)LOGIN_ACCOUNT_MAX_ATTEMPTS;
+        }
+
         return (int)RATE_LIMIT_MAX_ATTEMPTS;
+    }
+
+    /**
+     * หน้าต่างเวลาของแต่ละ bucket
+     *
+     * bucket ต่อบัญชีใช้หน้าต่างที่ยาวกว่ามาก เพราะมันมีไว้จับ "การไล่เดาที่กระจาย
+     * มาจากหลายเครื่อง" ซึ่งช้าและยาวกว่าการนั่งเดารัว ๆ จากเครื่องเดียว
+     */
+    private function getWindowSecondsForAction(string $action): int
+    {
+        if ($action === self::LOGIN_ACCOUNT_ACTION) {
+            return (int)LOGIN_ACCOUNT_WINDOW_SECONDS;
+        }
+
+        return (int)RATE_LIMIT_WINDOW_SECONDS;
     }
 
     private function markFailedAttemptInDatabase(string $action, string $clientIp, string $subject = ''): void
@@ -850,8 +932,8 @@ class AuthService
             ':bucket_key' => $key,
             ':action_type' => $action,
             ':client_ip' => $clientIp,
-            ':window_attempts' => RATE_LIMIT_WINDOW_SECONDS,
-            ':window_started' => RATE_LIMIT_WINDOW_SECONDS,
+            ':window_attempts' => $this->getWindowSecondsForAction($action),
+            ':window_started' => $this->getWindowSecondsForAction($action),
         ]);
     }
 
@@ -900,6 +982,6 @@ class AuthService
                 WHERE TIMESTAMPDIFF(SECOND, updated_at, NOW()) >= :retention_seconds';
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':retention_seconds' => max(RATE_LIMIT_WINDOW_SECONDS * 10, 600)]);
+        $stmt->execute([':retention_seconds' => max(LOGIN_ACCOUNT_WINDOW_SECONDS * 10, RATE_LIMIT_WINDOW_SECONDS * 10, 600)]);
     }
 }

@@ -146,6 +146,30 @@ if (!defined('RATE_LIMIT_WINDOW_SECONDS')) {
     define('RATE_LIMIT_WINDOW_SECONDS', config_positive_int('RATE_LIMIT_WINDOW_SECONDS', 60));
 }
 
+// ── เพดาน "ต่อบัญชี" (ไม่ผูกกับ IP) ────────────────────────────────────────
+// สองค่าบนผูกกับ IP ทั้งคู่ คนร้ายที่หมุนเปลี่ยน IP จึงไล่เดาบัญชีเดียวได้ไม่จำกัด
+// ค่าชุดนี้นับ "รหัสผิดของบัญชีนี้" รวมทุกเครื่อง แล้ว **หน่วงเวลา** เมื่อเกิน
+// ⚠️ หลวมกว่าเพดานต่อ IP มาก และหน้าต่างยาวกว่า เพราะการไล่เดาแบบกระจายช้าและยาว
+// ⚠️ ห้ามเปลี่ยนเป็นการปฏิเสธ — จะกลายเป็นช่องให้คนร้ายล็อกบัญชีเหยื่อทิ้ง
+if (!defined('LOGIN_ACCOUNT_MAX_ATTEMPTS')) {
+    define('LOGIN_ACCOUNT_MAX_ATTEMPTS', config_positive_int('LOGIN_ACCOUNT_MAX_ATTEMPTS', 20));
+}
+
+if (!defined('LOGIN_ACCOUNT_WINDOW_SECONDS')) {
+    define('LOGIN_ACCOUNT_WINDOW_SECONDS', config_positive_int('LOGIN_ACCOUNT_WINDOW_SECONDS', 900));
+}
+
+// ⚠️⚠️ เพดานเวลารอ — ต้องมี และต้องไม่ยาว
+//
+// ระหว่างที่หน่วง คำขอนั้นยึด PHP worker + การเชื่อมต่อฐานข้อมูลไว้ · โฮสต์แบบแชร์
+// (Hostinger) มี worker จำกัดราวสิบกว่าตัว ยิ่งหน่วงนานยิ่งใช้ worker หมดเร็ว
+// = คนร้ายล่มเว็บได้ด้วยการเดารหัส ซึ่งแย่กว่าปัญหาที่ตั้งใจแก้
+// 1.5 วินาที ทำให้การไล่เดาช้าลง ~3 เท่าของเวลา `password_verify()` โดยที่
+// worker ยังไม่ถูกยึดนานเกินไป · **อย่าขึ้นเป็นหลายวินาทีโดยไม่ได้วัดจำนวน worker ก่อน**
+if (!defined('LOGIN_ACCOUNT_MAX_DELAY_MS')) {
+    define('LOGIN_ACCOUNT_MAX_DELAY_MS', config_positive_int('LOGIN_ACCOUNT_MAX_DELAY_MS', 1500));
+}
+
 if (!defined('PASSWORD_MIN_LENGTH')) {
     define('PASSWORD_MIN_LENGTH', max(4, config_positive_int('PASSWORD_MIN_LENGTH', 8)));
 }
