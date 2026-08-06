@@ -197,4 +197,58 @@ final class OverviewDailyServiceAnalysisTest extends IntegrationTestCase
 
         $this->assertSame(0, $summary['incomplete_days']);
     }
+
+    /**
+     * ⭐⭐ ตัวหารที่หน้าเว็บโชว์ ต้องเป็นตัวเดียวกับที่ใช้ตัดสินว่า "ครบ" ไหม
+     *
+     * ⚠️ อาการที่วัดได้จริง: มี 3 ร้าน · ร้าน A กรอกตั้งแต่ 1 ส.ค. · ร้าน B เริ่ม 5 ส.ค. ·
+     * ร้าน C ไม่เคยกรอกเลย → คอลัมน์โชว์ **"1/3 ร้าน" โดยไม่มีสัญลักษณ์เตือน**
+     * คู่กับสรุปด้านบนที่เขียนว่า **"จาก 7 วันที่กรอกครบทุกร้าน"** บนจอเดียวกัน
+     *
+     * [เจ้าของระบบตัดสิน 2026-08-07] "ครบ" = ทุกร้านที่เริ่มบันทึกแล้ว — ตัวเลขจึงถูก
+     * ที่ผิดคือหน้าเว็บเอา "จำนวนร้านทั้งหมด" มาเป็นตัวหาร ทำให้ขัดกับคำว่าครบ
+     */
+    public function testTheRowShowsTheSameDenominatorThatDecidesCompleteness(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+        $this->createShop($userId, 'ร้าน C');   // ไม่เคยกรอกเลย
+
+        foreach (['2026-06-01', '2026-06-02', '2026-06-03'] as $date) {
+            $this->createRecord($shopA, $date, 1000.0, 200.0);
+        }
+        $this->createRecord($shopB, '2026-06-03', 1000.0, 200.0);
+
+        $rows = $this->makeService()->buildDailyOverview($userId, self::MONTH)['data']['days'];
+        $byDate = [];
+        foreach ($rows as $row) {
+            $byDate[(string)$row['record_date']] = $row;
+        }
+
+        $this->assertSame(1, $byDate['2026-06-01']['shops_tracked'] ?? null, 'ตัวหารของวันที่ยังมีร้านเดียวผิด');
+        $this->assertTrue($byDate['2026-06-01']['is_complete'], 'ควรนับว่าครบตามกติกาที่เจ้าของเลือก');
+        $this->assertSame(2, $byDate['2026-06-03']['shops_tracked'] ?? null, 'ตัวหารไม่ขยับตามร้านที่เริ่มบันทึก');
+    }
+
+    /** ⚠️ อีกด้าน: ร้านที่เริ่มบันทึกแล้วขาดไปวันหนึ่ง ต้องยังขึ้นว่าไม่ครบ */
+    public function testAMissingDayStillCountsAsIncomplete(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        $this->createRecord($shopA, '2026-06-01', 1000.0, 200.0);
+        $this->createRecord($shopB, '2026-06-01', 1000.0, 200.0);
+        $this->createRecord($shopB, '2026-06-02', 1000.0, 200.0);   // ร้าน A ขาดวันที่ 2
+
+        $rows = $this->makeService()->buildDailyOverview($userId, self::MONTH)['data']['days'];
+        $byDate = [];
+        foreach ($rows as $row) {
+            $byDate[(string)$row['record_date']] = $row;
+        }
+
+        $this->assertSame(2, $byDate['2026-06-02']['shops_tracked'] ?? null);
+        $this->assertFalse($byDate['2026-06-02']['is_complete'], 'วันที่ขาดร้านหนึ่งไปกลับนับว่าครบ');
+    }
 }

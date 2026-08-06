@@ -232,4 +232,61 @@ final class RecordServiceDeleteUpdateTest extends IntegrationTestCase
         $this->assertTrue($service->deleteRecord($userId, $shopId, $recordId)['success']);
         $this->assertTrue($service->deleteRecord($userId, $shopId, $recordId)['success']);
     }
+
+    /**
+     * ⭐⭐ แถวเก่าที่ลงวันล่วงหน้าไว้ ต้องยังแก้ยอดได้ถ้าไม่ย้ายวัน
+     *
+     * ⚠️ อาการที่วัดได้จริง: หน้าประวัติเปิดเดือนอนาคตที่มีข้อมูลเก่าได้และมีปุ่ม "แก้ไข"
+     * ผู้ใช้กดแก้แค่ยอดรายได้ (ไม่แตะวันที่) → **"วันที่ต้องไม่อยู่ในอนาคต"**
+     * ซึ่งชี้ไปที่ช่องที่ผู้ใช้ไม่ได้แตะเลย และทำได้อย่างเดียวคือลบทิ้งแล้วกรอกใหม่
+     *
+     * กติกาคือห้าม *สร้าง* ข้อมูลวันอนาคต การแก้ยอดของแถวที่มีอยู่แล้วไม่ได้สร้างอะไรใหม่
+     * [เจ้าของระบบตัดสิน 2026-08-07: "แก้ตัวเลขได้ ถ้าไม่เปลี่ยนวันที่"]
+     */
+    public function testALegacyFutureRowCanStillBeCorrected(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $recordId = $this->seedRecord($shopId, '2026-08-31');
+
+        $result = $this->makeService()
+            ->updateRecord($userId, $shopId, $recordId, '2026-08-31', 9999.0, 3000.0, 'แก้ยอด', '2026-08-07');
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertSame(
+            9999.0,
+            (float)$this->pdo->query("SELECT revenue FROM daily_records WHERE id = {$recordId}")->fetchColumn(),
+            'แก้ยอดของแถวเก่าไม่สำเร็จ — ผู้ใช้ทำได้อย่างเดียวคือลบทิ้ง'
+        );
+    }
+
+    /** ⚠️ อีกด้าน: ย้ายวันไปข้างหน้ายังห้ามเหมือนเดิม ไม่งั้นจะกลายเป็นช่องสร้างข้อมูลวันอนาคต */
+    public function testTheLegacyExceptionCannotBeUsedToMoveARecordFurtherIntoTheFuture(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $recordId = $this->seedRecord($shopId, '2026-08-31');
+
+        $result = $this->makeService()
+            ->updateRecord($userId, $shopId, $recordId, '2026-09-15', 9999.0, 3000.0, 'ย้ายวัน', '2026-08-07');
+
+        $this->assertFalse($result['success'], 'ย้ายรายการไปวันอนาคตอีกวันได้ — กลายเป็นช่องสร้างข้อมูลล่วงหน้า');
+        $this->assertSame(
+            '2026-08-31',
+            (string)$this->pdo->query("SELECT record_date FROM daily_records WHERE id = {$recordId}")->fetchColumn()
+        );
+    }
+
+    /** แถวปกติ (วันที่ผ่านมาแล้ว) ต้องย้ายไปวันอนาคตไม่ได้เหมือนเดิม */
+    public function testANormalRowStillCannotBeMovedIntoTheFuture(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $recordId = $this->seedRecord($shopId, '2026-08-01');
+
+        $result = $this->makeService()
+            ->updateRecord($userId, $shopId, $recordId, '2026-08-31', 1000.0, 200.0, 'ย้าย', '2026-08-07');
+
+        $this->assertFalse($result['success'], 'ย้ายรายการปกติไปวันอนาคตได้');
+    }
 }

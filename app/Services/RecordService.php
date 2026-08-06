@@ -734,7 +734,21 @@ class RecordService
             ];
         }
 
-        $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note, $today);
+        // ⚠️ แถวเก่าที่ลงวันล่วงหน้าไว้ก่อนมีกติกา "ห้ามบันทึกวันอนาคต" ต้องยังแก้ยอดได้
+        // ถ้าไม่ย้ายวัน · อ่านวันเดิมมาก่อนเพื่อบอกตัวตรวจว่าวันไหนคือ "วันเดิมของแถวนี้"
+        // (อ่านแบบไม่ล็อก — ใช้แค่ตัดสินว่าเป็นการย้ายวันหรือไม่ ตัวที่ตัดสินจริงคือการ
+        //  อ่านใต้ล็อกใน transaction ด้านล่าง)
+        $existingDate = null;
+        try {
+            $existingRecord = $this->recordRepository->findByIdAndShopId($recordId, $shopId);
+            if (is_array($existingRecord)) {
+                $existingDate = trim((string)($existingRecord['record_date'] ?? '')) ?: null;
+            }
+        } catch (Throwable $exception) {
+            error_log('[record] updateRecord lookup failed: ' . $exception->getMessage());
+        }
+
+        $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note, $today, $existingDate);
         if (($validation['success'] ?? false) !== true) {
             return $validation;
         }
@@ -1908,12 +1922,17 @@ class RecordService
         ];
     }
 
+    /**
+     * @param string|null $allowFutureDate วันอนาคตที่ยอมให้ผ่านได้ 1 วัน — ใช้กับการแก้แถวเก่า
+     *   ที่ลงล่วงหน้าไว้ก่อนมีกติกานี้ **โดยไม่เปลี่ยนวันที่** (ดูคอมเมนต์ที่ด่านด้านล่าง)
+     */
     private function validateRecordPayload(
         string $recordDate,
         float $revenue,
         float $adCost,
         ?string $note,
-        ?string $today = null
+        ?string $today = null,
+        ?string $allowFutureDate = null
     ): array {
         $dateObject = DateTime::createFromFormat('Y-m-d', $recordDate);
         if (!$dateObject || $dateObject->format('Y-m-d') !== $recordDate) {
@@ -1933,7 +1952,16 @@ class RecordService
             ];
         }
 
-        if ($recordDate > $this->resolveToday($today)) {
+        // ⚠️⚠️ ข้อยกเว้นเดียว: แก้แถวเก่าที่เป็นวันอนาคตอยู่แล้ว **โดยไม่ย้ายวัน**
+        //
+        // กติกาคือห้าม *สร้าง* ข้อมูลวันอนาคต การแก้ยอดของแถวที่มีอยู่แล้วไม่ได้สร้าง
+        // อะไรใหม่ · เดิมปฏิเสธหมด ผู้ใช้กดแก้แค่ยอดขายก็ได้ error ว่า "วันที่ต้องไม่อยู่
+        // ในอนาคต" ซึ่งชี้ไปที่ช่องที่ไม่ได้แตะเลย และทำได้อย่างเดียวคือลบทิ้ง
+        //
+        // ย้ายวันไปข้างหน้ายังห้ามเหมือนเดิม (`$allowFutureDate` ต้องตรงกับวันเดิมเป๊ะ)
+        $isUnchangedLegacyFutureDate = $allowFutureDate !== null && $recordDate === $allowFutureDate;
+
+        if (!$isUnchangedLegacyFutureDate && $recordDate > $this->resolveToday($today)) {
             return [
                 'success' => false,
                 'error' => 'วันที่ต้องไม่อยู่ในอนาคต',

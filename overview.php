@@ -476,7 +476,7 @@ require __DIR__ . '/includes/header.php';
                                 <span class="text-xs text-slate-500">(รายได้ <?= e(formatMoney($dayAvgRevenue)) ?>)</span>
                             <?php endif; ?>
                             <?php if ($dayCompleteDays > 0): ?>
-                                <span class="text-xs text-slate-500">จาก <?= e((string)$dayCompleteDays) ?> วันที่กรอกครบทุกร้าน</span>
+                                <span class="text-xs text-slate-500">จาก <?= e((string)$dayCompleteDays) ?> วันที่กรอกครบทุกร้านที่เริ่มบันทึกแล้ว</span>
                             <?php endif; ?>
                         <?php endif; ?>
 
@@ -504,7 +504,7 @@ require __DIR__ . '/includes/header.php';
 
                     <?php if ($dayIncompleteDays > 0): ?>
                         <p class="mt-2 border-t border-white/[0.06] pt-2 text-xs text-amber-400">
-                            ⚠️ <?= e((string)$dayIncompleteDays) ?> วันที่ยังกรอกไม่ครบทุกร้าน —
+                            ⚠️ <?= e((string)$dayIncompleteDays) ?> วันที่ยังกรอกไม่ครบทุกร้านที่เริ่มบันทึกแล้ว —
                             <span class="text-slate-500">ยอดรวมของวันเหล่านั้นเทียบกับวันอื่นตรง ๆ ไม่ได้</span>
                         </p>
                     <?php endif; ?>
@@ -532,6 +532,10 @@ require __DIR__ . '/includes/header.php';
                                 $rowDate = (string)($row['record_date'] ?? '');
                                 $rowShopsCount = (int)($row['shops_count'] ?? 0);
                                 $rowIsComplete = ($row['is_complete'] ?? true) === true;
+                                // ⚠️ ตัวหารต้องเป็น "ร้านที่เริ่มบันทึกแล้ว ณ วันนั้น" ตัวเดียวกับที่
+                                // ใช้ตัดสินว่าครบไหม · เดิมใช้จำนวนร้านทั้งหมด ทำให้เห็น "1/3 ร้าน"
+                                // โดยไม่มีเครื่องหมายเตือน คู่กับสรุปด้านบนที่เขียนว่า "กรอกครบทุกร้าน"
+                                $rowShopsExpected = (int)($row['shops_tracked'] ?? $dayTotalShops);
                                 $rowRevenue = (float)($row['total_revenue'] ?? 0);
                                 $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
                                 $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
@@ -547,7 +551,7 @@ require __DIR__ . '/includes/header.php';
                                     <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
                                     <td class="px-3 py-2 font-medium <?= $rowIsComplete ? 'text-slate-400' : 'text-amber-400' ?>">
-                                        <?= e($rowShopsCount . '/' . $dayTotalShops) ?> ร้าน<?= $rowIsComplete ? '' : ' ⚠️' ?>
+                                        <?= e($rowShopsCount . '/' . $rowShopsExpected) ?> ร้าน<?= $rowIsComplete ? '' : ' ⚠️' ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

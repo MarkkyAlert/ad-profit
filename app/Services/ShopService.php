@@ -224,8 +224,14 @@ class ShopService
                 ];
             }
 
-            $existingName = trim_unicode_whitespace((string)($shop['name'] ?? ''));
-            if ($existingName === $shopName) {
+            // ⚠️⚠️ ต้องเทียบกับชื่อ **ที่เก็บอยู่จริง** ไม่ใช่ชื่อที่ normalize แล้ว
+            //
+            // ร้านเก่าที่ชื่อติดช่องว่างยูนิโค้ด (NBSP จากการก๊อปมาจาก LINE/Word) เทียบแบบ
+            // normalize สองฝั่งแล้วจะ "เท่ากันเสมอ" → คืนว่าสำเร็จโดยไม่ UPDATE อะไรเลย
+            // ผู้ใช้จึงล้างช่องว่างที่มองไม่เห็นออกจากชื่อร้านไม่ได้ตลอดกาล
+            // ทั้งที่ระบบขึ้นว่า "อัปเดตชื่อร้านค้าเรียบร้อยแล้ว" ทุกครั้ง
+            $storedName = (string)($shop['name'] ?? '');
+            if ($storedName === $shopName) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                     $this->db->commit();
                 }

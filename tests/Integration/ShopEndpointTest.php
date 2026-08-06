@@ -97,6 +97,33 @@ final class ShopEndpointTest extends ControllerTestCase
         $this->assertSame(20, $this->countRows('shops'), 'สร้างร้านที่ 21 ได้');
     }
 
+    /**
+     * ⭐⭐ ล้างช่องว่างที่มองไม่เห็นออกจากชื่อร้านได้จริง
+     *
+     * ⚠️ ชื่อร้านที่ก๊อปมาจาก LINE/Word มักติด NBSP (ช่องว่างที่มองไม่เห็น) ท้ายชื่อ
+     * เดิมการเทียบ "ชื่อเปลี่ยนไหม" normalize ทั้งสองฝั่งก่อน ผลคือเท่ากันเสมอ →
+     * คืนว่า "อัปเดตชื่อร้านค้าเรียบร้อยแล้ว" โดยไม่ได้ UPDATE อะไรเลย
+     * ผู้ใช้จึงล้างช่องว่างนั้นออกไม่ได้ตลอดกาล ทั้งที่ระบบบอกว่าสำเร็จทุกครั้ง
+     */
+    public function testRenamingCanStripInvisibleWhitespaceFromAnOldName(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId, "ร้านสอง\u{a0}");
+        $session = $this->startSession($userId, $shopId);
+
+        $this->submit($session, [
+            'action' => 'rename',
+            'shop_id' => (string)$shopId,
+            'name' => 'ร้านสอง',
+        ]);
+
+        $this->assertSame(
+            'ร้านสอง',
+            (string)$this->pdo->query("SELECT name FROM shops WHERE id = {$shopId}")->fetchColumn(),
+            'ช่องว่างที่มองไม่เห็นยังอยู่ — ระบบบอกว่าสำเร็จแต่ไม่ได้เปลี่ยนอะไร'
+        );
+    }
+
     /** ⭐ เปลี่ยนชื่อร้านไปชนกับชื่อที่มีอยู่แล้วไม่ได้ */
     public function testRenamingToAnExistingNameIsRejected(): void
     {
