@@ -267,4 +267,44 @@ final class XlsxReportServiceComparisonTest extends TestCase
 
         $spreadsheet->disconnectWorksheets();
     }
+
+    /**
+     * ⭐⭐ ลูกศรในไฟล์ Excel ต้องตรงกับตัวเลขที่พิมพ์ข้าง ๆ (เหมือนหน้าเว็บ)
+     *
+     * ⚠️ เดิม Excel ตัดสินลูกศรจาก **ค่าดิบ** แล้วค่อยปัดตอนพิมพ์ตัวเลข ผลคือ
+     *   % จริง +0.04 → หน้าเว็บ "0.0%" (เทา ไม่มีลูกศร) · Excel "↑0.0%"
+     * ลูกศรขัดกับเลขที่เห็นในไฟล์เดียวกัน · `format_change_badge()` ถูกสร้างมา
+     * ปิดความไม่ตรงกันแบบนี้พอดี แต่ไฟล์ Excel เขียนลูกศรเอง จึงหลุดออกไป
+     *
+     * @return array<string,array{0:float,1:string}>
+     */
+    public static function nearZeroChangeProvider(): array
+    {
+        return [
+            'บวกน้อยจนปัดแล้วเป็น 0' => [0.04, ''],
+            'ลบน้อยจนปัดแล้วเป็น 0' => [-0.04, ''],
+            'บวกพอให้ปัดขึ้น 0.1' => [0.06, '↑'],
+            'ลบพอให้ปัดลง 0.1' => [-0.06, '↓'],
+            'ศูนย์พอดี' => [0.0, ''],
+            'บวกชัดเจน' => [12.3, '↑'],
+            'ลบชัดเจน' => [-5.0, '↓'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nearZeroChangeProvider')]
+    public function testTheExcelArrowMatchesTheNumberBesideIt(float $percent, string $expectedArrow): void
+    {
+        $arrow = new \ReflectionMethod(XlsxReportService::class, 'changeArrow');
+
+        $this->assertSame(
+            $expectedArrow,
+            $arrow->invoke(null, $percent),
+            'ลูกศรใน Excel ขัดกับเลขที่พิมพ์ข้าง ๆ และขัดกับหน้าเว็บ'
+        );
+
+        // ต้องตรงกับกติกาของหน้าเว็บเสมอ ไม่ใช่แค่ตรงกับค่าที่คาดไว้ในเทสต์
+        $webDirection = format_change_badge($percent)['direction'];
+        $webArrow = $webDirection > 0 ? '↑' : ($webDirection < 0 ? '↓' : '');
+        $this->assertSame($webArrow, $arrow->invoke(null, $percent), 'Excel กับหน้าเว็บใช้กติกาคนละอย่าง');
+    }
 }

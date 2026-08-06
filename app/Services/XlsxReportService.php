@@ -401,7 +401,7 @@ class XlsxReportService
                 'A8',
                 sprintf(
                     'กำไร %s%s%% (%s%s) · ปีก่อน %s',
-                    $percentValue > 0 ? '↑' : ($percentValue < 0 ? '↓' : ''),
+                    self::changeArrow($percentValue),
                     number_format(abs($percentValue), 1),
                     $change >= 0 ? '+' : '-',
                     number_format(abs($change), 2),
@@ -983,7 +983,7 @@ class XlsxReportService
             'B' . $rowNumber,
             sprintf(
                 '%s%s%% (%s%s) · ปีก่อน %s',
-                $percentValue > 0 ? '↑' : ($percentValue < 0 ? '↓' : ''),
+                self::changeArrow($percentValue),
                 number_format(abs($percentValue), 1),
                 $change >= 0 ? '+' : '-',
                 number_format(abs($change), 2),
@@ -1216,4 +1216,21 @@ class XlsxReportService
         return $chart;
     }
 
+
+    /**
+     * ลูกศรของป้ายเปลี่ยนแปลง — ต้องตัดสินจาก **ค่าที่ปัดแล้ว** เหมือนหน้าเว็บ
+     *
+     * ⚠️ เดิมตัดสินจากค่าดิบ แล้วค่อยปัดตอนพิมพ์ตัวเลข ผลคือลูกศรขัดกับเลขที่เห็น:
+     *   % จริง +0.04 → หน้าเว็บ "0.0%" (เทา ไม่มีลูกศร) · Excel "↑0.0%"
+     * `format_change_badge()` ถูกสร้างมาปิดความไม่ตรงกันแบบนี้พอดี แต่ไฟล์ Excel
+     * เขียนลูกศรเอง จึงหลุดออกไปอยู่ในไฟล์ที่ผู้ใช้เปิดวางข้างหน้าจอ
+     */
+    private static function changeArrow(float $percent): string
+    {
+        return match (format_change_badge($percent)['direction']) {
+            1 => '↑',
+            -1 => '↓',
+            default => '',
+        };
+    }
 }
