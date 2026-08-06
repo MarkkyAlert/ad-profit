@@ -74,9 +74,17 @@ class OverviewAnnualService
 
         $startMonth = sprintf('%04d-01', $year);
         $endMonth = sprintf('%04d-%02d', $year, max(1, $lastMonth));
+        // ปีปัจจุบันตัดที่วันนี้ — daily_records เป็น actuals แถวเก่าที่ลงล่วงหน้าไว้
+        // ต้องไม่โผล่ในยอดรวม (กติกาเดียวกับ `AnnualService`)
+        $notAfterDate = $year === $currentYear ? $todayObject->format('Y-m-d') : null;
 
         try {
-            $monthlyTotals = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange($shopIds, $startMonth, $endMonth);
+            $monthlyTotals = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange(
+                $shopIds,
+                $startMonth,
+                $endMonth,
+                $notAfterDate
+            );
         } catch (Throwable $exception) {
             error_log('[overview-annual] buildYearlyOverview query failed: ' . $exception->getMessage());
             return [
@@ -91,11 +99,21 @@ class OverviewAnnualService
         if ($lastMonth > 0) {
             $previousYear = $year - 1;
 
+            // ⚠️⚠️ ต้องตัดถึง "วันเดียวกัน" ไม่ใช่แค่ "เดือนเดียวกัน" — เหตุผลเดียวกับ
+            // `AnnualService` เป๊ะ ๆ (ปีนี้ถึง 7 ส.ค. ต้องเทียบกับปีก่อนถึง 7 ส.ค.)
+            $previousNotAfterDate = $notAfterDate === null
+                ? null
+                : comparison_range_end(
+                    sprintf('%04d-%02d', $previousYear, $lastMonth),
+                    (int)$todayObject->format('j')
+                );
+
             try {
                 $previousTotals = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange(
                     $shopIds,
                     sprintf('%04d-01', $previousYear),
-                    sprintf('%04d-%02d', $previousYear, $lastMonth)
+                    sprintf('%04d-%02d', $previousYear, $lastMonth),
+                    $previousNotAfterDate
                 );
             } catch (Throwable $exception) {
                 error_log('[overview-annual] buildYearlyOverview previous year failed: ' . $exception->getMessage());

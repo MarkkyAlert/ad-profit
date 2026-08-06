@@ -79,15 +79,29 @@ class AnnualService
 
         // ปีก่อน — ขอเฉพาะเดือน 1..lastMonth เพื่อให้เทียบ "ช่วงเดียวกัน"
         // (ปีนี้ถึงแค่ ส.ค. ก็ต้องเทียบ ม.ค.–ส.ค. ของปีก่อน ไม่ใช่ทั้ง 12 เดือน)
+        //
+        // ⚠️⚠️ **ต้องตัดถึง "วันเดียวกัน" ด้วย ไม่ใช่แค่ "เดือนเดียวกัน"**
+        // เดิมตัดแค่ระดับเดือน ปีนี้จึงได้ 1 ม.ค.–7 ส.ค. แต่ปีก่อนได้ 1 ม.ค.–31 ส.ค.
+        // วัดจริง: ร้านที่ทำกำไรวันละ ฿1,000 เท่ากันเป๊ะทั้งสองปี ถูกรายงานว่า
+        // **฿219,000 เทียบ ฿243,000 = ↓9.9%** และตัวเลขนี้ "ดีขึ้นเอง" ทุกวัน
+        // จนกลายเป็น 0.0% เฉพาะวันสุดท้ายของเดือนเท่านั้น
+        // (`comparison_range_end()` หดวันตัดให้พอดีเดือนสั้น เช่น 31 มี.ค. → ก.พ.)
         $previousTotalsByMonthKey = [];
         if ($lastMonth > 0) {
             $previousYear = $year - 1;
+            $previousNotAfterDate = $notAfterDate === null
+                ? null
+                : comparison_range_end(
+                    sprintf('%04d-%02d', $previousYear, $lastMonth),
+                    (int)$todayObject->format('j')
+                );
 
             try {
                 $previousTotals = $this->recordRepository->getMonthlyTotalsByMonthRange(
                     $shopId,
                     sprintf('%04d-01', $previousYear),
-                    sprintf('%04d-%02d', $previousYear, $lastMonth)
+                    sprintf('%04d-%02d', $previousYear, $lastMonth),
+                    $previousNotAfterDate
                 );
             } catch (Throwable $exception) {
                 error_log('[annual] buildYearlySummary previous year failed: ' . $exception->getMessage());
@@ -467,13 +481,19 @@ class AnnualService
         }
 
         $years = [$year - 2, $year - 1, $year];
+        $todayObject = $this->resolveToday($today);
 
         try {
             // ดึงครั้งเดียวคลุมทั้ง 3 ปี — reuse query เดิม ไม่เพิ่ม repo method
+            //
+            // ⚠️ ตัดที่วันนี้เมื่อช่วงคลุมถึงปีปัจจุบัน — ตารางรายเดือนในหน้าเดียวกันตัดอยู่แล้ว
+            // ถ้ากริดไม่ตัด ช่องของเดือนนี้จะรวมแถวเก่าที่เคยลงล่วงหน้าไว้
+            // (วัดจริง: ตารางบอก ฿7,000 แต่ช่องกริดเดือนเดียวกันบอก ฿106,000)
             $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange(
                 $shopId,
                 sprintf('%04d-01', $years[0]),
-                sprintf('%04d-12', $year)
+                sprintf('%04d-12', $year),
+                $year >= (int)$todayObject->format('Y') ? $todayObject->format('Y-m-d') : null
             );
         } catch (Throwable $exception) {
             error_log('[annual] buildMonthlyHeatmap failed: ' . $exception->getMessage());

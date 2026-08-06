@@ -365,10 +365,20 @@ class RecordRepository
     }
 
     /**
+     * ⚠️ `$notAfterDate` ทำหน้าที่เดียวกับใน `getMonthlyTotalsByMonthRange()` — **ผู้เรียกส่งวันมาเอง**
+     * ห้ามให้ repository อ่านวันนี้เอง ไม่งั้น seam `$today` ของ service พัง
+     *
+     * เดิมเมธอดนี้ **ไม่มีพารามิเตอร์นี้เลย** ทั้งที่ฝาแฝดแบบร้านเดียวมี ผลคือทุกจุดที่
+     * เรียกมันได้ยอด "ทั้งเดือน" ขณะที่ตัวเลขข้าง ๆ บนจอเดียวกันตัดที่วันนี้
+     *
      * @param int[] $shopIds
      */
-    public function getMonthlyTotalsByShopIdsAndMonthRange(array $shopIds, string $startMonth, string $endMonth): array
-    {
+    public function getMonthlyTotalsByShopIdsAndMonthRange(
+        array $shopIds,
+        string $startMonth,
+        string $endMonth,
+        ?string $notAfterDate = null
+    ): array {
         $shopIds = array_values(array_unique(array_filter(array_map('intval', $shopIds), static fn(int $id): bool => $id > 0)));
         if ($shopIds === []) {
             return [];
@@ -381,6 +391,10 @@ class RecordRepository
         }
 
         $endDate = $endDateObject->format('Y-m-t');
+
+        if ($notAfterDate !== null && $notAfterDate < $endDate) {
+            $endDate = $notAfterDate;
+        }
 
         $placeholders = [];
         $params = [

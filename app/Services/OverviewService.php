@@ -61,7 +61,7 @@ class OverviewService
             $comparisonRows = $this->attachProfitShare($comparisonRows, $totals);
             $comparisonRows = $this->attachProfitMomentum($comparisonRows, $shops, $monthDate, $today);
             $barChart = $this->buildBarChart($comparisonRows);
-            $sixMonthTrend = $this->buildSixMonthTrend($shops, $selectedMonth);
+            $sixMonthTrend = $this->buildSixMonthTrend($shops, $selectedMonth, $today);
         } catch (Throwable $exception) {
             error_log('[overview] buildOverview failed: ' . $exception->getMessage());
             return [
@@ -297,7 +297,12 @@ class OverviewService
         ];
     }
 
-    private function buildSixMonthTrend(array $shops, string $selectedMonth): array
+    /**
+     * ⚠️ ต้องรับ `$today` ต่อไปด้วย — ตารางเปรียบเทียบที่อยู่บนจอเดียวกันตัดที่วันนี้
+     * (`comparison_range_end()` ด้านบน) ถ้ากราฟไม่ตัด แท่งของเดือนนี้จะรวมแถวเก่าที่
+     * เคยลงล่วงหน้าไว้ ตัวเลขสองอันบนจอเดียวกันจึงไม่ตรงกัน (วัดจริง ฿7,000 กับ ฿106,000)
+     */
+    private function buildSixMonthTrend(array $shops, string $selectedMonth, ?string $today = null): array
     {
         $endMonthDate = DateTimeImmutable::createFromFormat('Y-m-d', $selectedMonth . '-01');
         if (!$endMonthDate) {
@@ -323,7 +328,17 @@ class OverviewService
             }
         }
 
-        $totalsRows = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange($shopIds, $startMonth, $endMonth);
+        $notAfterDate = comparison_range_end(
+            $endMonth,
+            resolve_comparison_cutoff_day($endMonth, $today)
+        );
+
+        $totalsRows = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange(
+            $shopIds,
+            $startMonth,
+            $endMonth,
+            $notAfterDate
+        );
         $rowByShopIdAndMonth = [];
         foreach ($totalsRows as $row) {
             $shopId = (int)($row['shop_id'] ?? 0);
