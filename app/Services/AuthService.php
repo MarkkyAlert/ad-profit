@@ -75,7 +75,17 @@ class AuthService
         }
 
         if ($normalizedEmail === '' || !is_valid_email($normalizedEmail)) {
-            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
+            // ⚠️⚠️ กรอกฟอร์มผิด **ไม่ใช่** ความพยายามสมัคร ต้องคืนโควตาที่จองไว้
+            // (หลักเดียวกับ `resetPassword()` — คอมเมนต์ตรงนั้นเคยอ้างว่า register()
+            //  ทำถูกอยู่แล้ว ซึ่งไม่จริง มันแค่ "ไม่นับซ้ำ" แต่ยังกินโควตาไป 1)
+            //
+            // วัดจริง: พิมพ์ช่องยืนยันรหัสผ่านไม่ตรง 5 ครั้ง (เกิดบ่อยมากบนมือถือ)
+            // → ครั้งที่ 6 ถูกกันด้วย "ลองสมัครบ่อยเกินไป กรุณารอ 1 นาที" และการสมัคร
+            // ที่กรอก **ถูกทุกช่อง** จากเบราว์เซอร์เดียวกันก็ถูกปฏิเสธด้วย
+            // ⚠️ ถัง `register_ip` ผูกกับ IP ล้วน ออฟฟิศที่ใช้เน็ตร่วมกันจึงแชร์โควตากัน
+            $this->releaseAttempt('register', $clientIp, $normalizedEmail);
+            $this->releaseAttempt(self::REGISTER_IP_ACTION, $clientIp);
+
             return [
                 'success' => false,
                 'error' => 'กรุณากรอกอีเมลที่ถูกต้อง',
@@ -83,7 +93,10 @@ class AuthService
         }
 
         if (strlen($normalizedEmail) > 255) {
-            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
+            // กรอกฟอร์มผิด — คืนโควตา (ดูเหตุผลเต็มที่กิ่งด้านบน)
+            $this->releaseAttempt('register', $clientIp, $normalizedEmail);
+            $this->releaseAttempt(self::REGISTER_IP_ACTION, $clientIp);
+
             return [
                 'success' => false,
                 'error' => 'อีเมลยาวเกินไป',
@@ -92,7 +105,10 @@ class AuthService
 
         $passwordError = validate_password_length($password);
         if ($passwordError !== null) {
-            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
+            // กรอกฟอร์มผิด — คืนโควตา (ดูเหตุผลเต็มที่กิ่งด้านบน)
+            $this->releaseAttempt('register', $clientIp, $normalizedEmail);
+            $this->releaseAttempt(self::REGISTER_IP_ACTION, $clientIp);
+
             return [
                 'success' => false,
                 'error' => $passwordError,
@@ -100,7 +116,10 @@ class AuthService
         }
 
         if ($password !== $passwordConfirm) {
-            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
+            // กรอกฟอร์มผิด — คืนโควตา (ดูเหตุผลเต็มที่กิ่งด้านบน)
+            $this->releaseAttempt('register', $clientIp, $normalizedEmail);
+            $this->releaseAttempt(self::REGISTER_IP_ACTION, $clientIp);
+
             return [
                 'success' => false,
                 'error' => 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน',
@@ -108,7 +127,8 @@ class AuthService
         }
 
         if ($this->userRepository->findByEmail($normalizedEmail) !== null) {
-            // ไม่ต้องนับซ้ำ — จองคิวไปแล้วก่อนตรวจ
+            // ⚠️ กิ่งนี้ **ตั้งใจไม่คืนโควตา** — การถามว่า "อีเมลนี้สมัครไปแล้วหรือยัง"
+            // ซ้ำ ๆ คือการไล่เดาว่าบัญชีไหนมีอยู่จริง ต่างจากการพิมพ์ฟอร์มผิด
             return [
                 'success' => false,
                 'error' => 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่อีกครั้ง',

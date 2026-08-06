@@ -23,13 +23,47 @@ $profileService = new ProfileService(
     new EmailService()
 );
 
-$result = $profileService->confirmEmailChange((string)($_GET['token'] ?? ''));
-$confirmed = ($result['success'] ?? false) === true;
-$newEmail = $confirmed ? (string)(($result['data'] ?? [])['email'] ?? '') : '';
-$errorMessage = $confirmed ? '' : (string)($result['error'] ?? 'ยืนยันอีเมลไม่สำเร็จ');
+$token = is_string($_GET['token'] ?? null) ? trim((string)$_GET['token']) : '';
+
+// ⚠️⚠️ ต้องรู้ก่อนว่าลิงก์นี้เป็นของบัญชีไหน **ก่อนแตะอะไรทั้งสิ้น**
+//
+// เดิมยืนยันทันทีแล้วล้าง `$_SESSION` ทิ้งโดยไม่ดูว่าคนที่กดเป็นเจ้าของลิงก์หรือเปล่า
+// ผลคือใครก็ได้ส่งลิงก์ของตัวเองให้เหยื่อกด (ทาง LINE/อีเมล) แล้ว **เหยื่อถูกเตะออก
+// จากระบบทุกเครื่องทันที** พร้อมหน้าจอที่สั่งให้ "เข้าสู่ระบบด้วย <อีเมลของผู้ส่ง>"
+// ซึ่งเป็นทั้งการก่อกวนและฉากตั้งต้นของการหลอกเอารหัสผ่าน (ทำซ้ำได้จริง วัดแล้ว)
+//
+// นี่คือบั๊กคลาสเดียวกับที่ `reset-password.php` แก้ไปแล้ว และคอมเมนต์ในไฟล์นั้น
+// อธิบายไว้ครบ — หน้านี้เขียนทีหลังแล้วพลาดซ้ำ
+$pendingRequest = $token === ''
+    ? null
+    : (new EmailChangeRepository($pdo))->findByTokenHash(hash('sha256', $token));
+
+$signedInUserId = (int)($_SESSION['user_id'] ?? 0);
+$linkOwnerId = $pendingRequest === null ? 0 : (int)($pendingRequest['user_id'] ?? 0);
+
+// ล็อกอินอยู่ แต่ลิงก์เป็นของบัญชีอื่น = ไม่ทำอะไรเลย ไม่ยืนยัน ไม่แตะ session
+$linkBelongsToAnotherAccount = $signedInUserId > 0
+    && $linkOwnerId > 0
+    && $signedInUserId !== $linkOwnerId;
+
+$confirmed = false;
+$newEmail = '';
+$errorMessage = '';
+
+if ($linkBelongsToAnotherAccount) {
+    $errorMessage = 'ลิงก์นี้เป็นของบัญชีอื่น ไม่ใช่บัญชีที่คุณกำลังใช้งานอยู่ '
+        . 'ระบบจึงไม่ได้เปลี่ยนแปลงอะไรเลย — ถ้าคุณเป็นเจ้าของลิงก์นี้จริง '
+        . 'กรุณาออกจากระบบก่อนแล้วกดลิงก์อีกครั้ง';
+} else {
+    $result = $profileService->confirmEmailChange($token);
+    $confirmed = ($result['success'] ?? false) === true;
+    $newEmail = $confirmed ? (string)(($result['data'] ?? [])['email'] ?? '') : '';
+    $errorMessage = $confirmed ? '' : (string)($result['error'] ?? 'ยืนยันอีเมลไม่สำเร็จ');
+}
 
 if ($confirmed) {
     // เตะทุก session ออกรวมทั้งเครื่องนี้ — เจ้าของต้องล็อกอินใหม่ด้วยอีเมลใหม่
+    // (มาถึงตรงนี้ได้เฉพาะกรณีที่ไม่ได้ล็อกอิน หรือล็อกอินอยู่ในบัญชีเจ้าของลิงก์)
     $_SESSION = [];
     session_regenerate_id(true);
     set_flash('success', 'เปลี่ยนอีเมลเรียบร้อยแล้ว กรุณาเข้าสู่ระบบด้วยอีเมลใหม่');

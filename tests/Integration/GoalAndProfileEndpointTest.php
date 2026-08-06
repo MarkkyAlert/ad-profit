@@ -530,4 +530,53 @@ final class GoalAndProfileEndpointTest extends ControllerTestCase
             'อุปกรณ์อื่นที่ล็อกอินค้างไว้ยังใช้งานต่อได้หลังเปลี่ยนรหัสผ่าน'
         );
     }
+
+    /**
+     * ⭐⭐ กรอกอีเมลเดิมของตัวเอง ต้องไม่บอกว่า "ส่งลิงก์ยืนยันไปที่อีเมลใหม่แล้ว"
+     *
+     * ⚠️ วัดจริงก่อนแก้: ได้แถบ **สีเขียว** ข้อความ "ส่งลิงก์ยืนยันไปที่อีเมลใหม่แล้ว"
+     * ทั้งที่ไม่ได้ส่งอะไรและไม่มีแถวใน `email_change_requests` เลย → ผู้ใช้นั่งรอ
+     * จดหมายที่ไม่มีวันมา · เกิดได้แม้พิมพ์แค่ตัวพิมพ์ใหญ่ต่างกัน (normalize แล้วเท่ากัน)
+     */
+    public function testUsingYourOwnEmailSaysNothingChangedInsteadOfClaimingALinkWasSent(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->submit('/api/profile.php', $session, [
+            'action' => 'change_email',
+            'email' => 'OWNER@Example.com',   // อีเมลเดิม แค่ตัวพิมพ์ต่างกัน
+            'current_password' => 'OldPass123',
+        ]);
+
+        $this->assertStringNotContainsString(
+            'ส่งลิงก์ยืนยัน',
+            (string)$response['body'],
+            'บอกว่าส่งลิงก์แล้วทั้งที่ไม่ได้ส่ง — ผู้ใช้จะนั่งรอจดหมายที่ไม่มีวันมา'
+        );
+        $this->assertStringContainsString('ใช้อยู่แล้ว', (string)$response['body']);
+        $this->assertSame(0, $this->countRows('email_change_requests'), 'สร้างคำขอทั้งที่อีเมลไม่ได้เปลี่ยน');
+    }
+
+    /** ⭐ เปลี่ยนไปเป็นอีเมลที่มีคนใช้แล้ว ต้องบอกสาเหตุตรง ๆ ไม่ใช่ "ไม่สามารถเปลี่ยนอีเมลได้" */
+    public function testChangingToATakenEmailSaysWhy(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $this->createUser('taken@example.com', 'OtherPass123');
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->submit('/api/profile.php', $session, [
+            'action' => 'change_email',
+            'email' => 'taken@example.com',
+            'current_password' => 'OldPass123',
+        ]);
+
+        $this->assertStringContainsString(
+            'ถูกใช้งานแล้ว',
+            (string)$response['body'],
+            'ไม่บอกสาเหตุ ผู้ใช้กดกี่ครั้งก็เหมือนเดิมโดยไม่รู้ว่าต้องแก้อะไร'
+        );
+    }
 }

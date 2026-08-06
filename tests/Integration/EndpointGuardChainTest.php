@@ -164,7 +164,11 @@ final class EndpointGuardChainTest extends ControllerTestCase
         $response = $this->postJson($path, $fields + ['shop_context_id' => (string)$shopId], $session);
 
         $this->assertSame(403, $response['status'], $path . ' ทำงานให้ทั้งที่ไม่มี CSRF token');
-        $this->assertStringContainsString('CSRF', $response['body']);
+        // ⚠️ ข้อความที่ผู้ใช้เห็นต้องเป็นภาษาไทย (กฎของโปรเจกต์) และต้องบอกว่าทำอะไรต่อ
+        // เดิมขึ้นว่า `Invalid CSRF token` กลาง UI ภาษาไทย โดยไม่บอกให้โหลดหน้าใหม่
+        $this->assertStringContainsString('หมดเวลาทำรายการ', $response['body']);
+        $this->assertStringContainsString('โหลดหน้าใหม่', $response['body'], 'ไม่ได้บอกผู้ใช้ว่าต้องทำอะไรต่อ');
+        $this->assertStringNotContainsString('CSRF', $response['body'], 'ศัพท์เทคนิคหลุดถึงหน้าจอผู้ใช้');
         $this->assertSame(0, $this->countRows('daily_records'), $path . ' เขียน daily_records');
         $this->assertSame(0, $this->countRows('monthly_goals'), $path . ' เขียน monthly_goals');
         $this->assertSame($shopsBefore, $this->countRows('shops'), $path . ' สร้างร้านใหม่');

@@ -47,24 +47,40 @@ final class AuthServiceRegisterTest extends IntegrationTestCase
         );
     }
 
-    /** ⭐ เครื่องเดียวไล่ทดสอบอีเมลไปเรื่อย ๆ ต้องถูกหยุด ไม่ใช่ยิงได้ไม่จำกัด */
+    /**
+     * ⭐ เครื่องเดียวไล่ทดสอบว่า "อีเมลไหนมีบัญชีอยู่" ต้องถูกหยุด
+     *
+     * ⚠️⚠️ ต้องยิงด้วย **รหัสผ่านที่ถูกรูปแบบ** เท่านั้น — นั่นคือท่าที่ได้คำตอบจริง
+     * ("อีเมลนี้ถูกใช้งานแล้ว" = มีบัญชี) · ยิงด้วยรหัสผ่านสั้น ๆ จะถูกปฏิเสธที่ด่าน
+     * ตรวจรูปแบบก่อนถึงฐานข้อมูล จึงไม่ได้คำตอบอะไรกลับไปเลย และตั้งใจไม่นับ
+     * (การพิมพ์ฟอร์มผิดของผู้ใช้จริงต้องไม่กินโควตาของทั้งออฟฟิศ)
+     *
+     * เดิมเทสต์นี้ยิงด้วย `'short'` ซึ่งไม่ใช่ท่าที่คนร้ายใช้ — ชื่อเทสต์กับสิ่งที่
+     * มันทดสอบจึงไม่ตรงกัน
+     */
     public function testOneAddressCannotProbeUnlimitedEmails(): void
     {
-        $this->createUser('taken@example.com');
+        $probeTargets = [];
+        for ($index = 1; $index <= RATE_LIMIT_MAX_ATTEMPTS + 3; $index++) {
+            $email = "taken{$index}@example.com";
+            $this->createUser($email);
+            $probeTargets[] = $email;
+        }
+
         $service = $this->makeService();
 
         $blockedAt = null;
-        for ($attempt = 1; $attempt <= RATE_LIMIT_MAX_ATTEMPTS + 3; $attempt++) {
-            // เปลี่ยนอีเมลทุกครั้ง — bucket ต่อ (IP + อีเมล) จับไม่ได้
-            $result = $service->register("probe{$attempt}@example.com", 'short', 'short', self::IP);
+        foreach ($probeTargets as $index => $email) {
+            // เปลี่ยนอีเมลทุกครั้ง — bucket ต่อ (IP + อีเมล) จับไม่ได้ ต้องพึ่ง bucket ต่อ IP
+            $result = $service->register($email, 'GoodPass123', 'GoodPass123', self::IP);
 
             if (str_contains((string)($result['error'] ?? ''), 'บ่อยเกินไป')) {
-                $blockedAt = $attempt;
+                $blockedAt = $index + 1;
                 break;
             }
         }
 
-        $this->assertNotNull($blockedAt, 'ยิงสมัครด้วยอีเมลใหม่ได้ไม่จำกัดจากเครื่องเดียว');
+        $this->assertNotNull($blockedAt, 'ไล่ถามว่าอีเมลไหนมีบัญชีอยู่ได้ไม่จำกัดจากเครื่องเดียว');
         $this->assertLessThanOrEqual(RATE_LIMIT_MAX_ATTEMPTS + 1, $blockedAt);
     }
 

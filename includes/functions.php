@@ -368,9 +368,11 @@ function ensure_post_request_or_respond(bool $wantsJson, string $redirectUrl): v
             header('Allow: POST');
         }
 
+        // ⚠️ ข้อความที่ผู้ใช้เห็นต้องเป็นภาษาไทยและบอกว่าต้องทำอะไรต่อ
+        // (endpoint ที่ตอบ JSON ล้วนอย่าง `*-data.php` ยังใช้อังกฤษได้ เพราะไม่มีใครอ่าน)
         api_respond([
             'success' => false,
-            'error' => 'Method Not Allowed',
+            'error' => 'วิธีเรียกหน้านี้ไม่ถูกต้อง กรุณากลับไปหน้าเดิมแล้วลองใหม่อีกครั้ง',
         ], 405, $redirectUrl, $wantsJson);
     }
 }
@@ -429,16 +431,19 @@ function ensure_form_content_type_or_respond(bool $wantsJson, string $redirectUr
 
     api_respond([
         'success' => false,
-        'error' => 'Unsupported Media Type',
+        'error' => 'รูปแบบข้อมูลที่ส่งมาไม่ถูกต้อง กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง',
     ], 415, $redirectUrl, $wantsJson);
 }
 
 function ensure_valid_csrf_or_respond(bool $wantsJson, string $redirectUrl, ?string $token = null): void
 {
     if (!verify_csrf($token)) {
+        // ⚠️⚠️ เกิดกับผู้ใช้ปกติบ่อยที่สุดตอนเปิดหน้าค้างไว้ข้ามวันแล้วกดส่ง
+        // หรือออกจากระบบในอีกแท็บ · เดิมขึ้นว่า `Invalid CSRF token` กลาง UI ภาษาไทย
+        // ซึ่งไม่บอกเลยว่าต้องทำอะไรต่อ (โหลดหน้าใหม่)
         api_respond([
             'success' => false,
-            'error' => 'Invalid CSRF token',
+            'error' => 'หมดเวลาทำรายการเพื่อความปลอดภัย กรุณาโหลดหน้าใหม่แล้วทำอีกครั้ง',
         ], 403, $redirectUrl, $wantsJson);
     }
 }
@@ -783,11 +788,12 @@ function infer_http_status_from_error(string $errorMessage, int $defaultStatus =
         return 403;
     }
 
-    if (str_contains($normalized, 'method not allowed')) {
+    if (str_contains($normalized, 'method not allowed') || str_contains($normalized, 'วิธีเรียกหน้านี้ไม่ถูกต้อง')) {
         return 405;
     }
 
-    if (str_contains($normalized, 'invalid csrf token')) {
+    // ⚠️ ต้องรู้จักทั้งข้อความไทย (ที่ผู้ใช้เห็น) และอังกฤษ (ที่ยังเหลือใน endpoint JSON ล้วน)
+    if (str_contains($normalized, 'invalid csrf token') || str_contains($normalized, 'หมดเวลาทำรายการ')) {
         return 403;
     }
 

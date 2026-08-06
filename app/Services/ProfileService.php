@@ -377,6 +377,13 @@ class ProfileService
                 ];
             }
 
+            // ⚠️⚠️ กรอกอีเมลเดิมของตัวเอง = ไม่มีอะไรต้องทำ **แต่ห้ามตอบว่า "ส่งลิงก์แล้ว"**
+            //
+            // เดิมคืน success โดยไม่มี `message` แล้ว controller เติมข้อความปริยาย
+            // "ส่งลิงก์ยืนยันไปที่อีเมลใหม่แล้ว" ให้ → ผู้ใช้เห็นแถบเขียวแล้วนั่งรอ
+            // จดหมายที่ไม่มีวันมา · เกิดได้แม้พิมพ์แค่ตัวพิมพ์ใหญ่ต่างกัน (normalize
+            // แล้วเท่ากัน) และเกิดแม้ตอนที่ระบบอีเมลปิดอยู่ เพราะกิ่งนี้คืนค่าก่อน
+            // ถึงด่าน "ระบบส่งอีเมลยังไม่พร้อมใช้งาน"
             $currentEmail = normalize_email((string)($user['email'] ?? ''));
             if ($currentEmail === $normalizedEmail) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
@@ -385,12 +392,20 @@ class ProfileService
 
                 return [
                     'success' => true,
+                    'message' => 'อีเมลนี้เป็นอีเมลที่คุณใช้อยู่แล้ว ไม่มีอะไรต้องเปลี่ยน',
                     'data' => [
                         'email' => $currentEmail,
+                        // ⚠️ ต้องมีคีย์นี้เสมอ ไม่งั้น controller จะเข้าใจว่า "ไม่ได้ส่ง" แล้วตอบ 503
+                        'email_sent' => true,
                     ],
                 ];
             }
 
+            // ⚠️ ต้องบอกสาเหตุตรง ๆ — เดิมตอบ "ไม่สามารถเปลี่ยนอีเมลได้" เฉย ๆ ผู้ใช้กด
+            // กี่ครั้งก็เหมือนเดิมโดยไม่รู้ว่าต้องแก้อะไร · เหตุผล "กันการเดาว่ามีบัญชีนี้ไหม"
+            // ใช้ไม่ได้ที่นี่ เพราะตอน **ยืนยัน** ระบบบอกตรง ๆ อยู่แล้ว และคนที่ถามคือคนที่
+            // ล็อกอินอยู่ (ต่างจากหน้าสมัคร/ลืมรหัสผ่านซึ่งใครก็ยิงได้)
+            // ⚠️ ข้อความเดิมยังถูกใช้กับ "createRequest ล้ม" และ PDO error ด้วย แยกไม่ออก
             $existingUser = $this->userRepository->findByEmail($normalizedEmail);
             if ($existingUser !== null && (int)$existingUser['id'] !== $userId) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
@@ -399,7 +414,7 @@ class ProfileService
 
                 return [
                     'success' => false,
-                    'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
+                    'error' => 'อีเมลนี้ถูกใช้งานแล้ว กรุณาใช้อีเมลอื่น',
                 ];
             }
 
@@ -434,6 +449,26 @@ class ProfileService
             // ทั้งที่ไม่ว่ารออีกกี่ชั่วโมงก็ไม่มีทางสำเร็จ
             //
             // ผลข้างเคียงที่แย่ที่สุดคือคำขอเดิมที่ยังใช้ได้อยู่ถูกทับหายไปฟรี ๆ
+            // ⚠️⚠️ ลิงก์ในจดหมายต้องเป็น URL เต็ม ไม่งั้นกดจากกล่องจดหมายไม่ได้
+            //
+            // ทางลืมรหัสผ่านมีด่านนี้อยู่แล้ว (`AuthService::requestPasswordReset`) แต่ทาง
+            // เปลี่ยนอีเมลไม่มี → ลืมตั้ง APP_URL บนเซิร์ฟเวอร์แล้วผู้ใช้ได้จดหมายที่มีลิงก์
+            // เป็น `/verify-email.php?token=…` (relative) ซึ่งกดไม่ได้ ขณะที่หน้าเว็บ
+            // ขึ้นว่า "ส่งลิงก์ยืนยันไปที่ … แล้ว" → เปลี่ยนอีเมลไม่ได้ตลอดไปโดยไม่รู้สาเหตุ
+            // ⚠️ `.env.example` ส่ง `APP_URL=` มาว่าง จึงพลาดได้ง่ายมาก
+            if (APP_ENV === 'production' && preg_match('#^https?://#i', APP_URL) !== 1) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                error_log('[profile] APP_URL must be an absolute URL in production for email change links');
+
+                return [
+                    'success' => false,
+                    'error' => 'ระบบยังไม่พร้อมใช้งานในขณะนี้ กรุณาติดต่อผู้ดูแลระบบ',
+                ];
+            }
+
             if ($this->emailService === null || !$this->emailService->isEnabled()) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
                     $this->db->rollBack();

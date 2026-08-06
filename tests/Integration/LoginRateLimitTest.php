@@ -418,6 +418,52 @@ final class LoginRateLimitTest extends IntegrationTestCase
     }
 
     /**
+     * ⭐⭐ พิมพ์ช่อง "ยืนยันรหัสผ่าน" ผิดตอนสมัคร ต้องไม่กินโควตา
+     *
+     * ⚠️ วัดจริงก่อนแก้: พิมพ์ยืนยันไม่ตรง 5 ครั้ง (เกิดบ่อยมากบนมือถือ) → ครั้งที่ 6
+     * ถูกกันด้วย "ลองสมัครบ่อยเกินไป กรุณารอ 1 นาที" และการสมัครที่กรอก **ถูกทุกช่อง**
+     * จากเบราว์เซอร์เดียวกันก็ถูกปฏิเสธด้วยข้อความเดียวกัน
+     *
+     * ⚠️ ถัง `register_ip` ผูกกับ IP ล้วน ออฟฟิศที่ใช้เน็ตร่วมกันจึงแชร์โควตากันทั้งตึก
+     * — ความผิดพลาดในการพิมพ์ของคนหนึ่งจึงไปกันคนอื่นออกจากระบบด้วย
+     *
+     * หลักเดียวกับที่ `resetPassword()` แก้ไปแล้ว · คอมเมนต์ตรงนั้นเคยอ้างว่า
+     * `register()` ทำถูกอยู่แล้ว ซึ่งไม่จริง — มันแค่ "ไม่นับซ้ำ" แต่ยังกินโควตาไป 1
+     */
+    public function testATypoInTheConfirmPasswordDoesNotBurnTheRegisterQuota(): void
+    {
+        $service = $this->service();
+
+        for ($attempt = 1; $attempt <= (int)RATE_LIMIT_MAX_ATTEMPTS; $attempt++) {
+            $service->register("new{$attempt}@example.com", 'GoodPass123', 'พิมพ์ไม่ตรง', self::OFFICE_IP);
+        }
+
+        $attempts = (int)$this->pdo
+            ->query("SELECT COALESCE(SUM(attempts), 0) FROM auth_rate_limits WHERE action_type = 'register_ip'")
+            ->fetchColumn();
+
+        $this->assertSame(0, $attempts, 'พิมพ์ฟอร์มผิดถูกนับเป็นความพยายามสมัคร ' . $attempts . ' ครั้ง');
+
+        $ok = $service->register('finally@example.com', 'GoodPass123', 'GoodPass123', self::OFFICE_IP);
+        $this->assertTrue($ok['success'] ?? false, (string)($ok['error'] ?? ''));
+    }
+
+    /** ⚠️ อีกด้าน: ถามซ้ำ ๆ ว่า "อีเมลนี้สมัครไปแล้วหรือยัง" ยังต้องถูกนับ (เป็นการไล่เดาบัญชี) */
+    public function testAskingWhetherAnEmailIsTakenStillCounts(): void
+    {
+        $this->makeUser('taken@example.com');
+        $service = $this->service();
+
+        $service->register('taken@example.com', 'GoodPass123', 'GoodPass123', self::OFFICE_IP);
+
+        $attempts = (int)$this->pdo
+            ->query("SELECT COALESCE(SUM(attempts), 0) FROM auth_rate_limits WHERE action_type = 'register_ip'")
+            ->fetchColumn();
+
+        $this->assertGreaterThan(0, $attempts, 'ไล่เดาว่าบัญชีไหนมีอยู่ได้ไม่จำกัด');
+    }
+
+    /**
      * ⭐⭐ ขอลิงก์ลืมรหัสผ่าน 1 ครั้ง ต้องถูกนับ 1 ไม่ใช่ 2
      *
      * ⚠️ บั๊กเดียวกับ `testAnExpiredLinkCountsOncePerClick()` เป๊ะ ๆ แต่คนละทาง —
