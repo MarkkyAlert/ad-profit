@@ -629,21 +629,6 @@ class AuthService
         return self::$dummyPasswordHash;
     }
 
-    private function isRateLimited(string $action, string $clientIp, string $subject = ''): bool
-    {
-        if ($this->canUseDatabaseRateLimit()) {
-            try {
-                return $this->isRateLimitedInDatabase($action, $clientIp, $subject);
-            } catch (Throwable $exception) {
-                $this->demoteToSessionLimiter('DB read failed', $exception);
-            }
-        }
-
-        $bucket = $this->getRateLimitBucket($action, $clientIp, $subject);
-
-        return (int)$bucket['attempts'] >= $this->getMaxAttemptsForAction($action);
-    }
-
     /**
      * นับความพยายาม 1 ครั้งแบบ atomic แล้วคืน "เลขที่นับได้หลังบวกแล้ว"
      *
@@ -799,24 +784,6 @@ class AuthService
         return (int)$row['window_age_seconds'] >= $this->getWindowSecondsForAction($action)
             ? 0
             : (int)$row['attempts'];
-    }
-
-    private function markFailedAttempt(string $action, string $clientIp, string $subject = ''): void
-    {
-        if ($this->canUseDatabaseRateLimit()) {
-            try {
-                $this->markFailedAttemptInDatabase($action, $clientIp, $subject);
-                return;
-            } catch (Throwable $exception) {
-                $this->demoteToSessionLimiter('DB write failed', $exception);
-            }
-        }
-
-        $bucket = $this->getRateLimitBucket($action, $clientIp, $subject);
-        $bucket['attempts'] = (int)$bucket['attempts'] + 1;
-
-        $key = $this->rateLimitKey($action, $clientIp, $subject);
-        $_SESSION['auth_rate_limits'][$key] = $bucket;
     }
 
     private function clearRateLimit(string $action, string $clientIp, string $subject = ''): void
