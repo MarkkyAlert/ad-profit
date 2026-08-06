@@ -32,7 +32,11 @@ final class ProfileServiceCredentialTest extends TestCase
             $userRepository ?? $this->makeUserRepository(),
             $pdo,
             null,
-            $changeRepository
+            $changeRepository,
+            // ⚠️ ต้องเป็นระบบอีเมลที่ "ตั้งค่าครบแล้ว" — ปล่อยเป็น null จะไปตกทาง
+            // "ระบบอีเมลยังไม่ได้ตั้งค่า" ซึ่งปฏิเสธตั้งแต่ต้นโดยตั้งใจ แล้วเทสต์
+            // เรื่องอื่นในไฟล์นี้จะไม่มีวันเดินไปถึงกติกาที่มันตั้งใจตรวจ
+            new \EmailService(true, 'smtp.example.test', 587, 'user', 'pass', 'no-reply@example.test')
         );
     }
 

@@ -417,6 +417,33 @@ final class LoginRateLimitTest extends IntegrationTestCase
         $this->assertSame(3, $attempts, 'กด 3 ครั้งถูกนับ ' . $attempts . ' ครั้ง — ชนเพดานเร็วกว่าที่ควร');
     }
 
+    /**
+     * ⭐⭐ ขอลิงก์ลืมรหัสผ่าน 1 ครั้ง ต้องถูกนับ 1 ไม่ใช่ 2
+     *
+     * ⚠️ บั๊กเดียวกับ `testAnExpiredLinkCountsOncePerClick()` เป๊ะ ๆ แต่คนละทาง —
+     * ตอนแก้รอบนั้นแก้เฉพาะ `resetPassword()` ส่วน `requestPasswordReset()`
+     * ยังเรียกทั้ง `reserveAttempt()` (ซึ่งนับให้แล้ว) และ `markFailedAttempt()` ซ้ำอีก
+     *
+     * ⚠️ ตอนที่พบ อาการยัง **มองไม่เห็นจากหน้าเว็บ** เพราะเพดานของทางนี้เป็น 1 พอดี
+     * ผลลัพธ์ที่ผู้ใช้เจอจึงถูกต้องโดยบังเอิญ · แต่ถ้าใครขยับเพดานเป็น 5 จะได้จริง 2
+     * เทสต์นี้จึงตรวจ "ตัวนับ" ตรง ๆ ไม่ใช่ตรวจว่าถูกกันตอนไหน
+     */
+    public function testAskingForAResetLinkOnceCountsOnce(): void
+    {
+        $this->makeUser('owner@example.com');
+        $this->service()->requestPasswordReset('owner@example.com', '203.0.113.77');
+
+        $attempts = (int)$this->pdo
+            ->query("SELECT attempts FROM auth_rate_limits WHERE action_type = 'password_reset' LIMIT 1")
+            ->fetchColumn();
+
+        $this->assertSame(
+            1,
+            $attempts,
+            'ขอ 1 ครั้งถูกนับ ' . $attempts . ' ครั้ง — ใครขยับเพดานจะได้จำนวนครั้งไม่ตรงกับที่ตั้ง'
+        );
+    }
+
     /** ⭐ ขอลิงก์รีเซ็ตรหัสผ่านซ้ำ ๆ ต้องถูกกัน (เพดานแค่ 1 ครั้งต่อหน้าต่าง) */
     public function testRepeatedPasswordResetRequestsAreThrottled(): void
     {

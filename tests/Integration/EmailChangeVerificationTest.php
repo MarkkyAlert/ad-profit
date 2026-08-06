@@ -7,6 +7,7 @@ namespace Tests\Integration;
 require_once __DIR__ . '/IntegrationTestCase.php';
 
 use EmailChangeRepository;
+use EmailService;
 use PasswordResetRepository;
 use PDO;
 use ProfileService;
@@ -61,7 +62,11 @@ final class EmailChangeVerificationTest extends IntegrationTestCase
                     $pdo,
                     new PasswordResetRepository($pdo),
                     new EmailChangeRepository($pdo),
-                    null
+                    // ⚠️ ต้องเป็นระบบอีเมลที่ "ตั้งค่าครบแล้ว" ไม่ใช่ null — คลาสนี้จำลอง
+                    // เครื่องที่ส่งอีเมลได้ปกติ (การส่งจริงถูกแทนที่ด้านล่างอยู่แล้ว)
+                    // ถ้าปล่อยเป็น null จะไปตกทาง "ระบบอีเมลยังไม่ได้ตั้งค่า" ซึ่งปฏิเสธ
+                    // ตั้งแต่ต้นโดยตั้งใจ แล้วเทสต์ทั้งไฟล์จะไม่ได้ทดสอบการยืนยันอีเมลเลย
+                    new EmailService(true, 'smtp.example.test', 587, 'user', 'pass', 'no-reply@example.test')
                 );
                 $this->captured = &$captured;
             }

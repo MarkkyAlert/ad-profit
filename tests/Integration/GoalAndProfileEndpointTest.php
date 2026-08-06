@@ -18,6 +18,34 @@ require_once __DIR__ . '/ControllerTestCase.php';
 final class GoalAndProfileEndpointTest extends ControllerTestCase
 {
     /**
+     * ⚠️⚠️ เซิร์ฟเวอร์ทดสอบต้อง "ตั้งค่าอีเมลครบแล้วแต่ส่งไม่ออก" ไม่ใช่ "ยังไม่ได้ตั้งค่า"
+     *
+     * สองสภาพนี้ระบบตอบคนละอย่างโดยตั้งใจ:
+     *  · ยังไม่ได้ตั้งค่า → ปฏิเสธตั้งแต่ต้น ไม่กินโควตา ไม่ทับคำขอเดิม (กดอีกกี่ครั้งก็ไม่สำเร็จ)
+     *  · ตั้งค่าแล้วแต่ส่งไม่ออก → บันทึกคำขอไว้ ตอบ 503 ให้รอสักครู่แล้วกดใหม่ (มีโอกาสสำเร็จ)
+     *
+     * ถ้าปล่อยให้เซิร์ฟเวอร์ทดสอบเป็นแบบ "ยังไม่ได้ตั้งค่า" ตามปริยาย เทสต์ในไฟล์นี้
+     * จะไปตกทางแรกทั้งหมด แล้ว **ทางที่สองไม่มีใครทดสอบเลย** ทั้งที่มันคือทางที่
+     * เกิดขึ้นจริงบนเซิร์ฟเวอร์ (SMTP ล่มชั่วคราว)
+     *
+     * โฮสต์ `.invalid` เป็นโดเมนสงวนที่ไม่มีวันมีจริง การเชื่อมต่อจึงล้มทันที
+     *
+     * @return array<string,string>
+     */
+    protected static function serverEnvironmentOverrides(): array
+    {
+        return [
+            'MAIL_ENABLED' => 'true',
+            'MAIL_HOST' => 'smtp.example.invalid',
+            'MAIL_USERNAME' => 'test@example.invalid',
+            'MAIL_PASSWORD' => 'not-a-real-password',
+            'MAIL_FROM_ADDRESS' => 'no-reply@example.invalid',
+            'MAIL_RETRY_ATTEMPTS' => '0',
+            'MAIL_TIMEOUT_SECONDS' => '5',
+        ];
+    }
+
+    /**
      * @param array<string,string> $fields
      * @return array{status:int,headers:array<string,string>,body:string}
      */

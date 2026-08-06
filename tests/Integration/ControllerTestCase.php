@@ -31,6 +31,20 @@ abstract class ControllerTestCase extends IntegrationTestCase
     private static ?string $sessionDir = null;
     private static ?string $startupError = null;
 
+    /**
+     * ค่า env เพิ่มเติมต่อคลาสเทสต์ — คลาสลูกเขียนทับได้
+     *
+     * ⚠️ มีไว้ให้เทสต์จำลอง "สภาพเซิร์ฟเวอร์" ที่ต่างจากปริยายได้จริง เช่นเปิดระบบอีเมล
+     * แล้วชี้ไปโฮสต์ที่ไม่มีอยู่ เพื่อให้ได้ "ตั้งค่าแล้วแต่ส่งไม่ออก" ของจริง
+     * ซึ่งเป็นคนละเรื่องกับ "ยังไม่ได้ตั้งค่า" และระบบต้องตอบคนละอย่าง
+     *
+     * @return array<string,string>
+     */
+    protected static function serverEnvironmentOverrides(): array
+    {
+        return [];
+    }
+
     public static function setUpBeforeClass(): void
     {
         parent::setUpBeforeClass();
@@ -79,7 +93,7 @@ abstract class ControllerTestCase extends IntegrationTestCase
             // ในโหมดอื่นทั้งหมด แล้ว warning/notice จะไม่โผล่บนหน้า เทสต์ที่ตรวจว่า
             // "ไม่มี error หลุดบนจอ" จึงผ่านตลอดโดยไม่ได้ตรวจอะไรเลย (เคยพลาดมาแล้ว)
             'APP_ENV' => 'development',
-        ]);
+        ], static::serverEnvironmentOverrides());
 
         $process = @proc_open($command, $descriptors, $pipes, $projectRoot, $environment);
         if (!is_resource($process)) {

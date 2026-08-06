@@ -327,6 +327,11 @@ class AuthService
 
         // เพดานแค่ 1 ครั้งต่อหน้าต่าง — ถ้าถามก่อนนับ คำขอที่มาพร้อมกันจะส่งอีเมล
         // ซ้ำหลายฉบับให้เจ้าของบัญชีเดียวกัน
+        //
+        // ⚠️⚠️ การจองตรงนี้ **นับให้แล้ว** ห้ามเรียก `markFailedAttempt()` ซ้ำอีก
+        // เดิมเรียกซ้ำอยู่บรรทัดถัดไป ทำให้ขอ 1 ครั้งถูกนับเป็น 2 (วัดจริงแล้ว)
+        // ตอนนี้ยังไม่เห็นอาการเพราะเพดานเป็น 1 พอดี แต่ใครขยับเพดานเป็น 5
+        // จะได้จริงแค่ 2 ครั้ง — เป็นกับดักแบบเดียวกับที่เคยเจอใน `reserveAttempt()`
         if ($this->reserveAttempt('password_reset', $clientIp, $normalizedEmail)
             > $this->getMaxAttemptsForAction('password_reset')) {
             return [
@@ -334,9 +339,6 @@ class AuthService
                 'error' => 'ลองขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่',
             ];
         }
-
-        // Count every password-reset request in the window to prevent abuse/spam.
-        $this->markFailedAttempt('password_reset', $clientIp, $normalizedEmail);
 
         if ($normalizedEmail === '' || !is_valid_email($normalizedEmail)) {
             return [
@@ -605,20 +607,6 @@ class AuthService
         }
 
         return self::$dummyPasswordHash;
-    }
-
-    /** นับความพยายามที่ล้มเหลวทั้ง bucket ต่อบัญชี และ bucket ต่อ IP */
-    private function markFailedLoginAttempt(string $clientIp, string $normalizedEmail): void
-    {
-        $this->markFailedAttempt('login', $clientIp, $normalizedEmail);
-        $this->markFailedAttempt(self::LOGIN_IP_ACTION, $clientIp);
-    }
-
-    /** เหมือนกันกับฝั่งล็อกอิน — สมัครล้มเหลวต้องนับทั้ง 2 bucket */
-    private function markFailedRegisterAttempt(string $clientIp, string $normalizedEmail): void
-    {
-        $this->markFailedAttempt('register', $clientIp, $normalizedEmail);
-        $this->markFailedAttempt(self::REGISTER_IP_ACTION, $clientIp);
     }
 
     private function isRateLimited(string $action, string $clientIp, string $subject = ''): bool

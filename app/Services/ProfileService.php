@@ -387,6 +387,29 @@ class ProfileService
                 ];
             }
 
+            // ⚠️⚠️ ระบบอีเมลยังไม่ได้ตั้งค่า = ลิงก์จะไม่มีวันไปถึง ต้องหยุดตรงนี้
+            // **ก่อน** จองโควตาและก่อนเขียนคำขอทับของเดิม
+            //
+            // วัดจริงตอนยังไม่มีด่านนี้ (ระบบอีเมลปิดอยู่): กดครั้งแรกได้ข้อความ
+            // "ส่งอีเมลยืนยันไม่สำเร็จ **กรุณาลองใหม่อีกครั้ง**" พอทำตามทันทีกลับได้
+            // "ส่งลิงก์บ่อยเกินไป กรุณารอ 1 นาที" — สั่งให้ลองใหม่แล้วลงโทษที่ทำตาม
+            // และไม่มีข้อความไหนบอกสาเหตุจริงเลย · ครบ 5 ครั้งก็ถูกกันไปอีก 1 ชั่วโมง
+            // ทั้งที่ไม่ว่ารออีกกี่ชั่วโมงก็ไม่มีทางสำเร็จ
+            //
+            // ผลข้างเคียงที่แย่ที่สุดคือคำขอเดิมที่ยังใช้ได้อยู่ถูกทับหายไปฟรี ๆ
+            if ($this->emailService === null || !$this->emailService->isEnabled()) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                error_log('[profile] email change requested but the mail system is not configured');
+
+                return [
+                    'success' => false,
+                    'error' => 'ระบบส่งอีเมลยังไม่พร้อมใช้งาน จึงยังเปลี่ยนอีเมลไม่ได้ กรุณาติดต่อผู้ดูแลระบบ',
+                ];
+            }
+
             $rateLimit = $this->reserveEmailChangeSendSlot($userId);
             if ($rateLimit !== null) {
                 if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
@@ -431,7 +454,7 @@ class ProfileService
                 ],
                 'message' => $sent
                     ? 'ส่งลิงก์ยืนยันไปที่ ' . $normalizedEmail . ' แล้ว — อีเมลจะเปลี่ยนเมื่อคุณกดลิงก์นั้น'
-                    : 'บันทึกคำขอแล้ว แต่ส่งอีเมลยืนยันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+                    : 'บันทึกคำขอแล้ว แต่ส่งอีเมลยืนยันไม่สำเร็จ กรุณารอสักครู่แล้วกดส่งใหม่อีกครั้ง',
             ];
         } catch (PDOException $exception) {
             if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {

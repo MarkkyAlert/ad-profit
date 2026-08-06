@@ -59,7 +59,9 @@ final class PasswordResetInvalidationTest extends IntegrationTestCase
                     $pdo,
                     new PasswordResetRepository($pdo),
                     new \EmailChangeRepository($pdo),
-                    null
+                    // ⚠️ ต้องเป็นระบบอีเมลที่ "ตั้งค่าครบแล้ว" — ปล่อยเป็น null จะไปตกทาง
+                    // "ระบบอีเมลยังไม่ได้ตั้งค่า" ซึ่งปฏิเสธตั้งแต่ต้นโดยตั้งใจ
+                    new \EmailService(true, 'smtp.example.test', 587, 'user', 'pass', 'no-reply@example.test')
                 );
                 $this->captured = &$captured;
             }
