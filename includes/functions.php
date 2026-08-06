@@ -919,6 +919,12 @@ function schema_required_unique_indexes(): array
         // ทำ ON DUPLICATE KEY UPDATE เพื่อให้ "ขอลิงก์ใหม่ = ลิงก์เก่าใช้ไม่ได้"
         // ถ้า index หาย การขอลิงก์ใหม่จะกลายเป็น INSERT ทำให้ลิงก์เก่าทุกใบยังใช้ได้ต่อ
         ['password_reset_tokens', 'uq_password_reset_user'],
+        ['email_change_requests', 'uq_email_change_token_hash'],
+        // เหตุผลเดียวกับ `uq_password_reset_user` เป๊ะ ๆ — `EmailChangeRepository::createRequest`
+        // ใช้ ON DUPLICATE KEY UPDATE เพื่อให้ "ขอลิงก์ใหม่ = ลิงก์เก่าใช้ไม่ได้ทันที"
+        // ⚠️ index นี้คือสิ่งเดียวที่บังคับกติกานั้น ถ้าหาย การขอใหม่จะกลายเป็น INSERT
+        // แล้ว **ลิงก์เปลี่ยนอีเมลทุกใบที่เคยขอจะยังใช้ได้ตลอดไป** โดยไม่มีอะไรผิดพลาดให้เห็น
+        ['email_change_requests', 'uq_email_change_user'],
     ];
 }
 
@@ -1075,6 +1081,8 @@ function schema_required_column_types(): array
         ['users', 'display_name', 'varchar(120)'],
         ['users', 'email', 'varchar(255)'],
         ['users', 'password_hash', 'varchar(255)'],
+        ['email_change_requests', 'new_email', 'varchar(255)'],
+        ['email_change_requests', 'token_hash', 'char(64)'],
     ];
 }
 
@@ -1116,7 +1124,18 @@ function schema_column_type_matches(PDO $pdo, string $tableName, string $columnN
  */
 function schema_transactional_tables(): array
 {
-    return ['users', 'shops', 'daily_records', 'monthly_goals', 'password_reset_tokens'];
+    return [
+        'users',
+        'shops',
+        'daily_records',
+        'monthly_goals',
+        'password_reset_tokens',
+        'email_change_requests',
+        // ⚠️ ตัวจำกัดการเดารหัสผ่านพึ่งการนับที่ห้ามพลาด — บน MyISAM การลองใหม่เมื่อชนกัน
+        // (1205/1213) จะไม่มีวันเกิดขึ้นเลยเพราะไม่มี transaction ให้ล้ม ตัวนับจึงเพี้ยน
+        // ได้เงียบ ๆ ในจังหวะที่มีคนยิงพร้อมกัน ซึ่งคือจังหวะเดียวที่ต้องการมันจริง ๆ
+        'auth_rate_limits',
+    ];
 }
 
 function schema_table_is_innodb(PDO $pdo, string $tableName): bool
@@ -1147,6 +1166,9 @@ function schema_required_cascades(): array
         ['monthly_goals', 'fk_monthly_goals_shop'],
         ['shops', 'fk_shops_user'],
         ['password_reset_tokens', 'fk_password_reset_user'],
+        // ลบผู้ใช้แล้วคำขอเปลี่ยนอีเมลต้องหายตาม ไม่งั้น token ยังใช้ได้อยู่
+        // และถ้าผู้ใช้คนใหม่ได้ id เดิม ลิงก์เก่าจะไปเปลี่ยนอีเมลของคนใหม่แทน
+        ['email_change_requests', 'fk_email_change_user'],
     ];
 }
 

@@ -169,12 +169,20 @@ function check_schema_compatibility(PDO $pdo): array
     }
 
     try {
-        if (!schema_table_exists($pdo, 'auth_rate_limits')) {
-            $cachedResult = [
-                'ok' => false,
-                'message' => 'Missing required table auth_rate_limits',
-            ];
-            return $cachedResult;
+        // ⚠️ ตารางที่เพิ่มทีหลังต้องมาลงทะเบียนตรงนี้ด้วยเสมอ
+        //
+        // `email_change_requests` เคยตกสำรวจ: อัปโหลดโค้ดใหม่ขึ้นเซิร์ฟเวอร์แล้วลืมรัน
+        // migration → แอปเปิดได้ตามปกติทุกหน้า จนกว่าจะมีคนกดเปลี่ยนอีเมลถึงจะเจอ
+        // ทางตัน ซึ่งอาจเป็นเวลาหลายเดือนหลังจากนั้น · การ์ดตัวนี้มีไว้เพื่อให้รู้
+        // ตั้งแต่วินาทีแรกหลัง deploy พร้อมบอกว่าต้องรันอะไร
+        foreach (['auth_rate_limits', 'email_change_requests'] as $requiredTable) {
+            if (!schema_table_exists($pdo, $requiredTable)) {
+                $cachedResult = [
+                    'ok' => false,
+                    'message' => 'Missing required table ' . $requiredTable,
+                ];
+                return $cachedResult;
+            }
         }
 
         if (!schema_column_exists($pdo, 'users', 'display_name')) {
