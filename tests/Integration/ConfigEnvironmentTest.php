@@ -66,6 +66,9 @@ final class ConfigEnvironmentTest extends TestCase
             'เวลารอของอีเมล: ติดลบ' => ['MAIL_TIMEOUT_SECONDS', '-1', '15'],
             'จำนวนครั้งที่ลองส่งซ้ำ: ขยะ' => ['MAIL_RETRY_ATTEMPTS', 'สองครั้ง', '1'],
             'เพดานการเดารหัส: ขยะ' => ['RATE_LIMIT_MAX_ATTEMPTS', '5 ครั้ง', '5'],
+            'cooldown เปลี่ยนอีเมล: ขยะ' => ['EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS', '1 นาที', '60'],
+            'เพดานส่งลิงก์เปลี่ยนอีเมล: ศูนย์' => ['EMAIL_CHANGE_RESEND_MAX_ATTEMPTS', '0', '5'],
+            'หน้าต่างส่งลิงก์เปลี่ยนอีเมล: ขยะ' => ['EMAIL_CHANGE_RESEND_WINDOW_SECONDS', 'หนึ่งชั่วโมง', '3600'],
             'เวลาหมดอายุ session: ขยะ' => ['SESSION_IDLE_TIMEOUT_SECONDS', '4h', '14400'],
         ];
     }

@@ -146,6 +146,19 @@ if (!defined('RATE_LIMIT_WINDOW_SECONDS')) {
     define('RATE_LIMIT_WINDOW_SECONDS', config_positive_int('RATE_LIMIT_WINDOW_SECONDS', 60));
 }
 
+// ส่งลิงก์ยืนยันเปลี่ยนอีเมล: ผู้ใช้ 1 คนส่งได้ไม่เกิน 1 ครั้งต่อนาที และ 5 ครั้งต่อชั่วโมง
+if (!defined('EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS')) {
+    define('EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS', config_positive_int('EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS', 60));
+}
+
+if (!defined('EMAIL_CHANGE_RESEND_MAX_ATTEMPTS')) {
+    define('EMAIL_CHANGE_RESEND_MAX_ATTEMPTS', config_positive_int('EMAIL_CHANGE_RESEND_MAX_ATTEMPTS', 5));
+}
+
+if (!defined('EMAIL_CHANGE_RESEND_WINDOW_SECONDS')) {
+    define('EMAIL_CHANGE_RESEND_WINDOW_SECONDS', config_positive_int('EMAIL_CHANGE_RESEND_WINDOW_SECONDS', 3600));
+}
+
 // ── เพดาน "ต่อบัญชี" (ไม่ผูกกับ IP) ────────────────────────────────────────
 // สองค่าบนผูกกับ IP ทั้งคู่ คนร้ายที่หมุนเปลี่ยน IP จึงไล่เดาบัญชีเดียวได้ไม่จำกัด
 // ค่าชุดนี้นับ "รหัสผิดของบัญชีนี้" รวมทุกเครื่อง แล้ว **หน่วงเวลา** เมื่อเกิน

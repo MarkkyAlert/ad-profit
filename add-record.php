@@ -88,14 +88,14 @@ require __DIR__ . '/includes/header.php';
                 name="record_date"
                 type="date"
                 data-date="<?= e(date('d/m/Y')) ?>"
+                max="<?= e($todayDate) ?>"
                 value="<?= e($todayDate) ?>"
                 required
                 class="w-full rounded-xl px-4 py-2.5 transition-all date-input-formatted"
                 style="position: relative;"
                 onchange="this.setAttribute('data-date', this.value ? this.value.split('-').reverse().join('/') : '')">
-            <?php // ลงวันที่ล่วงหน้าทำได้ (บางคนตั้งใจ) แต่ต้องเห็นว่ากำลังทำอยู่ — กันพิมพ์ปีผิด ?>
             <p id="future-date-warning" class="mt-1 hidden text-xs text-amber-300">
-                ⚠️ วันที่นี้อยู่ในอนาคต — บันทึกได้ แต่ตรวจสอบอีกครั้งว่าพิมพ์ปีถูกไหม
+                วันที่นี้อยู่ในอนาคต ระบบจะไม่บันทึกยอดที่ยังไม่เกิดขึ้น
             </p>
         </div>
 
@@ -230,7 +230,7 @@ require __DIR__ . '/includes/header.php';
         <td class="px-2 py-2 text-slate-500 bulk-row-number"></td>
         <td class="px-2 py-2">
             <input type="hidden" name="row_number[]" value="">
-                <input name="record_date[]" type="date" class="w-full rounded-lg px-2 py-1.5 text-sm">
+                <input name="record_date[]" type="date" max="<?= e($todayDate) ?>" class="w-full rounded-lg px-2 py-1.5 text-sm">
         </td>
         <td class="px-2 py-2">
             <input name="revenue[]" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
@@ -992,8 +992,7 @@ require __DIR__ . '/includes/header.php';
     </div>
 </section>
 <script>
-    // เตือนเมื่อวันที่อยู่ในอนาคต — ไม่บล็อกการบันทึก (ลงล่วงหน้าเป็นเรื่องปกติ)
-    // แต่ทำให้การพิมพ์ปีผิด เช่น 2027 ไม่ผ่านไปเงียบ ๆ
+    // เตือนให้ตรงกับ server-side validation: daily_records เป็นยอดจริงเท่านั้น
     (() => {
         const dateInput = document.getElementById('record-date');
         const warning = document.getElementById('future-date-warning');

@@ -52,12 +52,14 @@ class AnnualService
 
         $startMonth = sprintf('%04d-01', $year);
         $endMonth = sprintf('%04d-%02d', $year, max(1, $lastMonth));
+        $notAfterDate = $year === $currentYear ? $todayObject->format('Y-m-d') : null;
 
         try {
             $monthlyTotals = $this->recordRepository->getMonthlyTotalsByMonthRange(
                 $shopId,
                 $startMonth,
-                $endMonth
+                $endMonth,
+                $notAfterDate
             );
         } catch (Throwable $exception) {
             error_log('[annual] buildYearlySummary failed: ' . $exception->getMessage());
@@ -223,15 +225,8 @@ class AnnualService
                 $targetRevenue = $goal['target_revenue'] !== null ? (float)$goal['target_revenue'] : null;
                 $targetProfit = $goal['target_profit'] !== null ? (float)$goal['target_profit'] : null;
 
-                // ⚠️⚠️ การ์ดเป้าหมายต้องนับ "ถึงวันนี้" เท่านั้น เหมือนแดชบอร์ด
-                //
-                // ระบบให้ลงข้อมูลวันล่วงหน้าได้ · ถ้านับทั้งเดือน หน้านี้กับไฟล์ Excel
-                // จะขึ้น "✓ ถึงเป้าแล้ว 100%" ขณะที่แดชบอร์ดขึ้น "40% ยังไม่ถึงเป้า"
-                // จากข้อมูลชุดเดียวกันเดือนเดียวกัน (เกิดขึ้นจริง)
-                //
-                // ⚠️ ตัดเฉพาะตรงนี้ ไม่ใช่ทั้งเมธอด — ยอดรวมรายปีกับตารางรายเดือน
-                // **ตั้งใจ**นับแถวล่วงหน้าของเดือนนี้ เพื่อให้แผ่น "รายวัน" กับ
-                // "รายเดือน" ในไฟล์ Excel เดียวกันบวกได้เท่ากัน (XlsxAnnualParityTest)
+                // กติกาเดียวกับยอดรวมรายปีด้านบน: ปีปัจจุบันนับถึงวันนี้เท่านั้น
+                // เพื่อไม่ให้แถวล่วงหน้าที่หลุดมาจากข้อมูลเก่าทำให้การ์ดเป้าหมายสวนกับแดชบอร์ด
                 [$goalRevenue, $goalProfit] = $this->totalsUpTo($monthlyTotals, $shopId, $monthKey, $todayObject);
 
                 $goalProgress[] = [

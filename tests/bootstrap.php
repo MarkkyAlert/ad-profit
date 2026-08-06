@@ -33,6 +33,15 @@ if (!defined('RATE_LIMIT_MAX_ATTEMPTS')) {
 if (!defined('RATE_LIMIT_WINDOW_SECONDS')) {
     define('RATE_LIMIT_WINDOW_SECONDS', 60);
 }
+if (!defined('EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS')) {
+    define('EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS', 60);
+}
+if (!defined('EMAIL_CHANGE_RESEND_MAX_ATTEMPTS')) {
+    define('EMAIL_CHANGE_RESEND_MAX_ATTEMPTS', 5);
+}
+if (!defined('EMAIL_CHANGE_RESEND_WINDOW_SECONDS')) {
+    define('EMAIL_CHANGE_RESEND_WINDOW_SECONDS', 3600);
+}
 // ⚠️ ย่อลงจากของจริง (20) — ทุกครั้งที่วนคือการตรวจรหัสผ่านจริงซึ่งกินเวลา ~550ms
 // วน 20 ครั้งต่อเทสต์ทำให้ `composer test` ทะลุเพดานเวลา 300 วินาทีจนถูกฆ่าทิ้ง
 // ต้องมากกว่า RATE_LIMIT_MAX_ATTEMPTS (5) เพื่อคงความสัมพันธ์ "หลวมกว่าเพดานต่อ IP"

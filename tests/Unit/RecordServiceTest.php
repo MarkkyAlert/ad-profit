@@ -79,6 +79,30 @@ final class RecordServiceTest extends TestCase
         $this->assertTrue($result['success']);
     }
 
+    /** ยอดรายวันเป็นข้อมูลจริงของวันที่เกิดขึ้นแล้วเท่านั้น */
+    public function testFutureDatesAreRejectedBeforeAnyWritePathTouchesTheRepository(): void
+    {
+        $recordRepository = $this->createMock(RecordRepository::class);
+        $recordRepository->expects($this->never())->method('upsert');
+        $recordRepository->expects($this->never())->method('updateByIdAndShopId');
+
+        $shopRepository = $this->createStub(ShopRepository::class);
+        $shopRepository->method('userCanAccessShop')->willReturn(true);
+
+        $service = new RecordService($recordRepository, $shopRepository, null);
+
+        $single = $service->upsertRecord(1, 1, '2026-08-11', 100.0, 10.0, null, '2026-08-10');
+        $bulk = $service->upsertManyRecords(1, 1, [
+            ['row_number' => 1, 'record_date' => '2026-08-11', 'revenue' => 100.0, 'ad_cost' => 10.0],
+        ], null, '2026-08-10');
+        $update = $service->updateRecord(1, 1, 1, '2026-08-11', 100.0, 10.0, null, '2026-08-10');
+
+        foreach (['single' => $single, 'bulk' => $bulk, 'update' => $update] as $label => $result) {
+            $this->assertFalse($result['success'], $label);
+            $this->assertStringContainsString('อนาคต', (string)$result['error'], $label);
+        }
+    }
+
     /**
      * ปีนอกช่วงที่รายงานรองรับต้องถูกปฏิเสธ
      *
@@ -101,7 +125,7 @@ final class RecordServiceTest extends TestCase
     {
         $service = $this->makeService();
 
-        $this->assertTrue($service->upsertRecord(1, 1, '2000-01-01', 100.0, 10.0, null)['success']);
-        $this->assertTrue($service->upsertRecord(1, 1, '2100-12-31', 100.0, 10.0, null)['success']);
+        $this->assertTrue($service->upsertRecord(1, 1, '2000-01-01', 100.0, 10.0, null, '2000-01-01')['success']);
+        $this->assertTrue($service->upsertRecord(1, 1, '2100-12-31', 100.0, 10.0, null, '2100-12-31')['success']);
     }
 }

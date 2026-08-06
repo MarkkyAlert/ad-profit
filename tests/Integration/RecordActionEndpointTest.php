@@ -83,6 +83,37 @@ final class RecordActionEndpointTest extends ControllerTestCase
         );
     }
 
+    /** ⭐ ยอดรายวันเป็น actuals: แก้รายการไปวันอนาคตไม่ได้ */
+    public function testEditingIntoAFutureDateIsRejectedAndKeepsTheOldRecord(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $originalDate = date('Y-m-d', strtotime('-1 day'));
+        $futureDate = date('Y-m-d', strtotime('+1 day'));
+        $this->createRecord($shopId, $originalDate, 1000.0, 100.0, null);
+        $recordId = (int)$this->pdo->query("SELECT id FROM daily_records WHERE shop_id = {$shopId}")->fetchColumn();
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->postJson('/api/records.php', [
+            'action' => 'update',
+            'csrf_token' => $this->csrfTokenFor($session),
+            'shop_context_id' => (string)$shopId,
+            'record_id' => (string)$recordId,
+            'record_date' => $futureDate,
+            'revenue' => '1000',
+            'ad_cost' => '100',
+            'month' => substr($originalDate, 0, 7),
+        ], $session);
+
+        $this->assertSame(422, $response['status'], (string)$response['body']);
+        $this->assertStringContainsString('อนาคต', $response['body']);
+        $this->assertSame(
+            $originalDate,
+            $this->pdo->query("SELECT record_date FROM daily_records WHERE id = {$recordId}")->fetchColumn(),
+            'รายการถูกย้ายไปวันอนาคตทั้งที่ service ปฏิเสธแล้ว'
+        );
+    }
+
     /** ⭐ แก้ไขรายการของร้านคนอื่นไม่ได้ */
     public function testUpdatingAnotherUsersRecordIsRejected(): void
     {

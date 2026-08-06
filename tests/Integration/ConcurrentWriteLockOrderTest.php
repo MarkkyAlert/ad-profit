@@ -127,7 +127,7 @@ final class ConcurrentWriteLockOrderTest extends IntegrationTestCase
             ['row_number' => 1, 'record_date' => '2026-08-09', 'revenue' => '900', 'ad_cost' => '90', 'note' => ''],
             ['row_number' => 2, 'record_date' => '2026-08-01', 'revenue' => '100', 'ad_cost' => '10', 'note' => ''],
             ['row_number' => 3, 'record_date' => '2026-08-05', 'revenue' => '500', 'ad_cost' => '50', 'note' => ''],
-        ]);
+        ], null, '2026-08-31');
 
         $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
 
@@ -159,6 +159,29 @@ final class ConcurrentWriteLockOrderTest extends IntegrationTestCase
         $this->assertFalse($result['success'], 'ตั้งเป้าผ่านทั้งที่แถวร้านถูกจับไว้');
         $this->assertFalse($writer->inTransaction());
         $this->assertSame(0, $this->countRows('monthly_goals'));
+    }
+
+    /** ⭐ ลบเป้าหมายต้องจองแถวร้านก่อนเหมือนทางบันทึกและทางลบร้าน */
+    public function testGoalDeleteAlsoWaitsOnTheShopRow(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $this->createGoal($shopId, '2026-08', 50000.0, null);
+
+        $holder = $this->newConnection();
+        $holder->beginTransaction();
+        (new ShopRepository($holder))->lockForWrite($shopId, $userId);
+
+        $writer = $this->newConnection();
+        $writer->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $result = (new GoalService(new GoalRepository($writer), new ShopRepository($writer), $writer))
+            ->deleteGoal($userId, $shopId, '2026-08');
+
+        $holder->rollBack();
+
+        $this->assertFalse($result['success'], 'ลบเป้าผ่านทั้งที่แถวร้านถูกจับไว้');
+        $this->assertFalse($writer->inTransaction());
+        $this->assertSame(1, $this->countRows('monthly_goals'));
     }
 
     /**

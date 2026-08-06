@@ -30,6 +30,10 @@ ensure_post_request_or_respond($wantsJson, $redirectPath);
 ensure_form_content_type_or_respond($wantsJson, $redirectPath);
 ensure_post_body_not_truncated_or_respond($wantsJson, $redirectPath);
 
+// หน้าจัดการร้านอาจเปิดค้างไว้ก่อนที่ผู้ใช้สลับร้านจากอีกแท็บได้
+// ฟอร์มของหน้าที่เรนเดอร์เก่าจึงต้องไม่เปลี่ยนชื่อ/ลบร้านตาม session ใหม่โดยเงียบ ๆ
+ensure_shop_context_or_respond($wantsJson, $redirectPath, (int)($_SESSION['current_shop_id'] ?? 0));
+
 $respond = static function (array $payload, int $statusCode, string $redirectUrl) use ($wantsJson): never {
     api_respond($payload, $statusCode, $redirectUrl, $wantsJson);
 };
@@ -175,6 +179,7 @@ if ($action === 'delete') {
     $deletedShopId = (int)($deletedShop['id'] ?? 0);
 
     $currentSessionShopId = (int)($_SESSION['current_shop_id'] ?? 0);
+    $deletedCurrentShop = $currentSessionShopId > 0 && $currentSessionShopId === $deletedShopId;
     $activeShop = null;
 
     if ($currentSessionShopId > 0 && $currentSessionShopId !== $deletedShopId) {
@@ -201,7 +206,9 @@ if ($action === 'delete') {
 
     $respond([
         'success' => true,
-        'message' => 'ลบร้านค้าเรียบร้อยแล้ว',
+        'message' => $deletedCurrentShop
+            ? 'ลบร้านค้าเรียบร้อยแล้ว ระบบสลับไปใช้ร้าน "' . (string)($activeShop['name'] ?? '') . '" ให้แล้ว'
+            : 'ลบร้านค้าเรียบร้อยแล้ว',
         'data' => [
             'shop_id' => (int)($activeShop['id'] ?? 0),
             'shop_name' => (string)($activeShop['name'] ?? ''),

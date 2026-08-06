@@ -201,6 +201,89 @@ final class GoalAndProfileEndpointTest extends ControllerTestCase
             ->query("SELECT display_name FROM users WHERE id = {$userId}")->fetchColumn());
     }
 
+    /**
+     * ผู้ใช้ที่ล็อกอินอยู่ต้องไม่เห็นผลสำเร็จเมื่อส่งลิงก์ยืนยันอีเมลไม่ออก
+     * แม้คำขอในฐานข้อมูลจะถูกเก็บไว้เพื่อให้ลองส่งใหม่ได้ แต่ response ต้องสะท้อน
+     * ผลการส่งจริง ไม่เช่นนั้น redirect form จะแสดง flash สีเขียวคู่กับข้อความล้มเหลว.
+     */
+    public function testEmailChangeDeliveryFailureIsReportedAsAnError(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->submit('/api/profile.php', $session, [
+            'action' => 'change_email',
+            'email' => 'new@example.com',
+            'current_password' => 'OldPass123',
+        ]);
+
+        $this->assertSame(503, $response['status'], (string)$response['body']);
+        $this->assertStringContainsString('ส่งอีเมลยืนยันไม่สำเร็จ', $response['body']);
+        $this->assertSame(1, $this->countRows('email_change_requests'));
+    }
+
+    /** ส่งลิงก์เปลี่ยนอีเมลซ้ำทันทีต้องติด cooldown ต่อผู้ใช้ */
+    public function testEmailChangeResendIsLimitedToOncePerCooldown(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $first = $this->submit('/api/profile.php', $session, [
+            'action' => 'change_email',
+            'email' => 'first@example.com',
+            'current_password' => 'OldPass123',
+        ]);
+        $second = $this->submit('/api/profile.php', $session, [
+            'action' => 'change_email',
+            'email' => 'second@example.com',
+            'current_password' => 'OldPass123',
+        ]);
+
+        $this->assertSame(503, $first['status'], (string)$first['body']);
+        $this->assertSame(429, $second['status'], (string)$second['body']);
+        $this->assertStringContainsString('บ่อยเกินไป', $second['body']);
+        $this->assertSame('first@example.com', (string)$this->pdo
+            ->query("SELECT new_email FROM email_change_requests WHERE user_id = {$userId}")
+            ->fetchColumn());
+    }
+
+    /** ต่อให้รอ cooldown ครบ ก็ส่งได้สูงสุด 5 ครั้งต่อชั่วโมงต่อผู้ใช้ */
+    public function testEmailChangeResendIsLimitedToFiveTimesPerHour(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        for ($attempt = 1; $attempt <= 5; $attempt++) {
+            $response = $this->submit('/api/profile.php', $session, [
+                'action' => 'change_email',
+                'email' => 'round' . $attempt . '@example.com',
+                'current_password' => 'OldPass123',
+            ]);
+
+            $this->assertSame(503, $response['status'], 'ครั้งที่ ' . $attempt . ': ' . (string)$response['body']);
+            $this->pdo->exec(
+                "UPDATE auth_rate_limits
+                 SET started_at = started_at - INTERVAL 61 SECOND
+                 WHERE action_type = 'email_change_resend_cooldown'"
+            );
+        }
+
+        $blocked = $this->submit('/api/profile.php', $session, [
+            'action' => 'change_email',
+            'email' => 'sixth@example.com',
+            'current_password' => 'OldPass123',
+        ]);
+
+        $this->assertSame(429, $blocked['status'], (string)$blocked['body']);
+        $this->assertStringContainsString('1 ชั่วโมง', $blocked['body']);
+        $this->assertSame('round5@example.com', (string)$this->pdo
+            ->query("SELECT new_email FROM email_change_requests WHERE user_id = {$userId}")
+            ->fetchColumn());
+    }
+
     /** ⭐ เปลี่ยนรหัสผ่านโดยกรอกรหัสเดิมผิด ต้องไม่เปลี่ยนอะไรเลย */
     public function testAWrongCurrentPasswordChangesNothing(): void
     {
@@ -318,7 +401,10 @@ final class GoalAndProfileEndpointTest extends ControllerTestCase
             'current_password' => 'OldPass123',
         ]);
 
-        $this->assertSame(200, $response['status'], (string)$response['body']);
+        // test environment ไม่ตั้ง SMTP: คำขอถูกบันทึก แต่ delivery failure ต้องตอบเป็น
+        // error เพื่อไม่ให้ form redirect แสดงว่า "สำเร็จ" ทั้งที่ผู้ใช้ยังไม่ได้ลิงก์
+        $this->assertSame(503, $response['status'], (string)$response['body']);
+        $this->assertStringContainsString('ส่งอีเมลยืนยันไม่สำเร็จ', $response['body']);
         $this->assertSame(
             'owner@example.com',
             (string)$this->pdo->query("SELECT email FROM users WHERE id = {$userId}")->fetchColumn(),

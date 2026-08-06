@@ -12,8 +12,11 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 // (เดิมการซ่อมอยู่ใน header.php ซึ่ง include ท้ายไฟล์ หน้าจึงขึ้น "ไม่มีสิทธิ์" + ฿0 หนึ่งครั้ง)
 $shopId = resolve_current_shop_id($pdo, $userId);
 
-// ไม่รับเดือนอนาคต/รูปแบบผิด — helper เดียวกับ overview.php และ dashboard.php
-$selectedMonth = resolve_calendar_month($_GET['month'] ?? null);
+// รายงานยังหดเดือนอนาคตเพื่อไม่แสดงตัวเลขของช่วงที่ยังไม่เกิด แต่ History เป็นหน้าจัดการ
+// รายการ จึงต้องเปิดเดือนอนาคตได้เมื่อมีข้อมูลอยู่จริง ไม่เช่นนั้นรายการที่ลงล่วงหน้าจะ
+// แก้ไขหรือลบผ่านหน้าเว็บไม่ได้. เดือนอนาคตที่ว่างยังคงหดด้วย helper เดิม.
+$requestedMonth = trim((string)($_GET['month'] ?? ''));
+$selectedMonth = resolve_calendar_month($requestedMonth);
 
 $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
@@ -21,6 +24,20 @@ $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 
 $historyError = null;
 $historyResult = $recordService->getMonthlyRecords($userId, $shopId, $selectedMonth);
+
+if (
+    preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth) === 1
+    && $requestedMonth > $selectedMonth
+) {
+    $futureHistoryResult = $recordService->getMonthlyRecords($userId, $shopId, $requestedMonth);
+    if (
+        ($futureHistoryResult['success'] ?? false) === true
+        && !empty($futureHistoryResult['data']['records'])
+    ) {
+        $selectedMonth = $requestedMonth;
+        $historyResult = $futureHistoryResult;
+    }
+}
 
 $records = [];
 $totals = [
@@ -60,7 +77,6 @@ require __DIR__ . '/includes/header.php';
                     id="month"
                     name="month"
                     type="month"
-                    max="<?= e(date('Y-m')) ?>"
                     value="<?= e($selectedMonth) ?>"
                     class="rounded-xl px-3 py-2 text-sm transition-all">
                 <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>

@@ -128,12 +128,17 @@ if ($action === 'forgot_password') {
 }
 
 if ($action === 'reset_password') {
-    ensure_valid_csrf_or_respond($wantsJson, '/reset-password.php', (string)($_POST['csrf_token'] ?? ''));
-
     // ⚠️ อ่านจาก $_POST เท่านั้น — ห้าม fallback ไป session
     // เดิม fallback ทำให้ลิงก์ที่ใครก็ได้ยิงเข้ามาทาง GET กำหนดได้ว่าการตั้งรหัสครั้งถัดไป
     // จะไปลงบัญชีไหน (ดูคอมเมนต์ยาวใน reset-password.php)
     $resetToken = trim((string)($_POST['token'] ?? ''));
+
+    // ต้องรู้ token ก่อนตรวจ CSRF เพื่อให้ redirect ของ form error พากลับไปหน้าเดิมได้
+    $failureRedirect = $resetToken !== ''
+        ? '/reset-password.php?token=' . rawurlencode($resetToken)
+        : '/forgot-password.php';
+
+    ensure_valid_csrf_or_respond($wantsJson, $failureRedirect, (string)($_POST['csrf_token'] ?? ''));
 
     $result = $authService->resetPassword(
         $resetToken,
@@ -144,7 +149,7 @@ if ($action === 'reset_password') {
 
     if (($result['success'] ?? false) === true) {
         // ตั้งรหัสใหม่สำเร็จ = เจ้าของบัญชียืนยันตัวตนผ่านอีเมลแล้ว → ล้าง session ที่ค้างอยู่
-        if (isset($_SESSION['user_id'])) {
+        if ((int)($_SESSION['user_id'] ?? 0) > 0) {
             clearAuthSession();
         }
 
@@ -158,14 +163,15 @@ if ($action === 'reset_password') {
     // พร้อมข้อความ "ลิงก์ไม่ถูกต้อง" (ซึ่งไม่จริง) แล้วเขียนทับข้อความจริงทิ้ง
     // ผู้ใช้ที่พิมพ์รหัสยืนยันผิดครั้งเดียวจึงต้องขออีเมลใหม่ทั้งใบ
     // token ยังไม่ถูกใช้ (resetPassword คืนค่าก่อนแตะ) จึงส่งกลับได้ปลอดภัย
-    $failureRedirect = $resetToken !== ''
-        ? '/reset-password.php?token=' . rawurlencode($resetToken)
+    $errorMessage = (string)($result['error'] ?? 'ไม่สามารถรีเซ็ตรหัสผ่านได้');
+    $serviceFailureRedirect = ($resetToken !== '' && !str_contains($errorMessage, 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง'))
+        ? $failureRedirect
         : '/forgot-password.php';
 
     $respond([
         'success' => false,
-        'error' => (string)($result['error'] ?? 'ไม่สามารถรีเซ็ตรหัสผ่านได้'),
-    ], 422, $failureRedirect);
+        'error' => $errorMessage,
+    ], 422, $serviceFailureRedirect);
 }
 
 $respond([

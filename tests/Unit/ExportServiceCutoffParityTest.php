@@ -10,7 +10,7 @@ use RecordService;
 use ShopRepository;
 
 /**
- * unit test ของ cutoff ใน sheet รายวัน (ตัดที่ "สิ้นเดือนปัจจุบัน" ไม่ใช่ "วันนี้")
+ * unit test ของ cutoff ใน sheet รายวัน (ปีปัจจุบันตัดที่วันนี้)
  * ส่วน parity ระหว่างแท็บอยู่ที่ Tests\Integration\XlsxAnnualParityTest (DB จริง)
  * today คงที่ = 2026-08-15
  */
@@ -67,20 +67,20 @@ final class ExportServiceCutoffParityTest extends TestCase
         $this->assertSame(9000.0, $data['totals']['revenue']);
     }
 
-    public function testFutureDatedRecordsInsideCurrentMonthAreKept(): void
+    public function testFutureDatedRecordsInsideCurrentMonthAreCutOff(): void
     {
         $service = $this->makeService([
             ['2026-08-02', 4000.0, 1000.0],
-            // ลงล่วงหน้าแต่ยังอยู่ในเดือนนี้ (today = 15 ส.ค.) → ต้องเก็บไว้
+            // อยู่ในเดือนนี้แต่ยังไม่ถึง (today = 15 ส.ค.) → ต้องไม่ export
             ['2026-08-25', 2000.0, 500.0],
             ['2026-08-31', 1000.0, 200.0],
         ]);
 
         $data = $service->buildYearlyDailyPayload(1, 1, 2026, self::TODAY)['data'];
 
-        $this->assertCount(3, $data['rows']);
-        $this->assertSame('2026-08-31', end($data['rows'])['record_date']);
-        $this->assertSame(5300.0, $data['totals']['profit']);
+        $this->assertCount(1, $data['rows']);
+        $this->assertSame('2026-08-02', end($data['rows'])['record_date']);
+        $this->assertSame(3000.0, $data['totals']['profit']);
     }
 
     public function testPastYearStillCoversTheWholeYear(): void

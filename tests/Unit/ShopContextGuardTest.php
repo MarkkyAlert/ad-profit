@@ -58,7 +58,7 @@ final class ShopContextGuardTest extends TestCase
     {
         $root = dirname(__DIR__, 2);
 
-        foreach (['add-record.php', 'history.php', 'dashboard.php'] as $page) {
+        foreach (['add-record.php', 'history.php', 'dashboard.php', 'shops.php'] as $page) {
             $source = (string)file_get_contents($root . '/' . $page);
 
             // ตัดออกมาทีละ <form ... </form> แล้วดูเฉพาะอันที่ส่งไป /api/

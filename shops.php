@@ -49,6 +49,7 @@ require __DIR__ . '/includes/header.php';
 
         <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="mt-4 space-y-3">
             <?= csrf_field() ?>
+            <?= shop_context_field($currentShopId) ?>
             <input type="hidden" name="action" value="create">
             <input type="hidden" name="redirect_to" value="/shops.php">
 
@@ -108,6 +109,7 @@ require __DIR__ . '/includes/header.php';
                             <?php else: ?>
                                 <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="shrink-0">
                                     <?= csrf_field() ?>
+                                    <?= shop_context_field($currentShopId) ?>
                                     <input type="hidden" name="action" value="switch">
                                     <input type="hidden" name="shop_id" value="<?= e((string)$shopId) ?>">
                                     <input type="hidden" name="redirect_to" value="/shops.php">
@@ -119,6 +121,7 @@ require __DIR__ . '/includes/header.php';
                         <div class="mt-4 flex flex-wrap items-end gap-2">
                             <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="min-w-0 flex-1 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                                 <?= csrf_field() ?>
+                                <?= shop_context_field($currentShopId) ?>
                                 <input type="hidden" name="action" value="rename">
                                 <input type="hidden" name="shop_id" value="<?= e((string)$shopId) ?>">
                                 <input type="hidden" name="redirect_to" value="/shops.php">
@@ -151,6 +154,7 @@ require __DIR__ . '/includes/header.php';
                                 data-confirm-typed-prompt="เพื่อยืนยันการลบร้าน กรุณาพิมพ์<?= $shopNameIsTruncated ? ' ' . ShopService::CONFIRM_NAME_MAX_LENGTH . ' ตัวแรกของ' : '' ?>ชื่อร้านให้ตรงตามนี้:"
                                 data-confirm-typed-input="confirm_shop_name">
                                 <?= csrf_field() ?>
+                                <?= shop_context_field($currentShopId) ?>
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="shop_id" value="<?= e((string)$shopId) ?>">
                                 <input type="hidden" name="redirect_to" value="/shops.php">

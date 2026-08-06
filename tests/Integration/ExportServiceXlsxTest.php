@@ -36,7 +36,7 @@ final class ExportServiceXlsxTest extends IntegrationTestCase
 
         $this->createRecord($shopId, '2026-03-10', 3000.0, 1000.0, 'รอบเดือน มี.ค.');
         $this->createRecord($shopId, '2026-01-05', 5000.0, 1000.0);
-        // ในเดือนปัจจุบันแต่ลงล่วงหน้า (today = 15 ส.ค.) — cutoff ตัดที่สิ้นเดือน จึงต้องยังอยู่
+        // ในเดือนปัจจุบันแต่ยังไม่ถึง (today = 15 ส.ค.) — actuals report ต้องตัดออก
         $this->createRecord($shopId, '2026-08-31', 2000.0, 500.0);
         // เดือนถัดไปเป็นต้นไป = อนาคตจริง ต้องถูกตัด
         $this->createRecord($shopId, '2026-09-01', 90000.0, 0.0);
@@ -47,12 +47,12 @@ final class ExportServiceXlsxTest extends IntegrationTestCase
         $data = $this->makeService()->buildYearlyDailyPayload($userId, $shopId, 2026, self::TODAY)['data'];
 
         $dates = array_map(static fn(array $row): string => (string)$row['record_date'], $data['rows']);
-        $this->assertSame(['2026-01-05', '2026-03-10', '2026-08-31'], $dates);
+        $this->assertSame(['2026-01-05', '2026-03-10'], $dates);
 
         $this->assertSame('ร้านคอร์ส', $data['shop_name']);
-        $this->assertSame(10000.0, $data['totals']['revenue']);
-        $this->assertSame(2500.0, $data['totals']['ad_cost']);
-        $this->assertSame(7500.0, $data['totals']['profit']);
+        $this->assertSame(8000.0, $data['totals']['revenue']);
+        $this->assertSame(2000.0, $data['totals']['ad_cost']);
+        $this->assertSame(6000.0, $data['totals']['profit']);
         $this->assertSame('รอบเดือน มี.ค.', $data['rows'][1]['note']);
     }
 

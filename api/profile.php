@@ -20,7 +20,8 @@ $profileService = new ProfileService(
     $pdo,
     new PasswordResetRepository($pdo),
     new EmailChangeRepository($pdo),
-    new EmailService()
+    new EmailService(),
+    new RateLimitRepository($pdo)
 );
 
 $redirectPath = resolve_safe_redirect_path(
@@ -149,6 +150,18 @@ if ($action === 'change_email') {
 
         $clearProfileRateLimit($rateLimitAction, $userId, $profileClientIp);
 
+        // คำขอเปลี่ยนอีเมลถูกบันทึกก่อนส่งจดหมาย เพื่อให้การส่งซ้ำทำได้อย่างปลอดภัย
+        // แต่สำหรับผู้ใช้ที่ล็อกอินอยู่ "ส่งไม่ออก" ต้องไม่ถูกตอบเป็น success มิฉะนั้น
+        // api_respond() จะสร้าง flash สีเขียวทั้งที่ข้อความบอกว่าส่งล้มเหลว. กรณีอีเมล
+        // เดิมไม่เปลี่ยนค่าไม่มี key นี้ จึงยังเป็น success ตามเดิม.
+        if (array_key_exists('email_sent', $data) && ($data['email_sent'] ?? false) !== true) {
+            $respond([
+                'success' => false,
+                'error' => (string)($result['message'] ?? 'ส่งอีเมลยืนยันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'),
+                'data' => $data,
+            ], 503, $redirectPath);
+        }
+
         // ⚠️ **อีเมลยังไม่เปลี่ยน** จนกว่าเจ้าของจะกดลิงก์ในกล่องจดหมายใหม่
         // จึงไม่แตะ `$_SESSION['email']` · ไม่ bump session_version · ไม่เตะ session อื่น
         // ทั้งหมดนั้นเกิดที่ `verify-email.php` ตอนยืนยันสำเร็จแทน
@@ -168,7 +181,7 @@ if ($action === 'change_email') {
     $respond([
         'success' => false,
         'error' => (string)($result['error'] ?? 'ไม่สามารถเปลี่ยนอีเมลได้'),
-    ], 422, $redirectPath);
+    ], ($result['rate_limited'] ?? false) === true ? 429 : 422, $redirectPath);
 }
 
 if ($action === 'change_password') {

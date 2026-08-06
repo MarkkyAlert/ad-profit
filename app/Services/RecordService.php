@@ -105,7 +105,8 @@ class RecordService
         string $recordDate,
         float $revenue,
         float $adCost,
-        ?string $note
+        ?string $note,
+        ?string $today = null
     ): array {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
@@ -114,7 +115,7 @@ class RecordService
             ];
         }
 
-        $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note);
+        $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note, $today);
         if (($validation['success'] ?? false) !== true) {
             return $validation;
         }
@@ -481,8 +482,13 @@ class RecordService
      *        row_number = เลขแถวที่ผู้ใช้เห็น (ไม่ส่งมาก็นับตามลำดับใน $rows)
      * @param int|null $maxRows เพดานจำนวนแถว — null = BULK_MAX_ROWS (ฟอร์มกรอกมือ)
      */
-    public function upsertManyRecords(int $userId, int $shopId, array $rows, ?int $maxRows = null): array
-    {
+    public function upsertManyRecords(
+        int $userId,
+        int $shopId,
+        array $rows,
+        ?int $maxRows = null,
+        ?string $today = null
+    ): array {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
@@ -571,7 +577,8 @@ class RecordService
                 (string)$row['record_date'],
                 (float)$revenueParsed['value'],
                 (float)$adCostParsed['value'],
-                $row['note']
+                $row['note'],
+                $today
             );
 
             if (($validation['success'] ?? false) !== true) {
@@ -710,7 +717,8 @@ class RecordService
         string $recordDate,
         float $revenue,
         float $adCost,
-        ?string $note
+        ?string $note,
+        ?string $today = null
     ): array {
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
@@ -726,7 +734,7 @@ class RecordService
             ];
         }
 
-        $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note);
+        $validation = $this->validateRecordPayload($recordDate, $revenue, $adCost, $note, $today);
         if (($validation['success'] ?? false) !== true) {
             return $validation;
         }
@@ -1886,8 +1894,13 @@ class RecordService
         ];
     }
 
-    private function validateRecordPayload(string $recordDate, float $revenue, float $adCost, ?string $note): array
-    {
+    private function validateRecordPayload(
+        string $recordDate,
+        float $revenue,
+        float $adCost,
+        ?string $note,
+        ?string $today = null
+    ): array {
         $dateObject = DateTime::createFromFormat('Y-m-d', $recordDate);
         if (!$dateObject || $dateObject->format('Y-m-d') !== $recordDate) {
             return [
@@ -1903,6 +1916,13 @@ class RecordService
             return [
                 'success' => false,
                 'error' => sprintf('ปีต้องอยู่ระหว่าง %d–%d', self::MIN_RECORD_YEAR, self::MAX_RECORD_YEAR),
+            ];
+        }
+
+        if ($recordDate > $this->resolveToday($today)) {
+            return [
+                'success' => false,
+                'error' => 'วันที่ต้องไม่อยู่ในอนาคต',
             ];
         }
 

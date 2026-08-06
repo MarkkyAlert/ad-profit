@@ -134,6 +134,29 @@ final class ShopEndpointTest extends ControllerTestCase
         $this->assertSame($current, $this->sessionShopId($session), 'ถูกย้ายออกจากร้านที่กำลังดูอยู่');
     }
 
+    /** ⭐ หน้าจัดการร้านที่เปิดค้างไว้ต้องแก้ชื่อร้านไม่ได้หลังสลับร้านจากอีกแท็บ */
+    public function testAStaleShopManagementFormDoesNotRenameAnything(): void
+    {
+        $userId = $this->createUser();
+        $renderedFor = $this->createShop($userId, 'ร้านตอนเปิดหน้า');
+        $current = $this->createShop($userId, 'ร้านหลังสลับแท็บ');
+        $session = $this->startSession($userId, $current);
+
+        $response = $this->submit($session, [
+            'action' => 'rename',
+            'shop_id' => (string)$renderedFor,
+            'name' => 'ชื่อจากหน้าเก่า',
+            'shop_context_id' => (string)$renderedFor,
+        ]);
+
+        $this->assertSame(409, $response['status'], (string)$response['body']);
+        $this->assertSame(
+            'ร้านตอนเปิดหน้า',
+            (string)$this->pdo->query("SELECT name FROM shops WHERE id = {$renderedFor}")->fetchColumn(),
+            'ฟอร์มจากหน้าเก่ายังแก้ข้อมูลได้หลังสลับร้านแล้ว'
+        );
+    }
+
     /**
      * ⭐ ชื่อร้านที่เป็นอิโมจิคนละตัว ต้องเป็นคนละร้าน
      *
@@ -282,6 +305,14 @@ final class ShopEndpointTest extends ControllerTestCase
         $this->assertSame(1, $this->countRows('shops'));
         $this->assertSame($survivor, $this->sessionShopId($session), 'session ยังชี้ร้านที่เพิ่งถูกลบ');
         $this->assertSame(0, $this->countRows('daily_records'), 'ข้อมูลของร้านที่ถูกลบยังค้างอยู่');
+
+        $payload = json_decode($response['body'], true);
+        $this->assertIsArray($payload, (string)$response['body']);
+        $this->assertStringContainsString(
+            'ร้านที่เหลือ',
+            (string)($payload['message'] ?? ''),
+            'ผู้ใช้ถูกย้ายไปร้านอื่นแต่ข้อความไม่บอกว่าร้านไหนกำลังใช้งานต่อ'
+        );
     }
 
     /** ⭐ ลบร้านของคนอื่นไม่ได้ แม้จะรู้ทั้ง id และชื่อ */

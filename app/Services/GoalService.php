@@ -208,12 +208,30 @@ class GoalService
         }
 
         $startedTransaction = false;
+        $canLockRows = false;
         try {
-            if ($this->db instanceof PDO && !$this->db->inTransaction()) {
-                $this->db->beginTransaction();
-                $startedTransaction = true;
+            if ($this->db instanceof PDO) {
+                if (!$this->db->inTransaction()) {
+                    $this->db->beginTransaction();
+                    $startedTransaction = true;
+                }
+
+                $canLockRows = $this->db->inTransaction();
+                if ($canLockRows && !$this->shopRepository->lockForWrite($shopId, $userId)) {
+                    if ($startedTransaction && $this->db->inTransaction()) {
+                        $this->db->rollBack();
+                    }
+
+                    return [
+                        'success' => false,
+                        'error' => 'ร้านนี้ถูกลบไปแล้ว กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
+                    ];
+                }
             }
 
+            // ต้องจองแถวร้านก่อนแตะแถวเป้าหมาย เหมือน upsertGoal() และ deleteShop()
+            // เพื่อให้การลบร้าน (ร้าน → ข้อมูลลูก) กับการลบเป้าใช้ลำดับล็อกเดียวกัน
+            // ไม่เช่นนั้นอาจลบเป้าพร้อมกับอีกคำขอที่กำลังลบร้านได้โดยไม่เข้าคิว
             // ไม่มีเป้าของเดือนนั้นแล้ว = ผลลัพธ์ตรงกับที่ผู้ใช้ขอ → ตอบสำเร็จ (idempotent)
             // กด back แล้ว submit ใหม่ไม่ควรได้ error แดง · ownership ตรวจไปแล้วด้านบน
             $this->goalRepository->deleteByShopAndMonth($shopId, $goalMonth);

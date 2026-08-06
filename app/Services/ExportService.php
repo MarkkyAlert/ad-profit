@@ -173,6 +173,7 @@ class ExportService
             ];
         }
 
+        $todayObject = $this->resolveToday($today);
         $lastMonth = $this->resolveLastMonth($year, $today);
 
         if ($lastMonth === 0) {
@@ -188,16 +189,19 @@ class ExportService
             ];
         }
 
-        // ตัดที่ "สิ้นเดือนปัจจุบัน" ไม่ใช่ "วันนี้" — เรคอร์ดที่ลงล่วงหน้าภายในเดือนนี้ยังเก็บครบ
-        // ตรงกับ sheet รายเดือนและหน้า annual ที่นับทั้งเดือนปัจจุบัน
+        // ปีปัจจุบันตัดที่วันนี้ เพราะ daily_records เป็น actuals เท่านั้น
+        // ปีอดีตยัง export ได้เต็มปีตามเดิม
         $endOfLastMonth = (new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $lastMonth)))->format('Y-m-t');
+        $endDate = $year === (int)$todayObject->format('Y')
+            ? $todayObject->format('Y-m-d')
+            : $endOfLastMonth;
 
         try {
             $rangeResult = $this->recordService->getRecordsByDateRange(
                 $userId,
                 $shopId,
                 sprintf('%04d-01-01', $year),
-                $endOfLastMonth
+                $endDate
             );
         } catch (Throwable $exception) {
             error_log('[export] buildYearlyDailyPayload fetch failed: ' . $exception->getMessage());
@@ -274,13 +278,7 @@ class ExportService
      */
     private function resolveLastMonth(int $year, ?string $today): int
     {
-        $todayInput = is_string($today) ? trim($today) : '';
-        $todayObject = $todayInput !== ''
-            ? DateTimeImmutable::createFromFormat('!Y-m-d', $todayInput)
-            : false;
-        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
-            $todayObject = new DateTimeImmutable('today');
-        }
+        $todayObject = $this->resolveToday($today);
 
         $currentYear = (int)$todayObject->format('Y');
 
@@ -293,6 +291,20 @@ class ExportService
         }
 
         return 0;
+    }
+
+    private function resolveToday(?string $today): DateTimeImmutable
+    {
+        $todayInput = is_string($today) ? trim($today) : '';
+        $todayObject = $todayInput !== ''
+            ? DateTimeImmutable::createFromFormat('!Y-m-d', $todayInput)
+            : false;
+
+        if (!$todayObject || $todayObject->format('Y-m-d') !== $todayInput) {
+            return new DateTimeImmutable('today');
+        }
+
+        return $todayObject;
     }
 
     private function sanitizeFilenameBase(string $shopName): string

@@ -12,8 +12,9 @@ use ShopRepository;
 /**
  * "วันล่าสุด" ต้องหมายถึงวันล่าสุดที่ผ่านมาแล้ว ไม่ใช่แถวที่ record_date มากที่สุด
  *
- * ระบบยอมให้บันทึกวันอนาคตได้ (ตัดสินไปแล้ว — เตือนแต่ไม่บล็อก) แถวพวกนั้นจึงลอยขึ้นบนสุด
- * ของ ORDER BY record_date DESC เสมอ · getDaysSinceLastRecord กันไว้แล้วด้วย
+ * ระบบไม่อนุญาตให้บันทึกวันอนาคตแล้ว แต่ฐานข้อมูลเก่า/fixture ที่เขียนตรงอาจยังมีแถวล่วงหน้า
+ * แถวพวกนั้นจึงยังห้ามถูกหยิบเป็น "วันล่าสุด" ของการวิเคราะห์
+ * getDaysSinceLastRecord กันไว้แล้วด้วย
  * findLatestOnOrBeforeDate แต่ getWeekdayContext ยังใช้ getRecentByShopId ตรง ๆ = คู่แฝดที่ตกหล่น
  *
  * ⚠️ เทสต์นี้ยืนยัน "ความสอดคล้องข้ามจุด" ไม่ใช่แค่พฤติกรรมจุดเดียว
@@ -97,7 +98,7 @@ final class RecordServiceFutureRecordTest extends TestCase
         $this->assertFalse($result['data']['has_data']);
     }
 
-    /** ระบุวันอนาคตมาเองยังดูได้ — ผู้ใช้ตั้งใจถามถึงวันนั้นจริง ๆ */
+    /** ระบุวันอนาคตมาเองยังดูได้เฉพาะกรณี legacy data ที่มีอยู่จริง */
     public function testWeekdayContextStillHonoursAnExplicitlyRequestedFutureDate(): void
     {
         $service = $this->makeService([
@@ -111,10 +112,9 @@ final class RecordServiceFutureRecordTest extends TestCase
     }
 
     /**
-     * ตรงกันข้ามกับด้านบน: "รายการล่าสุด" ในหน้าบันทึกต้องยังเห็นแถววันอนาคต
+     * ตรงกันข้ามกับด้านบน: "รายการล่าสุด" ในหน้าบันทึกยังเห็น legacy future rows
      *
-     * ถ้าซ่อน ผู้ใช้ที่เพิ่งกดบันทึกวันอนาคต (ซึ่งระบบอนุญาต) จะไม่เห็นแถวที่เพิ่งบันทึก
-     * แล้วเข้าใจว่าไม่ถูกบันทึก — ล็อกไว้เพื่อไม่ให้ใครไป "กวาดให้เหมือนกัน" ภายหลัง
+     * ใช้เพื่อให้ข้อมูลเก่าที่เคยลงไว้ยังจัดการได้ผ่านหน้าบันทึก/ประวัติ
      */
     public function testRecentRecordsListStillShowsFutureRows(): void
     {

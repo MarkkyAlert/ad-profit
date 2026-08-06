@@ -16,19 +16,25 @@ class ProfileService
 
     private ?EmailChangeRepository $emailChangeRepository;
     private ?EmailService $emailService;
+    private ?RateLimitRepository $emailChangeRateLimitRepository;
+
+    private const EMAIL_CHANGE_COOLDOWN_ACTION = 'email_change_resend_cooldown';
+    private const EMAIL_CHANGE_WINDOW_ACTION = 'email_change_resend_hour';
 
     public function __construct(
         UserRepository $userRepository,
         ?PDO $db = null,
         ?PasswordResetRepository $passwordResetRepository = null,
         ?EmailChangeRepository $emailChangeRepository = null,
-        ?EmailService $emailService = null
+        ?EmailService $emailService = null,
+        ?RateLimitRepository $emailChangeRateLimitRepository = null
     ) {
         $this->userRepository = $userRepository;
         $this->db = $db;
         $this->passwordResetRepository = $passwordResetRepository;
         $this->emailChangeRepository = $emailChangeRepository;
         $this->emailService = $emailService;
+        $this->emailChangeRateLimitRepository = $emailChangeRateLimitRepository;
     }
 
     /**
@@ -381,6 +387,15 @@ class ProfileService
                 ];
             }
 
+            $rateLimit = $this->reserveEmailChangeSendSlot($userId);
+            if ($rateLimit !== null) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return $rateLimit;
+            }
+
             $token = bin2hex(random_bytes(32));
             $created = $this->emailChangeRepository->createRequest(
                 $userId,
@@ -448,6 +463,45 @@ class ProfileService
                 'error' => 'ไม่สามารถเปลี่ยนอีเมลได้',
             ];
         }
+    }
+
+    private function reserveEmailChangeSendSlot(int $userId): ?array
+    {
+        if ($this->emailChangeRateLimitRepository === null) {
+            return null;
+        }
+
+        $subject = (string)$userId;
+
+        $cooldownAttempts = $this->emailChangeRateLimitRepository->reserveAttempt(
+            self::EMAIL_CHANGE_COOLDOWN_ACTION,
+            '',
+            $subject,
+            (int)EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS
+        );
+        if ($cooldownAttempts > 1) {
+            return [
+                'success' => false,
+                'error' => 'ส่งลิงก์ยืนยันอีเมลบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
+                'rate_limited' => true,
+            ];
+        }
+
+        $windowAttempts = $this->emailChangeRateLimitRepository->reserveAttempt(
+            self::EMAIL_CHANGE_WINDOW_ACTION,
+            '',
+            $subject,
+            (int)EMAIL_CHANGE_RESEND_WINDOW_SECONDS
+        );
+        if ($windowAttempts > (int)EMAIL_CHANGE_RESEND_MAX_ATTEMPTS) {
+            return [
+                'success' => false,
+                'error' => 'ส่งลิงก์ยืนยันอีเมลครบจำนวนที่อนุญาตแล้ว กรุณารอ 1 ชั่วโมงแล้วลองใหม่อีกครั้ง',
+                'rate_limited' => true,
+            ];
+        }
+
+        return null;
     }
 
     public function changePassword(

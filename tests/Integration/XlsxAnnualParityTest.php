@@ -50,7 +50,7 @@ final class XlsxAnnualParityTest extends IntegrationTestCase
         $this->createRecord($shopId, '2026-01-06', 4000.0, 2000.0);
         $this->createRecord($shopId, '2026-03-10', 20000.0, 19500.0);
         $this->createRecord($shopId, '2026-07-10', 1000.0, 3500.0);   // เดือนขาดทุน
-        $this->createRecord($shopId, '2026-08-28', 2000.0, 500.0);    // ล่วงหน้าในเดือนนี้ — ต้องนับ
+        $this->createRecord($shopId, '2026-08-28', 2000.0, 500.0);    // ล่วงหน้าในเดือนนี้ — ต้องไม่นับ
         $this->createRecord($shopId, '2026-11-01', 90000.0, 0.0);     // เดือนหน้า — ต้องไม่นับ
 
         $daily = $this->exportService()->buildYearlyDailyPayload($userId, $shopId, 2026, self::TODAY)['data'];
@@ -63,8 +63,8 @@ final class XlsxAnnualParityTest extends IntegrationTestCase
         $this->assertSame($daily['totals']['profit'], $monthlyProfit);
         $this->assertSame($daily['totals']['profit'], (float)$annual['profit']);
 
-        // ม.ค. 6,000 + มี.ค. 500 + ก.ค. -2,500 + ส.ค. 1,500 = 5,500
-        $this->assertSame(5500.0, (float)$annual['profit']);
+        // ม.ค. 6,000 + มี.ค. 500 + ก.ค. -2,500 = 4,000
+        $this->assertSame(4000.0, (float)$annual['profit']);
         $this->assertSame($daily['totals']['revenue'], (float)$annual['total_revenue']);
         $this->assertSame($daily['totals']['ad_cost'], (float)$annual['total_ad_cost']);
     }

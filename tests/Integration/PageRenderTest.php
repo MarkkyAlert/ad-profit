@@ -136,6 +136,22 @@ final class PageRenderTest extends ControllerTestCase
         $this->assertStringNotContainsString('ไม่มีสิทธิ์', $body);
     }
 
+    /** ⭐ History ต้องเปิดเดือนอนาคตได้เมื่อมีรายการจริง เพื่อให้แก้ไขและลบข้อมูลล่วงหน้าได้ */
+    public function testHistoryShowsRecordsInASelectedFutureMonth(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $futureMonth = (new \DateTimeImmutable('first day of next month'))->format('Y-m');
+        $this->createRecord($shopId, $futureMonth . '-01', 9876.0, 123.0, null);
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->get('/history.php?month=' . $futureMonth, $session);
+
+        $this->assertSame(200, $response['status']);
+        $this->assertStringContainsString('value="' . $futureMonth . '"', $response['body']);
+        $this->assertStringContainsString('9,876', $response['body']);
+    }
+
     /**
      * ⭐ `?month=` / `?year=` ที่เป็นอนาคต ต้องถูกหดกลับมาเสมอ ไม่ใช่โชว์ช่วงที่ยังไม่เกิด
      *

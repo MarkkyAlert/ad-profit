@@ -391,6 +391,30 @@ final class AuthEndpointTest extends ControllerTestCase
         $this->assertSame(1, $this->countRows('password_reset_tokens'), 'ลิงก์ถูกเผาทิ้งทั้งที่ยังไม่ได้ใช้');
     }
 
+    /** CSRF ผิดก็ต้องพา token กลับไปด้วย ไม่ใช่เด้งไปหน้า forgot แล้วเสีย flow */
+    public function testInvalidCsrfOnResetKeepsTheTokenInTheRedirect(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OldPass123');
+        $token = $this->issueResetToken($userId);
+        $guest = $this->startSession(0, 0);
+
+        $response = $this->post('/api/auth.php', [
+            'action' => 'reset_password',
+            'csrf_token' => 'invalid-token',
+            'token' => $token,
+            'password' => 'BrandNew456',
+            'password_confirm' => 'BrandNew456',
+        ], $guest);
+
+        $location = $response['headers']['location'] ?? '';
+        $this->assertSame(302, $response['status'], (string)$response['body']);
+        $this->assertStringContainsString('reset-password.php', $location);
+        $this->assertStringContainsString(rawurlencode($token), $location);
+        $this->assertSame(1, $this->countRows('password_reset_tokens'), 'CSRF ผิดแต่ลิงก์ถูกใช้หรือถูกลบ');
+        $this->assertTrue(password_verify('OldPass123', (string)$this->pdo
+            ->query("SELECT password_hash FROM users WHERE id = {$userId}")->fetchColumn()));
+    }
+
     /** ⭐ ตั้งรหัสใหม่สำเร็จ → รหัสเปลี่ยนจริง และลิงก์ถูกใช้ไปแล้ว */
     public function testASuccessfulResetChangesThePasswordAndBurnsTheToken(): void
     {
