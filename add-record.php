@@ -240,6 +240,12 @@ require __DIR__ . '/includes/header.php';
         </td>
         <td class="px-2 py-2">
             <input name="note[]" type="text" maxlength="255" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="ไม่บังคับ">
+            <?php /* ⚠️ ธง "แถวนี้ได้เทียบกับข้อมูลเดิมของวันนั้นแล้วหรือยัง" — JS ตั้งเป็น 1
+                     เมื่อโหลดข้อมูลเดือนสำเร็จ · ถ้าโหลดไม่สำเร็จค่านี้ยังเป็นว่าง แล้วฝั่ง
+                     เซิร์ฟเวอร์จะปฏิเสธการเขียนทับโน้ตที่มีอยู่ แทนที่จะลบทิ้งเงียบ ๆ
+                     (กันอุบัติเหตุ ไม่ได้กันการโจมตี — เป็นข้อมูลของผู้ใช้เอง หลักเดียวกับ
+                     shop_context_field) */ ?>
+            <input type="hidden" name="note_checked[]" value="">
         </td>
         <td class="px-2 py-2 text-center">
             <button type="button" class="bulk-remove-row text-red-400 hover:text-red-300 text-lg leading-none" title="ลบแถว">×</button>
@@ -582,12 +588,20 @@ require __DIR__ . '/includes/header.php';
             const adCostInput = row.querySelector('input[name="ad_cost[]"]');
             const noteInput = row.querySelector('input[name="note[]"]');
 
-            // มีค่ากรอกไว้แล้ว = ผู้ใช้กำลังพิมพ์เอง อย่าไปทับ
-            if ((revenueInput && revenueInput.value !== '')
-                || (adCostInput && adCostInput.value !== '')
-                || (noteInput && noteInput.value !== '')) {
+            // ⚠️⚠️ เดิมออกทันทีเมื่อมีช่องไหนกรอกไว้แล้ว ผลคือคนที่พิมพ์ยอดก่อนแล้วค่อย
+            // เลือกวันที่ (ท่าที่ใช้จริงบ่อย) **ไม่เคยได้โน้ตเดิมกลับมาเลย** แล้วการบันทึก
+            // ซึ่งเขียนทับทุกช่อง ก็ลบโน้ตของวันนั้นทิ้งพร้อมข้อความว่า "บันทึกเรียบร้อยแล้ว"
+            //
+            // ตอนนี้เติมเฉพาะช่องที่ยังว่าง — ของที่ผู้ใช้พิมพ์เองไม่ถูกทับ
+            // และช่องที่ไม่ได้แตะก็ได้ค่าเดิมกลับมาครบ
+            if (revenueInput && adCostInput && noteInput
+                && revenueInput.value !== '' && adCostInput.value !== '' && noteInput.value !== '') {
                 return;
             }
+
+            // เปลี่ยนวันที่แล้ว ธงของวันเก่าใช้ไม่ได้อีก — ล้างก่อนเริ่มโหลดใหม่เสมอ
+            const pendingFlag = row.querySelector('input[name="note_checked[]"]');
+            if (pendingFlag) { pendingFlag.value = ''; }
 
             const requestId = (bulkRowRequestIds.get(row) || 0) + 1;
             bulkRowRequestIds.set(row, requestId);
@@ -600,6 +614,7 @@ require __DIR__ . '/includes/header.php';
                     return;
                 }
 
+                const checkedFlag = row.querySelector('input[name="note_checked[]"]');
                 const day = byDate.get(value);
                 if (!day) {
                     // ตารางเดือนไม่ครอบวันอนาคต — บอกตรง ๆ ว่าตรวจให้ไม่ได้
@@ -612,19 +627,42 @@ require __DIR__ . '/includes/header.php';
                     return;
                 }
 
+                // เทียบกับข้อมูลเดิมของวันนั้นสำเร็จแล้ว — ช่องโน้ตที่ว่างหลังจากนี้
+                // แปลว่า "ผู้ใช้ตั้งใจล้าง" จริง ๆ ไม่ใช่ "ยังไม่รู้ว่ามีของเดิมอยู่"
+                if (checkedFlag) { checkedFlag.value = '1'; }
+
                 // ตารางเดือนคืนทุกวันจนถึงวันนี้ รวมวันที่ยังไม่ได้กรอก — ต้องแยกให้ออก
                 const dayHasData = day.revenue !== null || day.ad_cost !== null || (day.note || '') !== '';
                 if (!dayHasData) {
                     return;
                 }
 
-                if (revenueInput) { revenueInput.value = day.revenue === null ? '' : String(day.revenue); }
-                if (adCostInput) { adCostInput.value = day.ad_cost === null ? '' : String(day.ad_cost); }
-                if (noteInput) { noteInput.value = day.note || ''; }
+                // เติมเฉพาะช่องที่ยังว่าง — ห้ามทับสิ่งที่ผู้ใช้เพิ่งพิมพ์เอง
+                let filledAnything = false;
+                if (revenueInput && revenueInput.value === '' && day.revenue !== null) {
+                    revenueInput.value = String(day.revenue);
+                    filledAnything = true;
+                }
+                if (adCostInput && adCostInput.value === '' && day.ad_cost !== null) {
+                    adCostInput.value = String(day.ad_cost);
+                    filledAnything = true;
+                }
+                if (noteInput && noteInput.value === '' && (day.note || '') !== '') {
+                    noteInput.value = day.note;
+                    filledAnything = true;
+                }
+
+                if (!filledAnything) {
+                    showBulkNotice('วันที่ ' + value + ' มีข้อมูลอยู่แล้ว — กดบันทึกจะเป็นการแก้ไขทับ');
+                    return;
+                }
 
                 refresh();
                 showBulkNotice('วันที่ ' + value + ' มีข้อมูลอยู่แล้ว — ระบบเติมค่าเดิมไว้ให้ กดบันทึกจะเป็นการแก้ไขทับ');
             } catch (error) {
+                // ⚠️ ธงต้องเป็นว่างไว้ — เซิร์ฟเวอร์จะได้ปฏิเสธแทนที่จะลบโน้ตเดิมทิ้งเงียบ ๆ
+                const failedFlag = row.querySelector('input[name="note_checked[]"]');
+                if (failedFlag) { failedFlag.value = ''; }
                 showBulkNotice('โหลดข้อมูลเดิมของวันที่ ' + value + ' ไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก');
             }
         });
@@ -731,6 +769,19 @@ require __DIR__ . '/includes/header.php';
             });
 
             refresh();
+
+            // ⚠️⚠️ `input.value = …` **ไม่ทำให้ event `change` ทำงาน** ตัวเติมค่าเดิมของวัน
+            // (ซึ่งฟัง `change` ของ `record_date[]`) จึงไม่เคยทำงานเลยตอนวางจาก Excel
+            // ผลคือวางทับวันที่เคยมีโน้ตอยู่ แล้วกดบันทึก โน้ตหายพร้อมข้อความว่าสำเร็จ
+            //
+            // ยิง event เองหลังวางเสร็จ เพื่อให้ทางวางกับทางเลือกวันเองเดินโค้ดชุดเดียวกัน
+            // (`loadMonthData` มี cache ต่อเดือนอยู่แล้ว หลายแถวจึงไม่ยิง request ซ้ำ)
+            rows.forEach((row) => {
+                const dateInput = row.querySelector('input[name="record_date[]"]');
+                if (dateInput && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.value)) {
+                    dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
 
             if (pasteNotice) {
                 const messages = [];

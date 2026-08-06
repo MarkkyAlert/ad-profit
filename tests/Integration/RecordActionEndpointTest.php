@@ -205,6 +205,80 @@ final class RecordActionEndpointTest extends ControllerTestCase
         $this->assertSame(2000.0, (float)$rows[1]['revenue']);
     }
 
+    /**
+     * ⭐⭐ ตารางกรอกหลายวันต้องไม่ลบโน้ตเดิมทิ้งเงียบ ๆ เมื่อยังไม่ได้เทียบกับของเดิม
+     *
+     * ⚠️ อาการที่วัดได้จริง: วันที่ 3 ส.ค. มีโน้ต "ปิดแอด A เปิด B แทน" อยู่ ผู้ใช้กรอก
+     * วันที่+ยอดในตาราง (ไม่แตะช่องโน้ต) กดบันทึก → **"บันทึกข้อมูล 1 วันเรียบร้อยแล้ว"**
+     * แต่โน้ตหายถาวร · ขณะที่ไฟล์ CSV ที่ทำสิ่งเดียวกันเป๊ะ ๆ ถูกปฏิเสธพร้อมบอกแถว
+     *
+     * ตารางเติมโน้ตเดิมกลับมาให้เห็นก่อนเสมอ ช่องว่างจึงแปลว่า "ตั้งใจล้าง" —
+     * **แต่จริงเฉพาะเมื่อการเติมนั้นเกิดขึ้นจริง** ถ้าโหลดข้อมูลเดือนไม่สำเร็จ
+     * ผู้ใช้จะเห็นช่องว่างโดยไม่รู้ว่ามีของเดิมอยู่ ธง `note_checked` แยกสองกรณีนี้
+     */
+    public function testBulkUpsertRefusesToWipeANoteItNeverShowedTheUser(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $this->pdo->prepare(
+            'INSERT INTO daily_records (shop_id, record_date, revenue, ad_cost, note) VALUES (?, ?, ?, ?, ?)'
+        )->execute([$shopId, '2026-08-03', 5000, 2000, 'ปิดแอด A เปิด B แทน']);
+
+        $this->submit($session, $shopId, [
+            'action' => 'bulk_upsert',
+            'row_number[0]' => '1',
+            'record_date[0]' => '2026-08-03',
+            'revenue[0]' => '7000',
+            'ad_cost[0]' => '2500',
+            'note[0]' => '',
+            'note_checked[0]' => '',   // โหลดข้อมูลเดิมไม่สำเร็จ = ยังไม่เคยเห็นโน้ตเดิม
+        ]);
+
+        $this->assertSame(
+            'ปิดแอด A เปิด B แทน',
+            (string)$this->pdo
+                ->query("SELECT note FROM daily_records WHERE shop_id = {$shopId} AND record_date = '2026-08-03'")
+                ->fetchColumn(),
+            'โน้ตถูกลบทิ้งทั้งที่ผู้ใช้ไม่เคยเห็นว่ามันมีอยู่'
+        );
+        $this->assertStringContainsString('เว้นช่องโน้ต', $this->flashMessages($session), 'ไม่ได้บอกผู้ใช้ว่าเกิดอะไรขึ้น');
+    }
+
+    /**
+     * ⚠️ อีกด้านของกติกาเดียวกัน — เห็นโน้ตเดิมแล้วตั้งใจล้าง ต้องล้างได้จริง
+     *
+     * ถ้ากันหมดทุกกรณี ผู้ใช้จะลบโน้ตผ่านตารางไม่ได้เลยตลอดกาล
+     */
+    public function testBulkUpsertStillLetsTheUserClearANoteOnPurpose(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $this->pdo->prepare(
+            'INSERT INTO daily_records (shop_id, record_date, revenue, ad_cost, note) VALUES (?, ?, ?, ?, ?)'
+        )->execute([$shopId, '2026-08-03', 5000, 2000, 'โน้ตที่จะลบ']);
+
+        $this->submit($session, $shopId, [
+            'action' => 'bulk_upsert',
+            'row_number[0]' => '1',
+            'record_date[0]' => '2026-08-03',
+            'revenue[0]' => '7000',
+            'ad_cost[0]' => '2500',
+            'note[0]' => '',
+            'note_checked[0]' => '1',  // เห็นโน้ตเดิมแล้ว แล้วลบออกเอง
+        ]);
+
+        $this->assertNull(
+            $this->pdo
+                ->query("SELECT note FROM daily_records WHERE shop_id = {$shopId} AND record_date = '2026-08-03'")
+                ->fetchColumn() ?: null,
+            'ผู้ใช้ตั้งใจล้างโน้ตแล้วยังล้างไม่ได้'
+        );
+    }
+
     /** ⭐ แถวที่ผิดต้องรายงาน "แถวที่เท่าไหร่" ตามที่ผู้ใช้เห็นบนจอ */
     public function testBulkUpsertReportsTheRowNumberTheUserSees(): void
     {

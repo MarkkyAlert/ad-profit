@@ -88,6 +88,19 @@ if ($action === 'bulk_upsert') {
     // ไม่ตรงกับที่เห็นบนหน้าจอ ถ้าไม่มีค่านี้มาด้วย service จะนับเองแล้วชี้ผิดแถว
     $rowNumbers = isset($_POST['row_number']) && is_array($_POST['row_number']) ? $_POST['row_number'] : [];
 
+    // ⚠️⚠️ "แถวนี้ได้เทียบกับข้อมูลเดิมของวันนั้นแล้วหรือยัง"
+    //
+    // ตารางกรอกหลายวันเติมโน้ตเดิมกลับมาให้เห็นก่อนเสมอ ช่องโน้ตที่ว่างจึงแปลว่า
+    // "ผู้ใช้ตั้งใจล้าง" — **แต่จริงเฉพาะเมื่อการเติมนั้นเกิดขึ้นจริง**
+    // ถ้าโหลดข้อมูลเดือนไม่สำเร็จ ผู้ใช้จะเห็นช่องว่างโดยไม่รู้ว่ามีโน้ตเดิมอยู่
+    // แล้วการกดบันทึก (ซึ่งเขียนทับทุกช่อง) จะลบมันทิ้งพร้อมข้อความว่าสำเร็จ
+    //
+    // ธงนี้ทำให้ Service ปฏิเสธเคสนั้นด้วยข้อความเดียวกับทางไฟล์ CSV
+    // (กันอุบัติเหตุ ไม่ได้กันการโจมตี — เป็นข้อมูลของผู้ใช้เอง หลักเดียวกับ shop_context)
+    $noteChecked = isset($_POST['note_checked']) && is_array($_POST['note_checked'])
+        ? $_POST['note_checked']
+        : [];
+
     $rows = [];
     foreach (array_keys($recordDates) as $rowIndex) {
         $revenueParsed = parse_decimal_input($revenues[$rowIndex] ?? '', true);
@@ -104,6 +117,8 @@ if ($action === 'bulk_upsert') {
                 ? $adCostParsed['value']
                 : (string)($adCosts[$rowIndex] ?? ''),
             'note' => isset($notes[$rowIndex]) ? (string)$notes[$rowIndex] : null,
+            'note_was_missing' => trim((string)($notes[$rowIndex] ?? '')) === ''
+                && (string)($noteChecked[$rowIndex] ?? '') !== '1',
         ];
     }
 
