@@ -4,11 +4,25 @@ on:
   push:
   pull_request:
 
+# ⚠️⚠️ ไม่มีบล็อกนี้ = push ถี่ ๆ ทำให้รอบเก่ากับรอบใหม่แย่งคิวกันเอง
+#
+# วัดจริง 2 ครั้ง: งานทั้ง 5 ถูกยกเลิกพร้อมกันเป๊ะวินาทีเดียวกันที่นาทีที่ 15
+# โดย **ไม่ได้รันสักขั้นตอนเดียว** (0 จาก 0 ขั้นตอน) — คือรอเครื่องจนหมดเวลา
+# ผลคือคอมมิตนั้นขึ้นว่า "failure" ทั้งที่โค้ดไม่มีอะไรผิด ซึ่งอ่านแล้วเข้าใจผิด
+# ได้ง่ายมาก และทำให้ไม่รู้ว่าคอมมิตไหนถูกตรวจจริงบ้าง
+#
+# ตั้งแบบนี้แล้ว push ใหม่จะยกเลิกรอบเก่าอย่างตั้งใจ (ระบุเหตุผลชัด) และ
+# คอมมิตล่าสุดได้เครื่องรันเสมอ ซึ่งเป็นตัวที่เราสนใจจริง ๆ
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ── job 1: static analysis + unit tests (ไม่ต้องใช้ DB) ──────────────────────
   quality:
     name: Quality (PHPStan + Unit)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v5
@@ -50,6 +64,7 @@ jobs:
   lint-php82:
     name: Syntax lint (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     # ⚠️ ต้องมี 8.3 ด้วย — เป็นเวอร์ชันที่ **เซิร์ฟเวอร์จริงใช้** (Hostinger)
     # เดิม lint แค่ 8.2 (ต่ำสุดที่รองรับ) และรัน runtime แค่ 8.4 → 8.3 ไม่มีอะไรแตะเลย
@@ -89,6 +104,7 @@ jobs:
   integration:
     name: Integration (MariaDB 10.4)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     services:
       # ใช้ mariadb:10.4 ให้ตรงกับ dev environment
@@ -172,6 +188,7 @@ jobs:
   prod-install:
     name: คำสั่งติดตั้งของ production (PHP 8.3)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v5
