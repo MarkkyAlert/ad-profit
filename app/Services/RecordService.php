@@ -1173,6 +1173,8 @@ class RecordService
                 'avg_revenue' => null,
                 'avg_profit' => null,
                 'avg_roas' => null,
+                'window_month' => null,
+                'window_is_current_month' => true,
                 'comparable' => false,
                 'trend_reliable' => false,
             ],
@@ -1296,6 +1298,18 @@ class RecordService
                 'avg_roas' => ($sampleCount > 0 && $sampleAdCostTotal > 0)
                     ? round($sampleRevenueTotal / $sampleAdCostTotal, 2)
                     : null,
+                // ⚠️⚠️ เดือนที่ใช้เป็นฐานเทียบจริง — **ไม่จำเป็นต้องเป็นเดือนปัจจุบัน**
+                //
+                // การ์ดนี้เทียบ "รายการล่าสุด" กับวันเดียวกันในสัปดาห์ **ของเดือนที่รายการนั้นอยู่**
+                // ถ้ารายการล่าสุดคือ 28 ก.ค. แต่วันนี้ 7 ส.ค. ฐานเทียบคือ ก.ค. ไม่ใช่ ส.ค.
+                //
+                // วัดจริงตอนหน้าเว็บเขียนว่า "เดือนนี้" ตายตัว: ยังไม่ได้กรอกอะไรเลยในเดือน ส.ค.
+                // แต่การ์ดขึ้น "วันอังคาร**เดือนนี้**เฉลี่ย ฿8,000 (จาก 3 วัน)" ซึ่งเป็นข้อมูล ก.ค.
+                // ขณะที่ตาราง "กำไรเฉลี่ยตามวัน · เดือนนี้" ที่อยู่ใต้กันบนจอเดียวกันว่างเปล่า
+                // เพราะเดือน ส.ค. ยังไม่มีข้อมูล — สองอันบนจอเดียวกันพูดถึงคนละเดือน
+                'window_month' => $dateObject->format('Y-m'),
+                'window_is_current_month' => $dateObject->format('Y-m')
+                    === (new DateTimeImmutable($this->resolveToday($today)))->format('Y-m'),
                 // มีอะไรให้เทียบไหม (โชว์ค่าเฉลี่ยพร้อมกำกับ "จาก N วัน" ได้)
                 'comparable' => $sampleCount >= 1,
                 // พอจะฟันธงว่า "สูงกว่า/ต่ำกว่าปกติ" ไหม — 1–2 วันยังเป็นความบังเอิญ

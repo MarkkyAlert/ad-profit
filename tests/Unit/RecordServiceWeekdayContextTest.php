@@ -181,4 +181,49 @@ final class RecordServiceWeekdayContextTest extends TestCase
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('ไม่มีสิทธิ์', $result['error']);
     }
+
+    /**
+     * ⭐⭐ การ์ดนี้เทียบกับเดือนของ **รายการล่าสุด** ไม่ใช่เดือนปัจจุบันเสมอไป
+     *
+     * ⚠️ อาการที่วัดได้จริงตอนหน้าเว็บเขียน "เดือนนี้" ตายตัว: วันนี้ ศ. 7 ส.ค. ·
+     * ยังไม่ได้กรอกอะไรเลยในเดือน ส.ค. · รายการล่าสุดคือ อ. 28 ก.ค.
+     *   การ์ด : "วันอังคาร**เดือนนี้**เฉลี่ย ฿8,000 (จาก 3 วัน)"  ← ข้อมูลของ ก.ค.
+     *   ตารางใต้การ์ดบนจอเดียวกัน : ว่างเปล่า เพราะเดือน ส.ค. ยังไม่มีข้อมูล
+     * สองอันบนจอเดียวกันพูดถึงคนละเดือนโดยใช้คำเดียวกัน
+     *
+     * ฐานเทียบเป็น ก.ค. นั้นถูกแล้ว (เทียบรายการนั้นกับอังคารอื่นในเดือนเดียวกัน)
+     * สิ่งที่ผิดคือ **ป้ายกำกับ** จึงต้องบอกเดือนจริงออกมาให้หน้าเว็บใช้
+     */
+    public function testItReportsWhichMonthTheComparisonActuallyUsed(): void
+    {
+        $service = $this->makeService([
+            ['2026-07-07', 12000.0, 4000.0],
+            ['2026-07-14', 12000.0, 4000.0],
+            ['2026-07-21', 12000.0, 4000.0],
+            ['2026-07-28', 5000.0, 4000.0],
+        ]);
+
+        $data = $service->getWeekdayContext(1, 1, null, '2026-08-07')['data'] ?? [];
+
+        $this->assertSame('2026-07', $data['window_month'] ?? null, 'ไม่ได้บอกว่าใช้เดือนไหนเป็นฐานเทียบ');
+        $this->assertFalse(
+            $data['window_is_current_month'] ?? true,
+            'บอกว่าเป็นเดือนปัจจุบันทั้งที่ใช้ข้อมูลเดือนก่อน — หน้าเว็บจะเขียนว่า "เดือนนี้" ทั้งที่ไม่ใช่'
+        );
+        $this->assertSame(8000.0, (float)($data['avg_profit'] ?? 0), 'ค่าเฉลี่ยเปลี่ยนไปจากเดิม');
+    }
+
+    /** อีกด้าน: กรอกในเดือนนี้แล้ว ต้องบอกว่าเป็นเดือนปัจจุบันจริง ๆ */
+    public function testItSaysCurrentMonthWhenTheLatestRecordIsInThisMonth(): void
+    {
+        $service = $this->makeService([
+            ['2026-08-04', 9000.0, 3000.0],
+            ['2026-08-11', 6000.0, 3000.0],
+        ]);
+
+        $data = $service->getWeekdayContext(1, 1, null, '2026-08-11')['data'] ?? [];
+
+        $this->assertSame('2026-08', $data['window_month'] ?? null);
+        $this->assertTrue($data['window_is_current_month'] ?? false, 'กรอกเดือนนี้แล้วยังบอกว่าไม่ใช่เดือนนี้');
+    }
 }

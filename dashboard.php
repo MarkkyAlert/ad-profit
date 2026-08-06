@@ -56,6 +56,13 @@ $weekdayName = isset($weekdayData['weekday']) && $weekdayData['weekday'] !== nul
     ? formatThaiWeekday((int)$weekdayData['weekday'])
     : '';
 $weekdayTargetDate = (string)($weekdayData['target_date'] ?? '');
+// ⚠️⚠️ ห้ามเขียนว่า "เดือนนี้" ตายตัว — การ์ดนี้เทียบกับเดือนของ **รายการล่าสุด**
+// ซึ่งอาจเป็นเดือนก่อนถ้ายังไม่ได้กรอกอะไรในเดือนนี้ · วัดจริง: เดือน ส.ค. ไม่มีข้อมูลเลย
+// แต่การ์ดขึ้น "วันอังคารเดือนนี้เฉลี่ย ฿8,000 (จาก 3 วัน)" ซึ่งเป็นข้อมูลของ ก.ค.
+// ขณะที่ตารางใต้การ์ดบนจอเดียวกันว่างเปล่าเพราะเดือนนี้ยังไม่มีข้อมูล
+$weekdayMonthLabel = ($weekdayData['window_is_current_month'] ?? true) === true
+    ? 'เดือนนี้'
+    : 'เดือน ' . formatThaiMonth((string)($weekdayData['window_month'] ?? ''));
 $weekdayTargetRevenue = (float)($weekdayData['target_revenue'] ?? 0);
 $weekdayAvgRevenue = isset($weekdayData['avg_revenue']) && $weekdayData['avg_revenue'] !== null
     ? (float)$weekdayData['avg_revenue']
@@ -81,13 +88,13 @@ if ($weekdayTrendReliable && $weekdayAvgProfit !== null) {
     $weekdayTolerance = abs($weekdayAvgProfit) * 0.1;
 
     if ($weekdayProfitDiff > $weekdayTolerance) {
-        $weekdayHint = 'สูงกว่า' . $weekdayName . 'ปกติของเดือนนี้';
+        $weekdayHint = 'สูงกว่า' . $weekdayName . 'ปกติของ' . $weekdayMonthLabel;
         $weekdayHintClass = 'text-green-400';
     } elseif ($weekdayProfitDiff < -$weekdayTolerance) {
-        $weekdayHint = 'ต่ำกว่า' . $weekdayName . 'ปกติของเดือนนี้';
+        $weekdayHint = 'ต่ำกว่า' . $weekdayName . 'ปกติของ' . $weekdayMonthLabel;
         $weekdayHintClass = 'text-amber-300';
     } else {
-        $weekdayHint = 'ใกล้เคียง' . $weekdayName . 'ปกติของเดือนนี้';
+        $weekdayHint = 'ใกล้เคียง' . $weekdayName . 'ปกติของ' . $weekdayMonthLabel;
         $weekdayHintClass = 'text-slate-300';
     }
 }
@@ -722,7 +729,7 @@ require __DIR__ . '/includes/header.php';
         <?php if (!$weekdayComparable): ?>
             <p class="mt-3 text-sm text-slate-300">
                 กำไร <span class="font-semibold <?= e($weekdayProfitClass) ?>"><?= e(formatMoney($weekdayTargetProfit)) ?></span>
-                · ยังไม่มีวัน<?= e($weekdayName) ?>อื่นในเดือนนี้ให้เทียบ
+                · ยังไม่มีวัน<?= e($weekdayName) ?>อื่นใน<?= e($weekdayMonthLabel) ?> ให้เทียบ
             </p>
             <p class="mt-1 text-xs text-slate-500">
                 รายได้ <?= e(formatMoney($weekdayTargetRevenue)) ?>
@@ -731,7 +738,7 @@ require __DIR__ . '/includes/header.php';
             <div class="mt-3 space-y-1.5 text-sm text-slate-300">
                 <p>
                     กำไร <span class="font-semibold <?= e($weekdayProfitClass) ?>"><?= e(formatMoney($weekdayTargetProfit)) ?></span>
-                    · วัน<?= e($weekdayName) ?>เดือนนี้เฉลี่ย
+                    · วัน<?= e($weekdayName) ?><?= e($weekdayMonthLabel) ?> เฉลี่ย
                     <span class="font-semibold <?= e(((float)$weekdayAvgProfit) >= 0 ? 'text-slate-100' : 'text-red-400') ?>"><?= e(formatMoney((float)$weekdayAvgProfit)) ?></span>
                     <span class="text-xs text-slate-500">(จาก <?= e((string)$weekdaySampleCount) ?> วัน)</span>
                 </p>
