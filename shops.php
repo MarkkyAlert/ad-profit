@@ -11,7 +11,9 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $shopRepository = new ShopRepository($pdo);
 $userRepository = new UserRepository($pdo);
-$shopService = new ShopService($shopRepository, $userRepository);
+// ⚠️ ต้องส่ง $pdo ด้วย — ถ้าไม่ส่ง ทุกกิ่ง transaction/ล็อกใน ShopService ถูกข้ามเงียบ ๆ
+// วันนี้หน้านี้เรียกแต่เมธอดอ่าน แต่ถ้ามีใครเพิ่มการเขียนลงหน้านี้จะไม่มีล็อกเลย
+$shopService = new ShopService($shopRepository, $userRepository, $pdo);
 
 // helper เดียวกับทุกเพจ (ซ่อม session + cache ต่อ request) — เดิมหน้านี้ทำเองซ้ำ
 $currentShopId = resolve_current_shop_id($pdo, $userId);

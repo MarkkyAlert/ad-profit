@@ -310,6 +310,67 @@ final class AuthEndpointTest extends ControllerTestCase
     }
 
     /**
+     * ⭐⭐ ส่งอีเมลไม่ได้ ต้องบอกผู้ใช้ ไม่ใช่บอกว่า "คุณจะได้รับลิงก์"
+     *
+     * ⚠️ ค่าปริยายคือ `MAIL_ENABLED=false` · ถ้าขึ้นเซิร์ฟเวอร์แล้วลืมตั้ง SMTP
+     * ผู้ใช้ที่ลืมรหัสผ่านจะได้กล่องเขียว "คุณจะได้รับลิงก์" แล้วนั่งรอลิงก์ที่ไม่มีวันมา
+     * = **กู้บัญชีไม่ได้เลย** และไม่มีใครรู้ทั้งผู้ใช้และเจ้าของระบบ
+     */
+    public function testForgotPasswordSaysSoWhenTheMailSystemIsDown(): void
+    {
+        $this->createUser('owner@example.com', 'OldPass123');
+        $guest = $this->startSession(0, 0);
+
+        $response = $this->postJson('/api/auth.php', [
+            'action' => 'forgot_password',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'owner@example.com',
+        ], $guest);
+
+        $this->assertSame(503, $response['status'], 'บอกว่าสำเร็จทั้งที่ส่งอีเมลไม่ออก');
+        $this->assertStringContainsString('ส่งอีเมลไม่สำเร็จ', (string)$response['body']);
+    }
+
+    /**
+     * ⭐⭐ ข้อความ "ส่งอีเมลไม่ได้" ต้องเหมือนกันทั้งอีเมลที่มีบัญชีและไม่มี
+     *
+     * ⚠️ กับดักที่เจอตอนแก้: `email_sent` มีเฉพาะตอนอีเมลนั้นมีบัญชีจริง
+     * ถ้าเอามาตัดสิน คำขอของอีเมลที่มีบัญชีจะตอบ 503 ส่วนที่ไม่มีตอบ 200
+     * = **บอกใบ้ว่าใครสมัครไว้แล้ว** ซึ่งเป็นสิ่งที่ข้อความกลาง ๆ ตั้งใจปิดไว้
+     * จึงต้องตัดสินจาก "ระบบส่งอีเมลพร้อมไหม" ซึ่งเป็นสถานะของระบบ ไม่ใช่ของบัญชี
+     */
+    public function testTheMailFailureMessageDoesNotRevealWhetherTheAccountExists(): void
+    {
+        $this->createUser('owner@example.com', 'OldPass123');
+        $guest = $this->startSession(0, 0);
+
+        $known = $this->postJson('/api/auth.php', [
+            'action' => 'forgot_password',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'owner@example.com',
+        ], $guest);
+
+        $this->pdo->exec('TRUNCATE TABLE auth_rate_limits');
+
+        $unknown = $this->postJson('/api/auth.php', [
+            'action' => 'forgot_password',
+            'csrf_token' => $this->guestCsrf($guest),
+            'email' => 'never-signed-up@example.com',
+        ], $guest);
+
+        $this->assertSame(
+            $known['status'],
+            $unknown['status'],
+            'ตอบคนละรหัสสถานะตอนระบบเมลล่ม = บอกใบ้ว่ามีบัญชีอยู่จริง'
+        );
+        $this->assertSame(
+            (string)$known['body'],
+            (string)$unknown['body'],
+            'ตอบคนละข้อความ = บอกใบ้ว่ามีบัญชีอยู่จริง'
+        );
+    }
+
+    /**
      * ⭐ อีเมลที่ไม่มีในระบบต้องตอบเหมือนกันเป๊ะ — ไม่บอกใบ้ว่ามีบัญชีนี้หรือไม่
      *
      * ถ้าตอบต่างกัน คนที่ไล่เดาจะรู้ได้ทันทีว่าอีเมลไหนสมัครไว้แล้ว

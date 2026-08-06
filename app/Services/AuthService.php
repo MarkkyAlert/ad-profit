@@ -354,11 +354,19 @@ class AuthService
             ];
         }
 
+        // ⚠️⚠️ "ระบบส่งอีเมลพร้อมไหม" ต้องตอบเหมือนกันทุกคำขอ
+        //
+        // เป็นสถานะของ **ระบบ** ไม่ใช่ของบัญชี จึงคำนวณก่อนดูว่าอีเมลนี้มีบัญชีไหม
+        // ถ้าคำนวณทีหลัง คำขอของอีเมลที่มีบัญชีจะตอบคนละแบบกับที่ไม่มี
+        // = บอกใบ้ว่าอีเมลไหนสมัครไว้แล้ว ซึ่งเป็นสิ่งที่ข้อความกลาง ๆ ตั้งใจปิดไว้
+        $mailReady = $this->emailService !== null && $this->emailService->isEnabled();
+
         $user = $this->userRepository->findByEmail($normalizedEmail);
         if ($user === null) {
             return [
                 'success' => true,
                 'message' => 'หากอีเมลนี้มีอยู่ในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน',
+                'mail_ready' => $mailReady,
             ];
         }
 
@@ -397,6 +405,7 @@ class AuthService
             'success' => true,
             'message' => 'หากอีเมลนี้มีอยู่ในระบบ คุณจะได้รับลิงก์รีเซ็ตรหัสผ่าน',
             'email_sent' => $emailSent,
+            'mail_ready' => $mailReady,
         ];
 
         if (APP_ENV === 'development' && EXPOSE_DEV_RESET_LINK) {

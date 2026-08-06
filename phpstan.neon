@@ -37,6 +37,7 @@ parameters:
         - profile.php
         - reset-password.php
         - shops.php
+        - verify-email.php
 
     # ให้ PHPStan เห็น constant ที่ define ใน config.php (APP_ENV, MAIL_*, SCHEMA_GUARD_ENABLED ฯลฯ)
     # กัน constant.notFound — config.php แค่ define ค่า ไม่มี side effect (ไม่ต่อ DB / ไม่ start session)
