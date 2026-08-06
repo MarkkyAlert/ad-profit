@@ -10,7 +10,12 @@ requireAuth();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $userRepository = new UserRepository($pdo);
-$profileService = new ProfileService($userRepository);
+$profileService = new ProfileService(
+    $userRepository,
+    $pdo,
+    null,
+    new EmailChangeRepository($pdo)
+);
 $profileResult = $profileService->getProfile($userId);
 
 if (($profileResult['success'] ?? false) !== true) {
@@ -21,6 +26,14 @@ if (($profileResult['success'] ?? false) !== true) {
 $profile = is_array($profileResult['data'] ?? null) ? (array)$profileResult['data'] : [];
 $displayName = (string)($profile['display_name'] ?? '');
 $email = (string)($profile['email'] ?? ($_SESSION['email'] ?? ''));
+
+// ⭐ คำขอเปลี่ยนอีเมลที่ยังรอยืนยัน — ข้อความ "ส่งลิงก์ไปที่ … แล้ว" เป็นแบบชั่วคราว
+// หายไปทันทีที่โหลดหน้าใหม่ · ถ้าไม่แสดงตรงนี้ คนที่พิมพ์อีเมลใหม่ผิดจะเห็นแค่
+// "ไม่มีอะไรเกิดขึ้น" โดยไม่มีทางรู้ว่าลิงก์ถูกส่งไปที่ไหน
+$pendingEmailResult = $profileService->getPendingEmailChange($userId);
+$pendingEmailChange = is_array($pendingEmailResult['data'] ?? null)
+    ? (array)$pendingEmailResult['data']
+    : null;
 
 $pageTitle = 'ข้อมูลส่วนตัว';
 $currentPage = 'profile';
@@ -39,6 +52,21 @@ require __DIR__ . '/includes/header.php';
             <p class="mt-1 font-semibold text-indigo-200"><?= e($email) ?></p>
         </div>
     </div>
+
+    <?php if ($pendingEmailChange !== null): ?>
+        <div class="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm">
+            <p class="font-semibold text-amber-200">มีคำขอเปลี่ยนอีเมลรอการยืนยันอยู่</p>
+            <p class="mt-1 text-slate-300">
+                ส่งลิงก์ยืนยันไปที่
+                <span class="font-semibold text-amber-100"><?= e((string)$pendingEmailChange['new_email']) ?></span>
+                แล้ว — อีเมลจะเปลี่ยนเมื่อคุณกดลิงก์ในกล่องจดหมายนั้น
+            </p>
+            <p class="mt-1 text-xs text-slate-400">
+                ถ้าที่อยู่ด้านบนไม่ถูกต้อง หรือรอแล้วยังไม่ได้รับ ให้กรอกอีเมลใหม่แล้วกดส่งอีกครั้งได้เลย
+                ลิงก์เดิมจะใช้ไม่ได้ทันที
+            </p>
+        </div>
+    <?php endif; ?>
 </section>
 
 <section class="mt-6 grid gap-6 lg:grid-cols-2">

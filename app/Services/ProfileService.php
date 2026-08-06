@@ -200,6 +200,43 @@ class ProfileService
         ];
     }
 
+    /**
+     * ⭐ คำขอเปลี่ยนอีเมลที่ยังรอยืนยันอยู่ (คืน null เมื่อไม่มี)
+     *
+     * ⚠️ ที่ต้องมี: ข้อความ "ส่งลิงก์ยืนยันไปที่ … แล้ว" เป็นข้อความชั่วคราวที่หายไป
+     * ทันทีที่โหลดหน้าใหม่ · หลังจากนั้นหน้าโปรไฟล์แสดงแต่อีเมลปัจจุบัน ไม่มีที่ไหน
+     * บอกเลยว่ามีคำขอค้างอยู่และค้างอยู่กับที่อยู่ไหน
+     *
+     * คนที่พิมพ์อีเมลใหม่ผิด (`@gmial.com`) จึงเห็นแค่ "ไม่มีอะไรเกิดขึ้น" —
+     * ไม่รู้ว่าลิงก์ถูกส่งไปแล้วและส่งไปที่ไหน จึงไม่มีทางรู้ว่าตัวเองพิมพ์ผิดตรงไหน
+     *
+     * @return array{success:bool,data?:array{new_email:string,expires_at:string}|null,error?:string}
+     */
+    public function getPendingEmailChange(int $userId): array
+    {
+        if ($userId <= 0) {
+            return ['success' => false, 'error' => 'Unauthorized'];
+        }
+
+        // ระบบเปลี่ยนอีเมลไม่พร้อม = ไม่มีคำขอค้างได้อยู่แล้ว ไม่ใช่ความผิดพลาด
+        if ($this->emailChangeRepository === null || !$this->emailChangeRepository->isReady()) {
+            return ['success' => true, 'data' => null];
+        }
+
+        $pending = $this->emailChangeRepository->findPendingByUserId($userId);
+        if ($pending === null) {
+            return ['success' => true, 'data' => null];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'new_email' => (string)($pending['new_email'] ?? ''),
+                'expires_at' => (string)($pending['expires_at'] ?? ''),
+            ],
+        ];
+    }
+
     public function updateProfile(int $userId, string $displayName): array
     {
         if ($userId <= 0) {
