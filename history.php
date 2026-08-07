@@ -39,6 +39,18 @@ if (
     }
 }
 
+// ⚠️ ขอเดือนอนาคตที่ไม่มีข้อมูล = ถูกหดกลับมาเป็นเดือนปัจจุบัน ต้องบอกผู้ใช้ด้วย
+// ไม่งั้นตัวเลือกเดือนเด้งกลับมาเองโดยไม่มีคำอธิบาย (หน้าอื่นมี max= กันไว้ แต่หน้านี้
+// ต้องเปิดเดือนอนาคตที่มีข้อมูลได้ จึงใส่ max ไม่ได้ — บอกด้วยข้อความแทน)
+$historyMonthNotice = null;
+if (
+    preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth) === 1
+    && $requestedMonth > $selectedMonth
+) {
+    $historyMonthNotice = 'เดือน ' . formatThaiMonth($requestedMonth) . ' ยังไม่มีรายการ '
+        . 'ระบบจึงแสดงเดือน ' . formatThaiMonth($selectedMonth) . ' ให้แทน';
+}
+
 $records = [];
 $totals = [
     'total_revenue' => 0.0,
@@ -81,6 +93,9 @@ require __DIR__ . '/includes/header.php';
                     class="rounded-xl px-3 py-2 text-sm transition-all">
                 <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
             </form>
+            <?php if ($historyMonthNotice !== null): ?>
+                <p class="mt-2 text-xs text-amber-400"><?= e($historyMonthNotice) ?></p>
+            <?php endif; ?>
 
             <?php if ($historyError === null): ?>
                 <a href="<?= e(app_url('/api/export.php?month=' . rawurlencode($selectedMonth))) ?>" data-loading-link="true" class="btn-teal px-4 py-2 text-sm">

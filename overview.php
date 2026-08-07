@@ -469,6 +469,9 @@ require __DIR__ . '/includes/header.php';
                 </article>
             </section>
 
+            <?php /* ⚠️ คำเตือน "N วันยังกรอกไม่ครบ" เคยอยู่ในบล็อกนี้ จึงหายไปทั้งอันเมื่อ
+                     ยังไม่มีวันไหนกรอกครบเลย (ค่าเฉลี่ย/วันดีสุดเป็น null) — ซึ่งเป็นตอนที่
+                     คำเตือนจำเป็นที่สุดพอดี · ย้ายออกมาไว้ข้างนอกแล้ว */ ?>
             <?php if ($dayAvgProfit !== null || $dayBest !== null): ?>
                 <section class="section-card mt-4 px-4 py-3 sm:px-5">
                     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-400">
@@ -514,12 +517,21 @@ require __DIR__ . '/includes/header.php';
                         <?php endif; ?>
                     </div>
 
-                    <?php if ($dayIncompleteDays > 0): ?>
-                        <p class="mt-2 border-t border-white/[0.06] pt-2 text-xs text-amber-400">
+                </section>
+            <?php endif; ?>
+
+            <?php if ($dayIncompleteDays > 0 || (int)($dailySummary['missing_days'] ?? 0) > 0): ?>
+                <section class="section-card mt-4 px-4 py-3">
+                    <p class="text-xs text-amber-400">
+                        <?php if ($dayIncompleteDays > 0): ?>
                             ⚠️ <?= e((string)$dayIncompleteDays) ?> วันที่ยังกรอกไม่ครบทุกร้านที่เริ่มบันทึกแล้ว —
                             <span class="text-slate-500">ยอดรวมของวันเหล่านั้นเทียบกับวันอื่นตรง ๆ ไม่ได้</span>
-                        </p>
-                    <?php endif; ?>
+                        <?php endif; ?>
+                        <?php if ((int)($dailySummary['missing_days'] ?? 0) > 0): ?>
+                            <?php if ($dayIncompleteDays > 0): ?><br><?php endif; ?>
+                            ⚠️ <?= e((string)(int)$dailySummary['missing_days']) ?> วันที่ผ่านมาแล้วแต่ยังไม่มีร้านไหนกรอกเลย
+                        <?php endif; ?>
+                    </p>
                 </section>
             <?php endif; ?>
 
@@ -613,7 +625,7 @@ require __DIR__ . '/includes/header.php';
             <section class="section-card mt-6 p-4 sm:p-5">
                 <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                     <h2 class="text-base sm:text-lg font-semibold text-slate-100">เปรียบเทียบระหว่างร้าน (จัดอันดับตามกำไร)</h2>
-                    <span class="text-xs text-slate-400">รวมทั้งเดือน <?= e($selectedMonth) ?></span>
+                    <span class="text-xs text-slate-400">รวมทั้งเดือน <?= e(formatThaiMonth($selectedMonth)) ?></span>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full text-sm">

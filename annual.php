@@ -171,7 +171,12 @@ if (($heatmapResult['success'] ?? false) === true) {
     // normalize ความเข้มด้วยค่าสูงสุดของ |กำไร| ทั้งกริด — เทียบข้ามปีได้ในสเกลเดียว
     foreach ($heatmapGrid as $gridRow) {
         foreach ((array)$gridRow as $cell) {
-            if (($cell['has_data'] ?? false) === true && $cell['profit'] !== null) {
+            // ⚠️ เดือนที่ยังไม่จบต้องไม่เข้าฐานคำนวณความเข้มด้วย — ยอดบางส่วนจะดึงสเกลให้เพี้ยน
+            if (
+                ($cell['has_data'] ?? false) === true
+                && $cell['profit'] !== null
+                && ($cell['is_unfinished'] ?? false) !== true
+            ) {
                 $heatmapPeak = max($heatmapPeak, abs((float)$cell['profit']));
             }
         }
@@ -182,6 +187,12 @@ if (($heatmapResult['success'] ?? false) === true) {
 $heatCellStyle = static function (array $cell) use ($heatmapPeak): string {
     if (($cell['has_data'] ?? false) !== true || $cell['profit'] === null) {
         return '';
+    }
+
+    // ⚠️ เดือนที่ยังไม่จบมียอดแค่บางส่วน ระบายสีเทียบกับเดือนที่จบแล้วไม่ได้
+    // ไม่งั้นกริด "ฤดูกาล" จะบอกว่าเดือนปัจจุบันแย่สุดเสมอ ทั้งที่ยังตัดสินไม่ได้
+    if (($cell['is_unfinished'] ?? false) === true) {
+        return 'background-color: rgba(148, 163, 184, 0.10);';
     }
 
     $profit = (float)$cell['profit'];

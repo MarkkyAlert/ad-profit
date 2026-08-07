@@ -205,4 +205,39 @@ final class AnnualServiceHeatmapTest extends TestCase
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('ไม่มีสิทธิ์', $result['error']);
     }
+
+    /**
+     * ⭐⭐ เดือนปัจจุบันที่ยังไม่จบต้องถูกทำเครื่องหมายไว้ ไม่ให้เอาไปเทียบกับเดือนที่จบแล้ว
+     *
+     * ⚠️ ยอดของเดือนนี้เป็นแค่บางส่วน (ตัดที่วันนี้) · วัดจริง — ร้านที่ทำกำไรวันละ
+     * ฿1,000 เท่ากันทุกวันทั้งปี: ช่อง ส.ค. (กรอกถึงวันที่ 7) ได้ความเข้มต่ำสุด
+     * ที่ระบบมี (0.12) ขณะที่เดือนอื่นอยู่ 0.50–0.55 → กริดที่มีไว้ตอบว่า
+     * "เดือนไหนขายดี" กลับบอกว่าเดือนปัจจุบันแย่สุดของปี ทั้งที่กำไรต่อวันเท่าเดิมเป๊ะ
+     *
+     * ขัดกับการ์ด "เดือนกำไรแย่สุด" ที่อยู่เหนือมันบนจอเดียวกัน ซึ่งตั้งใจไม่ตัดสิน
+     * เดือนที่ยังไม่จบ (เจ้าของระบบตัดสินไว้เมื่อ 2026-08-05)
+     */
+    public function testTheUnfinishedCurrentMonthIsFlagged(): void
+    {
+        $service = $this->makeService([
+            ['month_key' => '2026-07', 'total_revenue' => 40000.0, 'total_ad_cost' => 9000.0, 'days_count' => 31],
+            ['month_key' => '2026-08', 'total_revenue' => 10000.0, 'total_ad_cost' => 3000.0, 'days_count' => 7],
+            ['month_key' => '2025-08', 'total_revenue' => 40000.0, 'total_ad_cost' => 9000.0, 'days_count' => 31],
+        ]);
+
+        $grid = $service->buildMonthlyHeatmap(1, 1, 2026, '2026-08-07')['data']['grid'] ?? [];
+
+        $this->assertTrue(
+            $grid[2026][8]['is_unfinished'] ?? false,
+            'เดือนปัจจุบันที่ยังไม่จบไม่ถูกทำเครื่องหมาย กริดจะระบายสีมันเทียบกับเดือนที่จบแล้ว'
+        );
+        $this->assertFalse(
+            $grid[2026][7]['is_unfinished'] ?? true,
+            'เดือนที่จบไปแล้วถูกทำเครื่องหมายว่ายังไม่จบ'
+        );
+        $this->assertFalse(
+            $grid[2025][8]['is_unfinished'] ?? true,
+            'เดือนเดียวกันของปีก่อน (จบไปแล้ว) ถูกทำเครื่องหมายว่ายังไม่จบ'
+        );
+    }
 }
