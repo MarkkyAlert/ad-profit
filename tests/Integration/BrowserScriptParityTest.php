@@ -555,6 +555,275 @@ final class BrowserScriptParityTest extends ControllerTestCase
     }
 
     /**
+     * ⭐⭐⭐ ใช้ "ตัวแปร" ที่ไม่มีนิยาม — ตัวกวาดเดิมจับได้แค่ "ฟังก์ชัน" ที่ไม่มีนิยาม
+     *
+     * ⚠️⚠️ เกิดขึ้นจริงและอยู่บนเซิร์ฟเวอร์มาแล้ว: ตัวยิง event หลังวางจาก Excel เขียนว่า
+     * `rows.forEach(...)` แต่ `rows` ถูกประกาศไว้ **ข้างใน** callback ของ `grid.forEach`
+     * จึงมองไม่เห็นจากตรงนั้น → **ReferenceError ทุกครั้งที่วาง** แล้วโค้ดหลังจากนั้นตายหมด
+     *
+     * ผลที่ผู้ใช้เจอ (วัดจริงบนเบราว์เซอร์):
+     *   · วางทับวันที่เคยมีโน้ต → ช่องโน้ตว่างเปล่า (ทางเลือกวันที่เองเติมให้ปกติ)
+     *     กดบันทึกแล้วโน้ตเดิมหายไปพร้อมข้อความว่าสำเร็จ
+     *   · คำเตือนทั้ง 3 แบบไม่ขึ้นเลย: วางเกิน 31 แถว · วางกว้างเกินตาราง · วันที่อ่านไม่ออก
+     *
+     * ⚠️ `php -l` ไม่เห็น · ตัวกวาดฟังก์ชันไม่เห็น (เพราะ `rows` ไม่ได้ตามด้วยวงเล็บ)
+     * · ไม่มี test runner ของ JS · จับได้ตอนเปิดเบราว์เซอร์จริงเท่านั้น
+     *
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('scriptedPageProvider')]
+    public function testEveryVariableTheScriptReadsIsDefined(string $relativePath): void
+    {
+        $blocks = self::scriptBlocksOf($relativePath);
+        $this->assertNotSame([], $blocks, 'หาบล็อก <script> ในหน้าไม่เจอ');
+
+        $sharedNames = self::declaredNamesIn(self::sharedScriptSource());
+        $seenEarlier = $sharedNames;
+        $problems = [];
+
+        // ก้อนก่อนหน้ามองเห็นได้ · ก้อนหลังมองย้อนไม่ได้ (กติกาเดียวกับตัวกวาดฟังก์ชัน)
+        foreach ($blocks as $rawBlock) {
+            $block = (string)preg_replace('/<\?[=php].*?\?' . '>/s', '0', $rawBlock);
+            $block = self::stripCommentsAndStrings($block);
+
+            $scopes = self::scopePathByOffset($block);
+            $declarations = self::declarationsWithScope($block, $scopes);
+
+            preg_match_all(
+                '/(?<![\w$.\d])([a-z_$][\w$]*)\s*\./',
+                $block,
+                $matches,
+                PREG_OFFSET_CAPTURE
+            );
+
+            foreach ($matches[1] as [$name, $offset]) {
+                if (isset(self::BROWSER_GLOBALS[$name]) || isset($seenEarlier[$name])) {
+                    continue;
+                }
+
+                $readScope = $scopes[$offset] ?? '|';
+                $visible = false;
+                foreach ($declarations[$name] ?? [] as $declaredScope) {
+                    // ⚠️⚠️ ต้องเป็น "ขอบเขตแม่หรือขอบเขตเดียวกัน" เท่านั้น
+                    //
+                    // ดูแค่ความลึกไม่พอ: `const rows = …` มีอยู่ 2 ที่คนละฟังก์ชัน
+                    // ที่หนึ่งลึกกว่าจุดที่ใช้ อีกที่ลึกเท่ากันแต่เป็นฟังก์ชันข้าง ๆ
+                    // ตัวกวาดที่วัดความลึกจึงตอบว่า "เห็น" ทั้งที่เบราว์เซอร์พังจริง
+                    if (str_starts_with($readScope, $declaredScope)) {
+                        $visible = true;
+                        break;
+                    }
+                }
+
+                if (!$visible) {
+                    $problems[$name] = $name;
+                }
+            }
+
+            foreach (array_keys($declarations) as $name) {
+                $seenEarlier[$name] = true;
+            }
+        }
+
+        $problems = array_values($problems);
+        sort($problems);
+
+        $this->assertSame(
+            [],
+            $problems,
+            $relativePath . ' ใช้ตัวแปร JS ที่มองไม่เห็นจากตรงนั้น: ' . implode(', ', $problems)
+        );
+    }
+
+    /**
+     * "เส้นทางขอบเขต" ของทุกตำแหน่งในโค้ด เช่น `|12|340|` = อยู่ในปีกกาที่เปิดที่ 12 แล้ว 340
+     *
+     * ใช้เทียบว่าตัวแปรที่ประกาศไว้ **มองเห็นได้จากตรงนั้นไหม** — ประกาศต้องอยู่ในขอบเขตแม่
+     * หรือขอบเขตเดียวกันเท่านั้น (เส้นทางของตัวประกาศต้องเป็นคำนำหน้าของเส้นทางจุดที่ใช้)
+     *
+     * @return array<int,string>
+     */
+    private static function scopePathByOffset(string $code): array
+    {
+        $paths = [];
+        $stack = [];
+        $current = '|';
+        $length = strlen($code);
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $code[$i];
+
+            if ($char === '}') {
+                array_pop($stack);
+                $current = '|' . implode('|', $stack) . ($stack === [] ? '' : '|');
+            }
+
+            $paths[$i] = $current;
+
+            if ($char === '{') {
+                $stack[] = $i;
+                $current = '|' . implode('|', $stack) . '|';
+            }
+        }
+
+        return $paths;
+    }
+
+    /**
+     * ชื่อที่ประกาศ พร้อมเส้นทางขอบเขตของแต่ละการประกาศ
+     *
+     * @param array<int,string> $scopes
+     * @return array<string,array<int,string>>
+     */
+    private static function declarationsWithScope(string $code, array $scopes): array
+    {
+        $result = [];
+        $record = static function (string $name, int $offset) use (&$result, $scopes): void {
+            $result[$name][] = $scopes[$offset] ?? '|';
+        };
+
+        foreach ([
+            '/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/',
+            '/\bfunction\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(/',
+            '/\bclass\s+([A-Za-z_$][\w$]*)/',
+            '/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/',
+        ] as $pattern) {
+            preg_match_all($pattern, $code, $found, PREG_OFFSET_CAPTURE);
+            foreach ($found[1] as [$name, $offset]) {
+                $record($name, $offset);
+            }
+        }
+
+        // พารามิเตอร์ — ต้องบันทึกไว้ที่ **ข้างในตัวฟังก์ชัน** ไม่ใช่ตรงที่เขียนชื่อ
+        // (ชื่อพารามิเตอร์อยู่นอกปีกกา แต่ขอบเขตของมันคือข้างใน)
+        // ⚠️ ต้องข้าม `if (…) {` `while (…) {` ฯลฯ ไม่งั้นทุกชื่อในเงื่อนไขกลายเป็น "ประกาศแล้ว"
+        $controlKeywords = array_flip(['if', 'for', 'while', 'switch', 'catch', 'return', 'typeof']);
+        preg_match_all(
+            '/(\b[A-Za-z_$][\w$]*)?\s*\(([^()]*)\)\s*(?:=>\s*)?(\{)?/',
+            $code,
+            $found,
+            PREG_OFFSET_CAPTURE
+        );
+        foreach ($found[2] as $index => [$group, $groupOffset]) {
+            if (isset($controlKeywords[(string)($found[1][$index][0] ?? '')])) {
+                continue;
+            }
+
+            $bodyOffset = ($found[3][$index][1] ?? -1) >= 0
+                ? $found[3][$index][1] + 1     // ข้างในปีกกาของตัวฟังก์ชัน
+                : $groupOffset;                // arrow แบบไม่มีปีกกา — ขอบเขตเดียวกับที่เขียน
+
+            preg_match_all('/[A-Za-z_$][\w$]*/', $group, $names);
+            foreach ($names[0] as $name) {
+                $record($name, $bodyOffset);
+            }
+        }
+
+        // `x => …` แบบพารามิเตอร์เดียวไม่มีวงเล็บ
+        preg_match_all('/(?<![\w$.])([A-Za-z_$][\w$]*)\s*=>/', $code, $found, PREG_OFFSET_CAPTURE);
+        foreach ($found[1] as [$name, $offset]) {
+            $record($name, $offset);
+        }
+
+        // destructuring: const { a, b } = … · const [a, b] = …
+        preg_match_all('/\b(?:const|let|var)\s*[\{\[]([^\}\]]*)[\}\]]/', $code, $found, PREG_OFFSET_CAPTURE);
+        foreach ($found[1] as [$group, $groupOffset]) {
+            preg_match_all('/[A-Za-z_$][\w$]*/', $group, $names);
+            foreach ($names[0] as $name) {
+                $record($name, $groupOffset);
+            }
+        }
+
+        return $result;
+    }
+
+    /** ของที่เบราว์เซอร์/ภาษามีให้อยู่แล้ว — ใช้ร่วมกับตัวกวาดตัวแปร */
+    private const BROWSER_GLOBALS = [
+        'document' => true, 'window' => true, 'console' => true, 'navigator' => true,
+        'location' => true, 'history' => true, 'localStorage' => true, 'sessionStorage' => true,
+        'JSON' => true, 'Math' => true, 'Object' => true, 'Array' => true, 'Number' => true,
+        'String' => true, 'Date' => true, 'Promise' => true, 'Map' => true, 'Set' => true,
+        'RegExp' => true, 'Intl' => true, 'URLSearchParams' => true, 'FormData' => true,
+        'Chart' => true, 'performance' => true, 'crypto' => true,
+        // คีย์เวิร์ดที่ตามด้วยจุดได้ในบางรูปประโยค
+        'this' => true, 'super' => true, 'new' => true, 'return' => true, 'typeof' => true,
+        'await' => true, 'else' => true, 'do' => true, 'in' => true, 'of' => true, 'case' => true,
+    ];
+
+    /**
+     * ชื่อทั้งหมดที่ประกาศไว้ในโค้ดก้อนหนึ่ง — ตัวแปร ฟังก์ชัน พารามิเตอร์ และ destructuring
+     *
+     * ⚠️ ต้องเก็บ **พารามิเตอร์** ด้วย ไม่งั้น `rows.forEach((row) => row.x)` จะถูกรายงานว่า
+     * `row` ไม่มีนิยาม ซึ่งเป็นผลบวกลวงที่ทำให้ตัวกวาดใช้งานไม่ได้เลย
+     *
+     * @return array<string,true>
+     */
+    private static function declaredNamesIn(string $code): array
+    {
+        $names = [];
+
+        $patterns = [
+            '/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/',        // const x
+            '/\bfunction\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(/',   // function foo(
+            '/\bclass\s+([A-Za-z_$][\w$]*)/',                    // class Foo
+            '/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/',              // catch (e)
+            '/\bfor\s*\(\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)/', // for (const x of
+            '/([A-Za-z_$][\w$]*)\s*=>/',                          // x => …
+        ];
+        foreach ($patterns as $pattern) {
+            preg_match_all($pattern, $code, $found);
+            foreach ($found[1] as $name) {
+                $names[$name] = true;
+            }
+        }
+
+        // พารามิเตอร์ในวงเล็บ — ทั้ง `function foo(a, b) {`, `(a, b) => …` และ `.forEach((a, b) => …)`
+        // ⚠️ ต้องไม่ผูกกับสิ่งที่อยู่ **ก่อน** วงเล็บ · `grid.forEach((cells, i) => …)` มี `(` ติดกัน
+        // สองตัว ซึ่งไม่มีขอบเขตคำให้จับ ทำให้ `cells` ถูกรายงานว่าไม่มีนิยาม (ผลบวกลวง)
+        preg_match_all('/\(([^()]*)\)\s*(?:=>|\{)/', $code, $paramGroups);
+        foreach ($paramGroups[1] as $group) {
+            preg_match_all('/[A-Za-z_$][\w$]*/', $group, $paramNames);
+            foreach ($paramNames[0] as $name) {
+                $names[$name] = true;
+            }
+        }
+
+        // destructuring: const { a, b } = … · const [a, b] = …
+        preg_match_all('/\b(?:const|let|var)\s*[\{\[]([^\}\]]*)[\}\]]/', $code, $destructured);
+        foreach ($destructured[1] as $group) {
+            preg_match_all('/[A-Za-z_$][\w$]*/', $group, $destructuredNames);
+            foreach ($destructuredNames[0] as $name) {
+                $names[$name] = true;
+            }
+        }
+
+        return $names;
+    }
+
+    /** @return array<int,string> เนื้อในของทุกก้อน `<script>` ตามลำดับในหน้า */
+    private static function scriptBlocksOf(string $relativePath): array
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/' . $relativePath);
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+
+        return $blocks[1];
+    }
+
+    /** โค้ดที่ทุกหน้าโหลดคู่กันเสมอ (header/footer) */
+    private static function sharedScriptSource(): string
+    {
+        $shared = '';
+        foreach (['includes/header.php', 'includes/footer.php'] as $sharedFile) {
+            foreach (self::scriptBlocksOf($sharedFile) as $block) {
+                $shared .= "\n" . self::stripCommentsAndStrings(
+                    (string)preg_replace('/<\?[=php].*?\?' . '>/s', '0', $block)
+                );
+            }
+        }
+
+        return $shared;
+    }
+
+    /**
      * ⭐ "หน้าตาเหมือนวันที่" ต้องไม่ใช้ตัวเดียวกับ "แปลงวันที่ได้"
      *
      * `looksLikeDateCell` ใช้แยกแถวหัวตารางเท่านั้น — ถ้าเอา `parseDateCell` ไปใช้แทน

@@ -776,7 +776,10 @@ require __DIR__ . '/includes/header.php';
             //
             // ยิง event เองหลังวางเสร็จ เพื่อให้ทางวางกับทางเลือกวันเองเดินโค้ดชุดเดียวกัน
             // (`loadMonthData` มี cache ต่อเดือนอยู่แล้ว หลายแถวจึงไม่ยิง request ซ้ำ)
-            rows.forEach((row) => {
+            // ⚠️ ต้องเรียก `getRows()` ตรงนี้ — `rows` ที่ประกาศไว้ข้างบนอยู่ **ข้างใน**
+            // callback ของ `grid.forEach` จึงมองไม่เห็นจากตรงนี้ · เดิมเขียน `rows.forEach`
+            // เฉย ๆ ทำให้เกิด ReferenceError ทุกครั้งที่วาง แล้วโค้ดหลังจากนี้ตายทั้งหมด
+            getRows().forEach((row) => {
                 const dateInput = row.querySelector('input[name="record_date[]"]');
                 if (dateInput && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.value)) {
                     dateInput.dispatchEvent(new Event('change', { bubbles: true }));
