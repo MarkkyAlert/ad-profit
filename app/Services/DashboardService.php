@@ -341,7 +341,10 @@ class DashboardService
             }
         }
 
-        $profit = $totalRevenue - $totalAdCost;
+        // ⭐ ปัดเป็นสตางค์ก่อนใช้ต่อ — ให้ตรงกับ `SUM()` ของฐานข้อมูลที่หน้าอื่นใช้
+        $totalRevenue = money_total($totalRevenue);
+        $totalAdCost = money_total($totalAdCost);
+        $profit = money_total($totalRevenue - $totalAdCost);
         $daysCount = count($records);
 
         return [
@@ -420,10 +423,10 @@ class DashboardService
             'previous_month' => $previousMonth,
             'compared_up_to_day' => $cutoffDay,
             'change' => [
-                'total_revenue' => $this->calculateChangePercent($selectedRevenue, $previousRevenue),
-                'total_ad_cost' => $this->calculateChangePercent($selectedAdCost, $previousAdCost),
-                'profit' => $this->calculateChangePercent($selectedProfit, $previousProfit),
-                'roas' => $this->calculateChangePercent($selectedRoasExact, $previousRoasExact),
+                'total_revenue' => change_percent($selectedRevenue, $previousRevenue),
+                'total_ad_cost' => change_percent($selectedAdCost, $previousAdCost),
+                'profit' => change_percent($selectedProfit, $previousProfit),
+                'roas' => change_percent($selectedRoasExact, $previousRoasExact),
             ],
         ];
     }
@@ -820,24 +823,6 @@ class DashboardService
         }
 
         return ['revenue' => $revenue, 'ad_cost' => $adCost];
-    }
-
-    /**
-     * เปอร์เซ็นต์การเปลี่ยนแปลงเทียบฐานเดือนก่อน
-     * ฐาน 0 (ไม่มีข้อมูลเดือนก่อน/เท่าทุนพอดี) → null เพราะหารไม่ได้
-     * ฐานติดลบ → หารด้วย abs เพื่อให้เครื่องหมายสื่อทิศทางจริง (ขาดทุนน้อยลง = บวก)
-     *
-     * เดิมหารด้วย $previous ที่มีเครื่องหมาย ทำให้เดือนที่ขาดทุนน้อยลงขึ้นลูกศรลงสีแดง
-     * และเดือนที่ขาดทุนหนักขึ้นขึ้นลูกศรขึ้นสีเขียว — ตรงข้ามกับ AnnualService
-     * และ OverviewAnnualService ที่ใช้ abs อยู่แล้ว
-     */
-    private function calculateChangePercent(?float $current, ?float $previous): ?float
-    {
-        if ($current === null || $previous === null || abs($previous) < 0.00001) {
-            return null;
-        }
-
-        return round((($current - $previous) / abs($previous)) * 100, 1);
     }
 
     private function isValidDate(string $date): bool

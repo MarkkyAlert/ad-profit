@@ -247,9 +247,10 @@ class ExportService
                 'shop_name' => (string)($shop['name'] ?? 'ร้านค้า'),
                 'rows' => $rows,
                 'totals' => [
-                    'revenue' => $totalRevenue,
-                    'ad_cost' => $totalAdCost,
-                    'profit' => $totalRevenue - $totalAdCost,
+                    // ⭐ ปัดเป็นสตางค์ — ไฟล์ที่ดาวน์โหลดต้องตรงกับตัวเลขบนหน้าเว็บ
+                    'revenue' => money_total($totalRevenue),
+                    'ad_cost' => money_total($totalAdCost),
+                    'profit' => money_total($totalRevenue - $totalAdCost),
                     'roas' => $totalAdCost > 0 ? round($totalRevenue / $totalAdCost, 2) : null,
                 ],
                 // ตำแหน่งคอลัมน์โน้ต — 1-based เพราะ PhpSpreadsheet ใช้เลขคอลัมน์แบบ 1 = A

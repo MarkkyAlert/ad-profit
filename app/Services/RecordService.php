@@ -1135,7 +1135,10 @@ class RecordService
             $totalAdCost += $adCost;
         }
 
-        $totalProfit = $totalRevenue - $totalAdCost;
+        // ⭐ ปัดเป็นสตางค์ก่อนใช้ต่อ — ให้ตรงกับ `SUM()` ของฐานข้อมูลที่หน้าอื่นใช้
+        $totalRevenue = money_total($totalRevenue);
+        $totalAdCost = money_total($totalAdCost);
+        $totalProfit = money_total($totalRevenue - $totalAdCost);
 
         return [
             'success' => true,
@@ -1294,7 +1297,9 @@ class RecordService
             $sampleAdCostTotal += $adCost;
         }
 
-        $sampleProfitTotal = $sampleRevenueTotal - $sampleAdCostTotal;
+        $sampleRevenueTotal = money_total($sampleRevenueTotal);
+        $sampleAdCostTotal = money_total($sampleAdCostTotal);
+        $sampleProfitTotal = money_total($sampleRevenueTotal - $sampleAdCostTotal);
 
         return [
             'success' => true,

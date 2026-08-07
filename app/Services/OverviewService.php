@@ -223,9 +223,7 @@ class OverviewService
             // ถูกป้ายว่า **"ใหม่"** พร้อม tooltip "ไม่มีข้อมูลเดือนก่อน" ซึ่งไม่จริงทั้งคู่
             // (`sumProfitByShopId` คืนแผนที่ที่ *ไม่มีคีย์* เมื่อไม่มีแถวเลย จึงแยกได้)
             $rows[$index]['prev_has_data'] = array_key_exists($shopId, $previousProfitByShopId);
-            $rows[$index]['profit_change_percent'] = abs($previousProfit) > 0.00001
-                ? round(($change / abs($previousProfit)) * 100, 1)
-                : null;
+            $rows[$index]['profit_change_percent'] = change_percent($profit, $previousProfit);
         }
 
         return $rows;
@@ -263,7 +261,10 @@ class OverviewService
             $totalAdCost += (float)($row['total_ad_cost'] ?? 0);
         }
 
-        $profit = $totalRevenue - $totalAdCost;
+        // ⭐ ปัดเป็นสตางค์ก่อนใช้ต่อ — ให้ตรงกับ `SUM()` ของฐานข้อมูลที่หน้าอื่นใช้
+        $totalRevenue = money_total($totalRevenue);
+        $totalAdCost = money_total($totalAdCost);
+        $profit = money_total($totalRevenue - $totalAdCost);
 
         return [
             'total_revenue' => $totalRevenue,

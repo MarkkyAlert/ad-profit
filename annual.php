@@ -105,7 +105,11 @@ $monthOutcomes = annual_month_outcome_counts($summary);
 $profitMonths = $monthOutcomes['profit'];
 $lossMonths = $monthOutcomes['loss'];
 $breakEvenMonths = $monthOutcomes['break_even'];
-$hasAnnualData = abs($totalRevenue) > 0.00001 || abs($totalAdCost) > 0.00001;
+// ⚠️⚠️ "มีข้อมูลไหม" ต้องนับจาก **จำนวนวัน/เดือนที่กรอก** ไม่ใช่จากยอดเงิน
+// วันที่กรอกไว้จริงแต่รายได้และค่าแอดเป็น 0 ทั้งคู่ (วันหยุด/ไม่ยิงแอด — ระบบอนุญาต)
+// คือข้อมูลจริง · เดิมเช็กจากยอดเงิน หน้าจึงขึ้นแถบ "ยังไม่มีข้อมูล" คู่กับตาราง
+// ที่แสดง "3 วัน" บนจอเดียวกัน (วัดจริงแล้ว)
+$hasAnnualData = (int)($summary['months_with_data'] ?? 0) > 0;
 
 $bestMonth = is_array($summary['best_month'] ?? null) ? (array)$summary['best_month'] : null;
 $worstMonth = is_array($summary['worst_month'] ?? null) ? (array)$summary['worst_month'] : null;
@@ -150,7 +154,7 @@ $noFinishedMonthText = $isFinishedYear ? 'ไม่มีข้อมูลใ�
 // เป็นกติกาเดียวกับการ์ดคู่ "วันดีสุด/แย่สุด" ซึ่งมีตัวกันนี้อยู่แล้ว — ระดับเดือนตกสำรวจ
 $monthExtremesComparable = extremes_are_comparable($bestMonth, $worstMonth, 'month');
 
-$singleMonthText = 'ยังเทียบไม่ได้ — มีเดือนที่จบแล้วเดือนเดียว';
+$singleMonthText = extremes_not_comparable_text();
 
 $bestMonthText = $noFinishedMonthText;
 $bestMonthProfit = null;
@@ -673,7 +677,7 @@ require __DIR__ . '/includes/header.php';
 <?php elseif ($projectionReason === 'insufficient_data' && $hasAnnualData): ?>
     <section class="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-3 sm:px-5">
         <p class="text-xs text-slate-500">
-            🔮 ข้อมูลยังไม่พอประมาณการสิ้นปี — ต้องมีอย่างน้อย 2 เดือนที่กรอกแล้ว
+            🔮 ข้อมูลยังไม่พอประมาณการสิ้นปี — ต้องมีอย่างน้อย 2 เดือนที่กรอกไปแล้วเกินครึ่งเดือน
         </p>
     </section>
 <?php endif; ?>

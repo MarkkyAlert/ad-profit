@@ -286,4 +286,61 @@ final class XlsxReportServiceAnnualTest extends TestCase
 
         $spreadsheet->disconnectWorksheets();
     }
+
+    /**
+     * ⭐⭐ ไฟล์ Excel ต้องใช้กติกา "ดีสุด/แย่สุดต้องคนละเดือน" เหมือนหน้าจอ
+     *
+     * ⚠️ หน้าเว็บขึ้น "ยังเทียบไม่ได้" ทั้งสองการ์ดเมื่อเดือนที่จบแล้วให้ผลเท่ากันหมด
+     * แต่ไฟล์เขียน "ก.ค. (฿30,000)" เป็นทั้งเดือนดีสุดและแย่สุดของปีเดียวกัน
+     * — เกิดกับทุกร้านใน 1–2 เดือนแรกที่เริ่มใช้ระบบ
+     *
+     * เป็นรูปแบบเดิมที่เจอซ้ำ ๆ: กติกาถูกบังคับใช้ที่หน้าจอแล้วแต่ไปไม่ถึงไฟล์
+     */
+    public function testTheAnnualSheetDoesNotCallOneMonthBothBestAndWorst(): void
+    {
+        $sheet = $this->buildSheet($this->summary([
+            'best_month' => ['month' => 7, 'profit' => 30000.0],
+            'worst_month' => ['month' => 7, 'profit' => 30000.0],
+        ]));
+
+        $best = $this->factValue($sheet, 'เดือนกำไรดีสุด');
+        $worst = $this->factValue($sheet, 'เดือนกำไรแย่สุด');
+
+        $this->assertNotNull($best, 'ไม่มีแถวเดือนกำไรดีสุดในไฟล์ — เทสต์นี้จะไม่ได้ตรวจอะไรเลย');
+        $this->assertStringContainsString(
+            'ยังเทียบไม่ได้',
+            (string)$best,
+            'ไฟล์ประกาศว่าเดือนเดียวกันเป็นทั้งเดือนดีสุดและแย่สุดของปี'
+        );
+        $this->assertSame($best, $worst);
+
+        $sheet->getParent()?->disconnectWorksheets();
+    }
+
+    /** คนละเดือนจริง ๆ ต้องยังแสดงตามปกติ */
+    public function testTwoDifferentMonthsAreStillShown(): void
+    {
+        $sheet = $this->buildSheet($this->summary([
+            'best_month' => ['month' => 1, 'profit' => 30000.0],
+            'worst_month' => ['month' => 7, 'profit' => -5000.0],
+        ]));
+
+        $this->assertStringContainsString('ม.ค.', (string)$this->factValue($sheet, 'เดือนกำไรดีสุด'));
+        $this->assertStringContainsString('ก.ค.', (string)$this->factValue($sheet, 'เดือนกำไรแย่สุด'));
+
+        $sheet->getParent()?->disconnectWorksheets();
+    }
+
+    /** ค้นค่าจากป้ายชื่อ ไม่ใช่ตำแหน่งเซลล์ตายตัว — จัดหน้าใหม่แล้วเทสต์ต้องไม่พังฟรี ๆ */
+    private function factValue(Worksheet $sheet, string $label): ?string
+    {
+        foreach ($sheet->getRowIterator() as $row) {
+            $index = $row->getRowIndex();
+            if (trim((string)$sheet->getCell('A' . $index)->getValue()) === $label) {
+                return (string)$sheet->getCell('C' . $index)->getValue();
+            }
+        }
+
+        return null;
+    }
 }

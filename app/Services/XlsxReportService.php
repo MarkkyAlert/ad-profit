@@ -397,9 +397,7 @@ class XlsxReportService
             // ก็ได้ null เหมือนกัน ต้องบอกให้ตรงกับหน้าเว็บ (ดูคอมเมนต์ใน AnnualService)
             $sheet->setCellValueExplicit(
                 'A8',
-                ($summary['prev_year_has_data'] ?? false) === true
-                    ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้'
-                    : 'ไม่มีข้อมูลปีก่อน',
+                $this->describeMissingYoy($summary),
                 DataType::TYPE_STRING
             );
         } else {
@@ -431,9 +429,14 @@ class XlsxReportService
         // ── บล็อกเดือนที่โดดเด่น ───────────────────────────────────
         $this->writeSectionHeader($sheet, 10, 'เดือนที่โดดเด่น');
 
+        [$bestMonthText, $worstMonthText] = $this->describeMonthExtremes(
+            is_array($summary['best_month'] ?? null) ? $summary['best_month'] : null,
+            is_array($summary['worst_month'] ?? null) ? $summary['worst_month'] : null
+        );
+
         $facts = [
-            ['เดือนกำไรดีสุด', $this->describeMonth($summary['best_month'] ?? null)],
-            ['เดือนกำไรแย่สุด', $this->describeMonth($summary['worst_month'] ?? null)],
+            ['เดือนกำไรดีสุด', $bestMonthText],
+            ['เดือนกำไรแย่สุด', $worstMonthText],
             [
                 'เดือนที่มีข้อมูล',
                 // นับด้วย helper ตัวเดียวกับหน้าสรุปประจำปี — เดือนที่กำไรเป็น 0 พอดี
@@ -972,7 +975,10 @@ class XlsxReportService
                 $totalAdCost += (float)($shop['total_ad_cost'] ?? 0);
                 $totalDays = max($totalDays, (int)($shop['days_count'] ?? 0));
             }
-            $totalProfit = $totalRevenue - $totalAdCost;
+            // ⭐ ปัดเป็นสตางค์ก่อนใช้ต่อ — ให้ตรงกับ `SUM()` ของฐานข้อมูลที่หน้าอื่นใช้
+            $totalRevenue = money_total($totalRevenue);
+            $totalAdCost = money_total($totalAdCost);
+            $totalProfit = money_total($totalRevenue - $totalAdCost);
 
             $sheet->setCellValueExplicit('A' . $totalRow, 'รวมทุกร้าน', DataType::TYPE_STRING);
             $sheet->setCellValue('B' . $totalRow, $totalRevenue);
@@ -984,9 +990,21 @@ class XlsxReportService
             if ($totalRevenue > 0) {
                 $sheet->setCellValue('F' . $totalRow, round(($totalProfit / $totalRevenue) * 100, 1));
             }
-            // ⚠️ สัดส่วนกำไรของแถวรวม = 100% ตามนิยาม ห้ามบวกค่าที่ปัดแล้วทีละแถว
-            // และ "วันที่กรอก" ใช้ค่ามากสุด ไม่ใช่ผลบวกข้ามร้าน (กติกาเดียวกับหน้าเว็บ)
-            $sheet->setCellValue('G' . $totalRow, 100.0);
+            // ⚠️⚠️ สัดส่วนกำไรของแถวรวม = 100% **เฉพาะเมื่อคำนวณสัดส่วนได้**
+            //
+            // กำไรรวม ≤ 0 → หารไม่ได้ ทุกแถวจึงเป็นช่องว่าง · หน้าเว็บเว้นว่างตามไปด้วย
+            // แต่ไฟล์เคยเขียน 100.0% ตายตัว → แถวรวมบอก 100% ขณะที่ทุกแถวเหนือมันว่าง
+            // บวกกันไม่ได้ 100% (วัดจริงตอนทุกร้านขาดทุน: กำไรรวมทั้งปี ฿-32,500)
+            $hasProfitShare = false;
+            foreach ($shops as $shop) {
+                if (($shop['profit_share'] ?? null) !== null) {
+                    $hasProfitShare = true;
+                    break;
+                }
+            }
+            if ($hasProfitShare) {
+                $sheet->setCellValue('G' . $totalRow, 100.0);
+            }
             // ⚠️ เขียนเป็นข้อความ "สูงสุด N วัน" เหมือนหน้าเว็บ — ตัวเลขเปล่าในคอลัมน์นี้
             // อ่านเป็นผลบวกของแถวบน ซึ่งบวกไม่ลง (3 ร้าน × 31 วัน ≠ 93 วันในเดือนที่มี 31 วัน)
             $sheet->setCellValueExplicit('H' . $totalRow, 'สูงสุด ' . $totalDays . ' วัน', DataType::TYPE_STRING);
@@ -1038,10 +1056,16 @@ class XlsxReportService
         }
         $rowNumber++;
 
+        // ⚠️ กติกาเดียวกับหน้าจอ — เดือนเดียวกันเป็นทั้งดีสุดและแย่สุดไม่ได้
+        [$bestMonthText, $worstMonthText] = $this->describeMonthExtremes(
+            is_array($summary['best_month'] ?? null) ? $summary['best_month'] : null,
+            is_array($summary['worst_month'] ?? null) ? $summary['worst_month'] : null
+        );
+
         $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนกำไรดีสุด', DataType::TYPE_STRING);
         $sheet->setCellValueExplicit(
             'B' . $rowNumber,
-            $this->describeMonth($summary['best_month'] ?? null),
+            $bestMonthText,
             DataType::TYPE_STRING
         );
         $rowNumber++;
@@ -1049,7 +1073,7 @@ class XlsxReportService
         $sheet->setCellValueExplicit('A' . $rowNumber, 'เดือนกำไรแย่สุด', DataType::TYPE_STRING);
         $sheet->setCellValueExplicit(
             'B' . $rowNumber,
-            $this->describeMonth($summary['worst_month'] ?? null),
+            $worstMonthText,
             DataType::TYPE_STRING
         );
         $rowNumber++;
@@ -1067,9 +1091,7 @@ class XlsxReportService
             // ⚠️ null = เทียบเป็น % ไม่ได้ ไม่ใช่ "ไม่มีข้อมูล" (ดูคอมเมนต์ใน AnnualService)
             $sheet->setCellValueExplicit(
                 'B' . $rowNumber,
-                ($summary['prev_year_has_data'] ?? false) === true
-                    ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้'
-                    : 'ไม่มีข้อมูลปีก่อน',
+                $this->describeMissingYoy($summary),
                 DataType::TYPE_STRING
             );
             return;
@@ -1176,6 +1198,50 @@ class XlsxReportService
         if ($value < 0) {
             $sheet->getStyle($coordinate)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
         }
+    }
+
+    /**
+     * ⚠️⚠️ ทำไม % เทียบปีก่อนถึงไม่มี — มี 3 สาเหตุที่ต้องบอกคนละอย่าง
+     *
+     * ไฟล์ต้องพูดตรงกับหน้าจอ · เดิมไฟล์รู้จักแค่ 2 สาเหตุ (มีข้อมูล/ไม่มีข้อมูล)
+     * ส่วน "อ่านข้อมูลปีก่อนไม่สำเร็จ" ถูกยุบไปรวมกับ "ไม่มีข้อมูล" ทั้งที่หน้าเว็บ
+     * แยกไว้แล้ว — คนเปิดไฟล์จะเข้าใจว่าปีก่อนไม่มีข้อมูลจริง ๆ
+     *
+     * @param array<string,mixed> $summary
+     */
+    private function describeMissingYoy(array $summary): string
+    {
+        if (($summary['prev_year_unavailable'] ?? false) === true) {
+            return 'โหลดข้อมูลปีก่อนไม่สำเร็จ — เทียบให้ไม่ได้ตอนนี้';
+        }
+
+        return ($summary['prev_year_has_data'] ?? false) === true
+            ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้'
+            : 'ไม่มีข้อมูลปีก่อน';
+    }
+
+    /**
+     * ⚠️⚠️ ไฟล์ต้องใช้กติกาเดียวกับหน้าจอ — `extremes_are_comparable()`
+     *
+     * วัดจริง: ร้านที่มีเดือนที่จบแล้วเดือนเดียว หน้าเว็บขึ้น "ยังเทียบไม่ได้" ทั้งสองการ์ด
+     * แต่ไฟล์ Excel เขียน "ก.ค. (฿30,000)" เป็นทั้งเดือนดีสุดและแย่สุดของปีเดียวกัน
+     * (เกิดกับทุกร้านใน 1–2 เดือนแรกที่เริ่มใช้ระบบ)
+     *
+     * @param array<string,mixed>|null $best
+     * @param array<string,mixed>|null $worst
+     * @return array{0:string,1:string} [ข้อความดีสุด, ข้อความแย่สุด]
+     */
+    private function describeMonthExtremes(?array $best, ?array $worst): array
+    {
+        if (!extremes_are_comparable($best, $worst, 'month')) {
+            $text = ($best === null && $worst === null)
+                ? '–'
+                : extremes_not_comparable_text();
+
+            return [$text, $text];
+        }
+
+        return [$this->describeMonth($best), $this->describeMonth($worst)];
     }
 
     /**

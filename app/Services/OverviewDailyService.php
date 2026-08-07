@@ -235,7 +235,10 @@ class OverviewDailyService
             $completeDays++;
         }
 
-        $profit = $totalRevenue - $totalAdCost;
+        // ⭐ ปัดเป็นสตางค์ก่อนใช้ต่อ — ให้ตรงกับ `SUM()` ของฐานข้อมูลที่หน้าอื่นใช้
+        $totalRevenue = money_total($totalRevenue);
+        $totalAdCost = money_total($totalAdCost);
+        $profit = money_total($totalRevenue - $totalAdCost);
         $daysCount = count($dailyRows);
 
         return [
@@ -247,9 +250,11 @@ class OverviewDailyService
             'days_count' => $daysCount,
             // เฉลี่ยต่อวันคิดจากวันที่กรอกครบเท่านั้น (ยอดรวมด้านบนยังนับทุกวันตามเดิม)
             'complete_days_count' => $completeDays,
-            'avg_revenue_per_day' => $completeDays > 0 ? round($completeRevenue / $completeDays, 2) : null,
+            'avg_revenue_per_day' => $completeDays > 0
+                ? round(money_total($completeRevenue) / $completeDays, 2)
+                : null,
             'avg_profit_per_day' => $completeDays > 0
-                ? round(($completeRevenue - $completeAdCost) / $completeDays, 2)
+                ? round(money_total($completeRevenue - $completeAdCost) / $completeDays, 2)
                 : null,
             'best_day' => $bestDay,
             'worst_day' => $worstDay,
@@ -293,32 +298,37 @@ class OverviewDailyService
     {
         $rows = [];
 
+        $totalsByShopId = [];
         foreach ($shopTotals as $row) {
-            $shopId = (int)($row['shop_id'] ?? 0);
+            $totalsByShopId[(int)($row['shop_id'] ?? 0)] = $row;
+        }
+
+        // ⚠️⚠️ ต้องมีทุกร้าน รวมร้านที่ยังไม่กรอก — query คืนเฉพาะร้านที่มีรายการ
+        //
+        // วัดจริง: 3 ร้าน กรอกจริง 2 · กดสลับแท็บของหน้าเดียวกันเฉย ๆ ตารางหัวข้อ
+        // "เปรียบเทียบระหว่างร้าน" แท็บรายเดือน/รายปีมี 3 แถว แต่แท็บรายวันเหลือ 2 แถว
+        // ร้านที่ 3 หายไปทั้งแถว ทั้งที่เมนูเลือกร้านด้านบนยังลิสต์ครบ 3 ร้าน
+        foreach ($shopNameById as $shopId => $shopName) {
+            $row = $totalsByShopId[(int)$shopId] ?? null;
             $revenue = (float)($row['total_revenue'] ?? 0);
             $adCost = (float)($row['total_ad_cost'] ?? 0);
             $profit = $revenue - $adCost;
 
             $rows[] = [
-                'shop_id' => $shopId,
-                'shop_name' => $shopNameById[$shopId] ?? 'ร้านค้า',
+                'shop_id' => (int)$shopId,
+                'shop_name' => (string)$shopName,
                 'total_revenue' => $revenue,
                 'total_ad_cost' => $adCost,
                 'profit' => $profit,
                 'roas' => $adCost > 0 ? round($revenue / $adCost, 2) : null,
                 'profit_margin' => $revenue > 0 ? round(($profit / $revenue) * 100, 1) : null,
+                // ร้านที่ไม่มีแถวใน query = ยังไม่กรอกอะไรในเดือนนี้
+                'days_count' => (int)($row['days_count'] ?? 0),
             ];
         }
 
-        // จัดอันดับด้วยกำไร ให้สอดคล้องกับมุมเดือน/แดชบอร์ด
-        // กำไรเท่ากันเรียงตามชื่อ — query ไม่การันตีลำดับ อันดับจึงสลับไปมาระหว่างรีเฟรชได้
-        // (ที่นี่ไม่ต้องกันร้านที่ไม่มีข้อมูลเหมือน OverviewService เพราะ $shopTotals มาจาก
-        //  query ที่คืนเฉพาะร้านที่มีรายการในวันนั้นอยู่แล้ว)
-        usort(
-            $rows,
-            static fn(array $left, array $right): int => ($right['profit'] <=> $left['profit'])
-                ?: strcmp((string)$left['shop_name'], (string)$right['shop_name'])
-        );
+        // ⚠️ ใช้ตัวเทียบกลางตัวเดียวกับอีก 2 แท็บ — ร้านที่ยังไม่มีข้อมูลไปท้ายเสมอ
+        usort($rows, 'compare_shop_rows_for_ranking');
 
         return $rows;
     }

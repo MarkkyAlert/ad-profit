@@ -177,10 +177,10 @@ class AnnualService
             $previousMonthTotals = $previousTotalsByMonthKey[$previousMonthKey] ?? null;
             $previousMonthProfit = (float)($previousMonthTotals['total_revenue'] ?? 0)
                 - (float)($previousMonthTotals['total_ad_cost'] ?? 0);
-            $previousYearProfit += $previousMonthProfit;
+            $previousYearProfit = money_total($previousYearProfit + $previousMonthProfit);
 
             $monthDaysCount = (int)($totals['days_count'] ?? 0);
-            $cumulativeProfit += $monthProfit;
+            $cumulativeProfit = money_total($cumulativeProfit + $monthProfit);
 
             $previousProfitSeries[] = $previousMonthProfit;
             $cumulativeSeries[] = $cumulativeProfit;
@@ -199,7 +199,7 @@ class AnnualService
                 // ปรับฐานให้เทียบกันได้จริง — เดือนที่กรอกวันเดียวอาจแรงกว่าเดือนที่กรอกครบแต่ยอดรวมสูงกว่า
                 'profit_per_day' => $monthDaysCount > 0 ? round($monthProfit / $monthDaysCount, 2) : null,
                 'prev_year_profit' => $previousMonthProfit,
-                'yoy_change_percent' => $this->calculateChangePercent($monthProfit, $previousMonthProfit),
+                'yoy_change_percent' => change_percent($monthProfit, $previousMonthProfit),
             ];
 
             // จัดอันดับด้วย "กำไร" และเลือกเฉพาะเดือนที่มีข้อมูลจริง
@@ -270,7 +270,10 @@ class AnnualService
             $totalAdCost += $monthAdCost;
         }
 
-        $profit = $totalRevenue - $totalAdCost;
+        // ⭐ ปัดเป็นสตางค์ก่อนใช้ต่อ — ให้ตรงกับ `SUM()` ของฐานข้อมูลที่หน้าอื่นใช้
+        $totalRevenue = money_total($totalRevenue);
+        $totalAdCost = money_total($totalAdCost);
+        $profit = money_total($totalRevenue - $totalAdCost);
 
         return [
             'success' => true,
@@ -306,7 +309,7 @@ class AnnualService
                     // อ่านไม่สำเร็จ — หน้าเว็บต้องบอกตามจริง ไม่ใช่บอกว่า "ไม่มีข้อมูล"
                     'prev_year_unavailable' => $previousYearReadFailed,
                     'yoy_profit_change' => $profit - $previousYearProfit,
-                    'yoy_profit_change_percent' => $this->calculateChangePercent($profit, $previousYearProfit),
+                    'yoy_profit_change_percent' => change_percent($profit, $previousYearProfit),
                     'projection' => $this->calculateYearEndProjection(
                         $months,
                         $cumulativeProfit,
@@ -589,20 +592,6 @@ class AnnualService
                 'comparable' => $yearsWithData >= 2,
             ],
         ];
-    }
-
-    /**
-     * เปอร์เซ็นต์การเปลี่ยนแปลงเทียบฐานปีก่อน
-     * ฐาน 0 (ไม่มีข้อมูลปีก่อน/เท่าทุนพอดี) → null เพราะหารไม่ได้
-     * ฐานติดลบ → หารด้วย abs เพื่อให้เครื่องหมายสื่อทิศทางจริง (ขาดทุนน้อยลง = บวก)
-     */
-    private function calculateChangePercent(float $current, float $previous): ?float
-    {
-        if (abs($previous) < 0.00001) {
-            return null;
-        }
-
-        return round((($current - $previous) / abs($previous)) * 100, 1);
     }
 
     /**

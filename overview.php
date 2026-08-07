@@ -151,7 +151,8 @@ if ($view === 'day') {
 
     $dailyTotalRevenue = (float)($dailySummary['total_revenue'] ?? 0);
     $dailyTotalAdCost = (float)($dailySummary['total_ad_cost'] ?? 0);
-    $hasDailyData = abs($dailyTotalRevenue) > 0.00001 || abs($dailyTotalAdCost) > 0.00001;
+    // ⚠️ นับจากจำนวนวันที่กรอก ไม่ใช่ยอดเงิน (ดูคอมเมนต์ใน annual.php)
+    $hasDailyData = (int)($dailySummary['days_count'] ?? 0) > 0;
 
     $chartRaw = (array)($dailyData['chart'] ?? []);
     $chartDates = array_values((array)($chartRaw['dates'] ?? []));
@@ -209,14 +210,16 @@ if ($view === 'day') {
 
     $yearTotalRevenue = (float)($yearlySummary['total_revenue'] ?? 0);
     $yearTotalAdCost = (float)($yearlySummary['total_ad_cost'] ?? 0);
-    $hasYearlyData = abs($yearTotalRevenue) > 0.00001 || abs($yearTotalAdCost) > 0.00001;
-
     // ⚠️ "วันที่กรอก" ของแถวรวมต้องไม่ใช่ผลบวกข้ามร้าน — 3 ร้านกรอกครบเดือน ม.ค. (31 วัน)
     // จะได้ 93 วัน ในช่วงที่มีแค่ 31 วัน · ตัวเลขที่มีความหมายคือ "วันมากที่สุดที่ร้านใดร้านหนึ่งกรอก"
     $yearlyDaysTotal = 0;
     foreach ($yearlyShopRows as $shopRow) {
         $yearlyDaysTotal = max($yearlyDaysTotal, (int)($shopRow['days_count'] ?? 0));
     }
+
+    // ⚠️ นับจากจำนวนวันที่กรอก ไม่ใช่ยอดเงิน (ดูคอมเมนต์ใน annual.php)
+    // ⚠️ ต้องอยู่ **หลัง** ลูปข้างบน ไม่งั้นอ่านค่าก่อนถูกคำนวณแล้วได้ 0 เสมอ
+    $hasYearlyData = $yearlyDaysTotal > 0;
     // สัดส่วนของทุกร้านรวมกันคือ 100% ตามนิยาม — ห้ามบวกค่าที่ปัดแล้วทีละแถว
     // (3 ร้านกำไรเท่ากัน → 33.3% ×3 = 99.9% ซึ่งอ่านแล้วเหมือนมีอะไรหาย)
     $yearlyHasShare = false;
@@ -307,7 +310,14 @@ if ($view === 'day') {
     $canView = (bool)($overviewData['can_view'] ?? false);
     $overviewTotalRevenue = (float)($totals['total_revenue'] ?? 0);
     $overviewTotalAdCost = (float)($totals['total_ad_cost'] ?? 0);
-    $hasOverviewData = abs($overviewTotalRevenue) > 0.00001 || abs($overviewTotalAdCost) > 0.00001;
+    // ⚠️ นับจากจำนวนวันที่กรอก ไม่ใช่ยอดเงิน (ดูคอมเมนต์ใน annual.php)
+    $hasOverviewData = false;
+    foreach ($comparisonRows as $comparisonRow) {
+        if ((int)($comparisonRow['days_count'] ?? 0) > 0) {
+            $hasOverviewData = true;
+            break;
+        }
+    }
 
     $barRaw = (array)($overviewData['charts']['bar'] ?? []);
     $barPayload = [
@@ -856,7 +866,7 @@ require __DIR__ . '/includes/header.php';
                     $worstMonthProfit = null;
                 }
 
-                $singleMonthText = 'ยังเทียบไม่ได้ — มีเดือนที่จบแล้วเดือนเดียว';
+                $singleMonthText = extremes_not_comparable_text();
                 $bestMonthLabel = $monthExtremesComparable
                     ? ($thaiMonths[(int)($yearlyBestMonth['month'] ?? 0)] ?? $noFinishedMonthText)
                     : ($yearlyBestMonth !== null ? $singleMonthText : $noFinishedMonthText);

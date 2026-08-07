@@ -128,6 +128,7 @@ class OverviewAnnualService
             foreach ($previousTotals as $row) {
                 $previousYearProfit += (float)($row['total_revenue'] ?? 0) - (float)($row['total_ad_cost'] ?? 0);
             }
+            $previousYearProfit = money_total($previousYearProfit);
         }
 
         $monthTotalsByKey = [];
@@ -226,7 +227,10 @@ class OverviewAnnualService
             $totalAdCost += $monthAdCost;
         }
 
-        $profit = $totalRevenue - $totalAdCost;
+        // ⭐ ปัดเป็นสตางค์ก่อนใช้ต่อ — ให้ตรงกับ `SUM()` ของฐานข้อมูลที่หน้าอื่นใช้
+        $totalRevenue = money_total($totalRevenue);
+        $totalAdCost = money_total($totalAdCost);
+        $profit = money_total($totalRevenue - $totalAdCost);
 
         $shopsRows = [];
         foreach ($shopTotalsById as $shopTotal) {
@@ -287,7 +291,7 @@ class OverviewAnnualService
                     'prev_year_unavailable' => $previousYearReadFailed,
                     'yoy_profit_change' => $previousYearProfit !== null ? $profit - $previousYearProfit : null,
                     'yoy_profit_change_percent' => $previousYearProfit !== null
-                        ? $this->calculateChangePercent($profit, $previousYearProfit)
+                        ? change_percent($profit, $previousYearProfit)
                         : null,
                 ],
                 'chart' => [
@@ -299,20 +303,6 @@ class OverviewAnnualService
                 'shops' => $shopsRows,
             ],
         ];
-    }
-
-    /**
-     * เปอร์เซ็นต์การเปลี่ยนแปลงเทียบฐานปีก่อน
-     * ฐาน 0 (ไม่มีข้อมูลปีก่อน/เท่าทุนพอดี) → null เพราะหารไม่ได้
-     * ฐานติดลบ → หารด้วย abs เพื่อให้เครื่องหมายสื่อทิศทางจริง (ขาดทุนน้อยลง = บวก)
-     */
-    private function calculateChangePercent(float $current, float $previous): ?float
-    {
-        if (abs($previous) < 0.00001) {
-            return null;
-        }
-
-        return round((($current - $previous) / abs($previous)) * 100, 1);
     }
 
     /**

@@ -321,4 +321,134 @@ final class SharedHelperContractTest extends TestCase
     ): void {
         $this->assertSame($expected, extremes_are_comparable($best, $worst, $key));
     }
+
+    /**
+     * ⭐⭐ `change_percent()` — จุดเดียวของสูตร "% เปลี่ยนแปลงเทียบช่วงก่อน"
+     *
+     * ⚠️ เคยเขียนซ้ำ 4 ที่ · จุดที่ละเอียดอ่อนคือ **หารด้วย `abs()`** เพื่อให้เครื่องหมาย
+     * สื่อทิศทางจริง (ฐานติดลบแล้วขาดทุนน้อยลง = ดีขึ้น = ค่าบวก) และ **ฐาน ≈ 0 คืน null**
+     * ไม่ใช่ 0 หรือ 100 เพราะเพิ่มจาก ฿0 คิดเป็น % ไม่ได้
+     *
+     * @return array<string,array{0:float|null,1:float|null,2:float|null}>
+     */
+    public static function changePercentProvider(): array
+    {
+        return [
+            'เพิ่มขึ้นเท่าตัว' => [200.0, 100.0, 100.0],
+            'ลดลงครึ่งหนึ่ง' => [50.0, 100.0, -50.0],
+            'เท่าเดิม' => [100.0, 100.0, 0.0],
+            'ขาดทุนน้อยลง = ดีขึ้น' => [-50.0, -100.0, 50.0],
+            'ขาดทุนมากขึ้น = แย่ลง' => [-150.0, -100.0, -50.0],
+            'จากขาดทุนเป็นกำไร' => [100.0, -100.0, 200.0],
+            'ฐานเป็นศูนย์' => [5000.0, 0.0, null],
+            'ฐานเกือบศูนย์' => [5000.0, 0.000001, null],
+            'ทั้งคู่เป็นศูนย์' => [0.0, 0.0, null],
+            'ปัจจุบันเป็น null' => [null, 100.0, null],
+            'ก่อนหน้าเป็น null' => [100.0, null, null],
+            'ปัดทศนิยม 1 ตำแหน่ง' => [100.5, 100.0, 0.5],
+            // ⚠️ เปลี่ยนแปลงน้อยมากปัดเป็น 0.0% — ป้าย ↑↓ ต้องตัดสินจากค่าหลังปัด
+            // ไม่ใช่ค่าดิบ ไม่งั้นจะได้ลูกศรขึ้นคู่กับเลข 0.0% (มี format_change_badge คุมอยู่)
+            'เปลี่ยนน้อยจนปัดเป็นศูนย์' => [100.05, 100.0, 0.0],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('changePercentProvider')]
+    public function testChangePercentHandlesNegativeAndZeroBases(
+        ?float $current,
+        ?float $previous,
+        ?float $expected
+    ): void {
+        $this->assertSame(
+            $expected,
+            change_percent($current, $previous),
+            sprintf('เทียบ %s กับฐาน %s ได้ผลผิด', var_export($current, true), var_export($previous, true))
+        );
+    }
+
+    /**
+     * ⭐⭐ ห้ามมีใครเขียนสูตรนี้ซ้ำอีก
+     *
+     * ⚠️ นิพจน์ `/ abs($…)) * 100` คือลายเซ็นของสูตรนี้ ถ้าเห็นมันอยู่นอก
+     * `change_percent()` แปลว่ามีคนกำลังก๊อปสูตรไปไว้ที่อื่น
+     */
+    public function testNobodyReimplementsTheChangePercentFormula(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/app/Services/*.php'),
+            (array)glob($root . '/*.php')
+        );
+
+        $offenders = [];
+        foreach ($files as $file) {
+            $code = (string)file_get_contents((string)$file);
+            if (preg_match('/\/\s*abs\(\$\w+\)\)\s*\*\s*100/', $code) === 1) {
+                $offenders[] = basename((string)$file);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'เขียนสูตร "% เปลี่ยนแปลง" ซ้ำใน: ' . implode(', ', $offenders) . ' — ให้เรียก change_percent() แทน'
+        );
+    }
+
+    /**
+     * ⭐⭐ ข้อความ "ยังเทียบไม่ได้" ต้องไม่บอกสาเหตุที่เดาเอา
+     *
+     * ⚠️ เดิมเขียนตายตัวว่า "มีเดือนที่จบแล้วเดือนเดียว" ซึ่งไม่จริงในกรณีที่พบบ่อยพอกัน:
+     * **ทุกเดือนที่จบแล้วกำไรเท่ากันหมด** (best กับ worst จึงชี้เดือนเดียวกัน)
+     *
+     * วัดจริง: ร้านที่กรอก ม.ค.–ก.ค. ได้กำไรเดือนละ ฿19,800 เท่ากันเป๊ะ → การ์ดขึ้น
+     * "มีเดือนที่จบแล้วเดือนเดียว" ขณะที่บรรทัดถัดมาบนจอเดียวกันเขียน "8 เดือนมีข้อมูล"
+     * และตารางใต้การ์ดแสดง 7 แถวของเดือนที่จบแล้ว
+     */
+    public function testTheNotComparableMessageDoesNotClaimThereIsOnlyOneMonth(): void
+    {
+        $this->assertStringNotContainsString(
+            'เดือนเดียว',
+            extremes_not_comparable_text(),
+            'ข้อความอ้างสาเหตุที่ไม่จริงเมื่อทุกเดือนที่จบแล้วให้ผลเท่ากัน'
+        );
+        $this->assertStringContainsString('ยังเทียบไม่ได้', extremes_not_comparable_text());
+    }
+
+    /** ⚠️ ถ้อยคำนี้เคยถูกคัดลอกไว้ 3 ที่ (หน้ารายปี · หน้ารวมร้าน · ไฟล์ Excel) */
+    public function testNobodyHardcodesTheNotComparableMessage(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/app/Services/*.php'),
+            (array)glob($root . '/*.php')
+        );
+
+        $offenders = [];
+        foreach ($files as $file) {
+            $code = (string)file_get_contents((string)$file);
+            if (str_contains($code, "'ยังเทียบไม่ได้")) {
+                $offenders[] = basename((string)$file);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'เขียนข้อความ "ยังเทียบไม่ได้" ตายตัวใน: ' . implode(', ', $offenders)
+            . ' — ให้เรียก extremes_not_comparable_text() แทน'
+        );
+    }
+
+    /**
+     * ⭐⭐ `money_total()` — ยอดที่บวกในภาษา PHP ต้องตรงกับ `SUM()` ของฐานข้อมูล
+     *
+     * ⚠️ ปัดครั้งเดียวตอนจบเท่านั้น · ต้องไม่เปลี่ยนค่าที่ละเอียดถึงสตางค์อยู่แล้ว
+     */
+    public function testMoneyTotalRemovesOnlyTheBinaryLeftovers(): void
+    {
+        $this->assertSame(500000.0, money_total(499999.99999999994));
+        $this->assertSame(499999.99, money_total(499999.99), 'ค่าที่ละเอียดถึงสตางค์อยู่แล้วถูกเปลี่ยน');
+        $this->assertSame(-1234.56, money_total(-1234.56), 'ค่าติดลบเพี้ยน');
+        $this->assertSame(0.0, money_total(0.0));
+    }
 }
