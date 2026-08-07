@@ -765,6 +765,7 @@ require __DIR__ . '/includes/header.php';
             let placedRows = 0;
             let truncatedRows = 0;
             let unreadableDates = 0;
+            let unreadableAmounts = 0;
             let shiftedColumns = 0;
 
             grid.forEach((cells, rowOffset) => {
@@ -805,6 +806,18 @@ require __DIR__ . '/includes/header.php';
                     }
 
                     input.value = normalizeCell(columnIndex, cell);
+
+                    // ⚠️⚠️ ช่องจำนวนเงินเป็น `<input type="number">` ซึ่ง **ทิ้งค่าที่ไม่ใช่
+                    // ตัวเลขเงียบ ๆ** — กติกาของ `cleanAmountCell()` คือ "อ่านไม่ออกให้คืน
+                    // ค่าดิบ แล้วให้เซิร์ฟเวอร์ปฏิเสธพร้อมข้อความ" แต่ค่าดิบไปไม่ถึงเซิร์ฟเวอร์
+                    // เพราะเบราว์เซอร์ลบทิ้งก่อน · ผู้ใช้จึงเห็นแค่ช่องว่าง ไม่มีคำอธิบายอะไรเลย
+                    //
+                    // วัดจริง: Excel ที่ตั้งรูปแบบเงินแบบมีจุลภาคไม่มีสตางค์ (12,500 / 9,800)
+                    // ซึ่งเป็นรูปแบบที่ใช้กันปกติที่สุด → ก๊อปทั้งคอลัมน์มาวาง **ทุกช่องว่างหมด**
+                    // ถ้าผู้ใช้ไม่ทันสังเกตแล้วกดบันทึก วันใหม่จะถูกบันทึกเป็นรายได้ ฿0
+                    if (input.value === '' && String(cell).trim() !== '') {
+                        unreadableAmounts++;
+                    }
                 });
 
                 placedRows++;
@@ -839,6 +852,12 @@ require __DIR__ . '/includes/header.php';
                 if (shiftedColumns > 0) {
                     messages.push('ข้อมูลที่วางกว้างเกินตาราง ' + shiftedColumns + ' ช่องจึงตกหล่น — '
                         + 'ตรวจสอบว่าเริ่มวางตรงคอลัมน์ที่ถูกต้องหรือไม่');
+                }
+
+                if (unreadableAmounts > 0) {
+                    messages.push('มี ' + unreadableAmounts + ' ช่องจำนวนเงินที่อ่านไม่ได้ '
+                        + '(เช่น 12,500 อ่านได้ทั้ง 12500 และ 12.5) — เว้นว่างไว้ '
+                        + 'กรุณาใช้ตัวเลขล้วน เช่น 12500 หรือใส่สตางค์ให้ครบ เช่น 12,500.00');
                 }
 
                 if (unreadableDates > 0) {
