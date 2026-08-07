@@ -139,7 +139,8 @@ require __DIR__ . '/includes/header.php';
         <div class="md:col-span-2">
             <?php // บอกให้รู้ตัวว่ากำลังแก้ของเดิม ไม่ใช่เพิ่มใหม่ — JS อัปเดตข้อความนี้ตอนเปลี่ยนวัน ?>
             <p id="existing-record-hint" class="mb-2 text-xs text-amber-300 <?= $existingRecord !== null ? '' : 'hidden' ?>">
-                ✎ วันนี้มีข้อมูลอยู่แล้ว — ระบบเติมค่าเดิมไว้ให้ กดบันทึกจะเป็นการแก้ไขทับ
+                <?php // ⚠️ ห้ามเขียน "วันนี้" ตายตัว — ผู้ใช้เปลี่ยนวันที่ได้ แล้วป้ายจะพูดถึงวันผิด ?>
+                ✎ วันที่เลือกไว้มีข้อมูลอยู่แล้ว — ระบบเติมค่าเดิมไว้ให้ กดบันทึกจะเป็นการแก้ไขทับ
             </p>
             <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">
                 ✓ บันทึกข้อมูล
@@ -1174,7 +1175,7 @@ require __DIR__ . '/includes/header.php';
                 // แล้วผู้ใช้กดบันทึกทับวันใหม่ด้วยตัวเลขของวันเก่า
                 applyDay(null);
                 lastAppliedDate = value;
-                hint.textContent = '⚠️ โหลดข้อมูลเดิมของวันนี้ไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก';
+                hint.textContent = '⚠️ โหลดข้อมูลเดิมของวันที่ ' + value + ' ไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก';
                 hint.classList.remove('hidden');
             }
         });
