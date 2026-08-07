@@ -1040,6 +1040,7 @@ require __DIR__ . '/includes/header.php';
     </p>
     <p class="mt-1 text-xs text-slate-500">
         ไฟล์ที่ดาวน์โหลดจากหน้าประวัติ นำกลับเข้ามาได้เลย · วันเดียวกันจะอัปเดตทับ ·
+        <span class="text-slate-300">ช่องรายได้/ค่าแอดต้องมีตัวเลขทุกแถว — วันที่ไม่มีให้ใส่ 0</span> ·
         ถ้ามีแถวใดผิด ระบบจะไม่บันทึกทั้งไฟล์ · สูงสุด <?= e((string)RecordService::IMPORT_MAX_ROWS) ?> แถว / 2MB
     </p>
 

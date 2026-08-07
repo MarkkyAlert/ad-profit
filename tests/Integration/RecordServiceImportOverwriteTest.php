@@ -57,13 +57,37 @@ final class RecordServiceImportOverwriteTest extends IntegrationTestCase
         $this->assertSame('โน้ตเดิม', $row['note']);
     }
 
-    /** วันใหม่ที่ยังไม่มีข้อมูล — ช่องว่างยังเท่ากับ 0 ตามที่ตัดสินไว้เดิม */
-    public function testBlankAmountOnANewDateStillMeansZero(): void
+    /**
+     * ⭐⭐ [เจ้าของระบบตัดสิน 2026-08-07] วันใหม่ที่เว้นช่องยอดไว้ **ก็ถูกปฏิเสธ**
+     *
+     * เดิมกติกาคือ "ช่องว่าง = 0 สำหรับวันใหม่" ซึ่งทำให้ CSV เป็นทางเขียนเดียวที่เดา
+     * แทนผู้ใช้ (ฟอร์มวันเดียวและตารางกรอกหลายวันบังคับกรอกทั้งคู่)
+     *
+     * ⚠️ ที่เปลี่ยนเพราะความเสียหายสองฝั่งไม่เท่ากัน: เดาเป็น 0 แล้วผิด = ได้วันขาดทุน
+     * ปลอมที่ไหลเข้าทุกรายงานโดยผู้ใช้ไม่รู้ตัว · ปฏิเสธแล้วผิด = ผู้ใช้พิมพ์ 0 เอง
+     */
+    public function testBlankAmountOnANewDateIsRejectedToo(): void
     {
         $userId = $this->createUser();
         $shopId = $this->createShop($userId);
 
         $result = $this->importCsv($userId, $shopId, "date,revenue,ad_cost,note\n2026-08-01,,1000,\n");
+
+        $this->assertFalse($result['success'], 'ยังเดาช่องว่างเป็น 0 อยู่');
+        $this->assertStringContainsString('แถวที่ 2', (string)$result['error']);
+        $this->assertStringContainsString('ใส่ 0', (string)$result['error'], 'ไม่ได้บอกผู้ใช้ว่าต้องทำอะไรต่อ');
+
+        $this->assertSame(0, (int)$this->pdo
+            ->query("SELECT COUNT(*) FROM daily_records WHERE shop_id = {$shopId}")->fetchColumn());
+    }
+
+    /** ⚠️ ใส่ 0 มาเองยังต้องผ่านตามปกติ — ไม่ใช่ปฏิเสธทุกอย่างที่เป็นศูนย์ */
+    public function testAnExplicitZeroOnANewDateStillWorks(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $result = $this->importCsv($userId, $shopId, "date,revenue,ad_cost,note\n2026-08-01,0,1000,\n");
 
         $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
         $this->assertSame(0.0, (float)$this->pdo
@@ -118,10 +142,16 @@ final class RecordServiceImportOverwriteTest extends IntegrationTestCase
         $userId = $this->createUser();
         $shopA = $this->createShop($userId, 'ร้าน A');
         $shopB = $this->createShop($userId, 'ร้าน B');
-        $this->createRecord($shopB, '2026-08-01', 9999.0, 1.0, null);
+        // ร้าน B มีโน้ตของวันเดียวกันอยู่ — ตัวกันต้องมองเฉพาะข้อมูลของร้านที่กำลังนำเข้า
+        $this->createRecord($shopB, '2026-08-01', 9999.0, 1.0, 'โน้ตของร้าน B');
 
-        $result = $this->importCsv($userId, $shopA, "date,revenue,ad_cost,note\n2026-08-01,,1000,\n");
+        // ⚠️ ใช้ไฟล์ที่ **ไม่มีคอลัมน์โน้ตเลย** เพื่อให้เดินผ่านตัวกัน "ช่องว่างทับของเดิม" จริง
+        // (ช่องยอดว่างถูกปฏิเสธตั้งแต่ชั้น parser แล้ว จึงใช้เป็นตัวกระตุ้นไม่ได้อีก)
+        $result = $this->importCsv($userId, $shopA, "date,revenue,ad_cost\n2026-08-01,1111,222\n");
 
         $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertSame('โน้ตของร้าน B', (string)$this->pdo
+            ->query("SELECT note FROM daily_records WHERE shop_id = {$shopB}")->fetchColumn(),
+            'ข้อมูลของอีกร้านถูกแตะ');
     }
 }

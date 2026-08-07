@@ -26,7 +26,7 @@ class AnnualService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -506,7 +506,7 @@ class AnnualService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 

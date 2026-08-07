@@ -111,7 +111,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -303,16 +303,36 @@ class RecordService
             $rawRevenue = $cellAt($columnMap['revenue']);
             $rawAdCost = $cellAt($columnMap['ad_cost']);
 
-            // ช่องว่าง = 0 — วันที่ไม่ได้ยิงแอด/ไม่มีรายได้เป็นเรื่องปกติ และ UI ก็ปล่อยว่างได้
+            // ⭐⭐ [เจ้าของระบบตัดสิน 2026-08-07] **ช่องยอดที่เว้นว่าง = ปฏิเสธ ไม่ใช่ 0**
             //
-            // ⚠️ ต้องจำไว้ด้วยว่า 0 นี้มาจาก "ช่องว่าง" ไม่ใช่ "ผู้ใช้พิมพ์ 0" — ชั้นบันทึก
-            // ใช้แยกสองกรณีนี้: ทับวันที่มีข้อมูลอยู่แล้วด้วยช่องว่าง = อุบัติเหตุ ต้องปฏิเสธ
+            // เดิมไฟล์ CSV แปลงช่องว่างเป็น 0 ให้เอง โดยให้เหตุผลว่า "UI ก็ปล่อยว่างได้"
+            // ซึ่ง **ไม่จริงแล้ว** — ทางเขียนอีกสองทางบังคับกรอกทั้งคู่:
+            //   · ฟอร์มวันเดียว        → `add-record.php` (required) + `api/records.php` (parse_decimal_input)
+            //   · ตารางกรอกหลายวัน    → `upsertManyRecords()` ปฏิเสธพร้อมเลขแถว
+            // CSV จึงเป็นทางเดียวที่เดาแทนผู้ใช้ และเป็นทางเดียวที่หลวมกว่าเพื่อน
+            //
+            // ⚠️ ความเสียหายสองฝั่งไม่เท่ากัน:
+            //   เดาเป็น 0 แล้วผิด → ได้ "วันที่รายได้ ฿0 แต่จ่ายค่าแอดจริง" คือวันขาดทุนหนัก
+            //   ที่ไม่เคยเกิดขึ้น แล้ววันปลอมนั้นไหลเข้า กำไรเฉลี่ยต่อวัน · การ์ดวันแย่สุด ·
+            //   ตารางวันในสัปดาห์ · ความคืบหน้าเป้า · ROAS · กราฟทุกตัว — และผู้ใช้ไม่รู้ตัว
+            //   ปฏิเสธแล้วผิด → ผู้ใช้พิมพ์ 0 เอง (ใน Excel เลือกคอลัมน์แล้ว Ctrl+Enter ครั้งเดียว)
+            //
+            // ⚠️ ไฟล์ที่ระบบ export ออกไปเองไม่เคยมีช่องยอดว่าง (`ExportService` เขียนตัวเลขเสมอ)
+            // ท่า "โหลดออกไปแก้ใน Excel แล้วนำเข้ากลับ" จึงไม่ได้รับผลกระทบ
             $revenueWasBlank = trim($rawRevenue) === '';
             $adCostWasBlank = trim($rawAdCost) === '';
 
+            if ($revenueWasBlank || $adCostWasBlank) {
+                fclose($handle);
+                $blankColumn = $revenueWasBlank ? 'รายได้' : 'ค่าแอด';
+
+                return $fail('แถวที่ ' . $rowNumber . ': เว้นช่อง' . $blankColumn . 'ไว้ '
+                    . '— ถ้าวันนั้นไม่มี' . $blankColumn . ' กรุณาใส่ 0');
+            }
+
             // ใช้ตัวแปลงกลางตัวเดียวกับฟอร์ม — อ่านไม่ได้/กำกวม = ปฏิเสธพร้อมบอกค่าที่ผู้ใช้เห็นจริง
-            $revenue = $revenueWasBlank ? '0' : normalize_money_string($rawRevenue);
-            $adCost = $adCostWasBlank ? '0' : normalize_money_string($rawAdCost);
+            $revenue = normalize_money_string($rawRevenue);
+            $adCost = normalize_money_string($rawAdCost);
 
             if ($revenue === null) {
                 fclose($handle);
@@ -492,7 +512,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -723,7 +743,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -960,7 +980,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1019,7 +1039,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1056,7 +1076,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1080,7 +1100,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1173,7 +1193,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1377,7 +1397,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1489,7 +1509,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1592,7 +1612,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1697,7 +1717,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 
@@ -1825,7 +1845,7 @@ class RecordService
         if (!$this->shopRepository->userCanAccessShop($shopId, $userId)) {
             return [
                 'success' => false,
-                'error' => 'คุณไม่มีสิทธิ์เข้าถึงร้านค้านี้',
+                'error' => 'ไม่มีสิทธิ์เข้าถึงร้านนี้ หรือร้านถูกลบไปแล้ว — กรุณาโหลดหน้าใหม่แล้วเลือกร้านอีกครั้ง',
             ];
         }
 

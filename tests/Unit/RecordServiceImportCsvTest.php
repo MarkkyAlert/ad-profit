@@ -307,28 +307,70 @@ final class RecordServiceImportCsvTest extends TestCase
     // ── Batch 2: ข้อที่พบจาก logic review ──────────────────────────────────
 
     /**
-     * ช่องตัวเลขว่าง = 0 (ตัดสินแล้ว) — วันที่ไม่ได้ยิงแอดคือเรื่องปกติ
+     * ⭐⭐ [เจ้าของระบบตัดสิน 2026-08-07] ช่องยอดที่เว้นว่าง = **ปฏิเสธ** ไม่ใช่ 0
      *
-     * เดิม parser ปล่อยค่าว่างผ่านเป็น '' แล้ว upsertManyRecords ปฏิเสธ
-     * → ทั้งไฟล์ไม่ถูกนำเข้า โดยข้อความไม่ได้บอกว่าปัญหาคือช่องว่าง
+     * ⚠️ เดิมแปลงเป็น 0 ให้เอง โดยให้เหตุผลในคอมเมนต์ว่า "UI ก็ปล่อยว่างได้" ซึ่งไม่จริง —
+     * ฟอร์มวันเดียว (`required` + `parse_decimal_input`) และตารางกรอกหลายวัน
+     * (`upsertManyRecords`) บังคับกรอกทั้งคู่ · CSV เป็นทางเดียวที่เดาแทนผู้ใช้
+     *
+     * ความเสียหายสองฝั่งไม่เท่ากัน: เดาเป็น 0 แล้วผิด = ได้ "วันที่รายได้ ฿0 แต่จ่ายค่าแอดจริง"
+     * คือวันขาดทุนปลอมที่ไหลเข้าทุกรายงาน (กำไรเฉลี่ยต่อวัน · วันแย่สุด · ROAS · เป้า · กราฟ)
+     * โดยผู้ใช้ไม่รู้ตัว · ปฏิเสธแล้วผิด = ผู้ใช้พิมพ์ 0 เอง
      */
-    public function testEmptyNumericCellBecomesZero(): void
+    public function testEmptyNumericCellIsRejected(): void
     {
         $result = $this->makeService()->parseImportCsv("วันที่,รายได้,ค่าแอด\n2026-08-01,1000,\n");
 
-        $this->assertTrue($result['success']);
-        $this->assertSame('1000', $result['rows'][0]['revenue']);
-        $this->assertSame('0', $result['rows'][0]['ad_cost']);
+        $this->assertFalse($result['success'], 'ยังเดาช่องว่างเป็น 0 อยู่');
+        $this->assertStringContainsString('แถวที่ 2', (string)$result['error']);
+        $this->assertStringContainsString('ค่าแอด', (string)$result['error'], 'ไม่ได้บอกว่าช่องไหน');
+        $this->assertStringContainsString('ใส่ 0', (string)$result['error'], 'ไม่ได้บอกว่าต้องทำอะไรต่อ');
     }
 
-    /** ต่อท่อสองชั้นจริง — เคยพังตรงรอยต่อนี้เพราะแต่ละชั้นถูกเทสต์แยกกัน */
-    public function testEmptyNumericCellSurvivesThroughToSaving(): void
+    /** ⚠️ ช่องรายได้ว่างต้องบอกว่า "รายได้" ไม่ใช่บอกชื่อช่องผิด */
+    public function testABlankRevenueNamesTheRevenueColumn(): void
+    {
+        $result = $this->makeService()->parseImportCsv("วันที่,รายได้,ค่าแอด\n2026-08-01,,500\n");
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('รายได้', (string)$result['error']);
+    }
+
+    /** ใส่ 0 มาเองยังผ่านตามปกติ — ไม่ใช่ปฏิเสธทุกอย่างที่เป็นศูนย์ */
+    public function testAnExplicitZeroStillPasses(): void
     {
         $service = $this->makeSavingService();
-        $parsed = $service->parseImportCsv("วันที่,รายได้,ค่าแอด\n2026-08-01,1000,\n");
-        $result = $service->upsertManyRecords(1, 1, $parsed['rows'], RecordService::IMPORT_MAX_ROWS);
+        $parsed = $service->parseImportCsv("วันที่,รายได้,ค่าแอด\n2026-08-01,1000,0\n");
 
+        $this->assertTrue($parsed['success'], (string)($parsed['error'] ?? ''));
+        $this->assertSame('0', $parsed['rows'][0]['ad_cost']);
+
+        $result = $service->upsertManyRecords(1, 1, $parsed['rows'], RecordService::IMPORT_MAX_ROWS);
         $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+    }
+
+    /**
+     * ⭐ ทั้ง 3 ทางที่เขียนข้อมูลต้องตีความ "ช่องว่าง" เหมือนกัน
+     *
+     * เดิม CSV เป็นทางเดียวที่หลวมกว่าเพื่อน — ผู้ใช้คนเดียวกันทำสิ่งเดียวกันผ่านคนละประตู
+     * ได้ผลคนละอย่าง
+     */
+    public function testAllThreeWritePathsRejectABlankAmount(): void
+    {
+        $service = $this->makeSavingService();
+
+        // ทาง 1: ไฟล์ CSV
+        $csv = $service->parseImportCsv("วันที่,รายได้,ค่าแอด\n2026-08-01,1000,\n");
+        $this->assertFalse($csv['success'], 'CSV ยังยอมให้เว้นช่องยอด');
+
+        // ทาง 2: ตารางกรอกหลายวัน (controller ส่งสตริงดิบมาเมื่อ parse ไม่ผ่าน)
+        $bulk = $service->upsertManyRecords(1, 1, [
+            ['row_number' => 1, 'record_date' => '2026-08-01', 'revenue' => '1000', 'ad_cost' => '', 'note' => null],
+        ], RecordService::IMPORT_MAX_ROWS);
+        $this->assertFalse($bulk['success'], 'ตารางกรอกหลายวันยังยอมให้เว้นช่องยอด');
+
+        // ทาง 3: ฟอร์มวันเดียว — ด่านอยู่ที่ `parse_decimal_input()` ตัวเดียวกับที่ controller ใช้
+        $this->assertFalse((bool)(parse_decimal_input('', false)['valid'] ?? false));
     }
 
     /**

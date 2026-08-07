@@ -116,6 +116,14 @@ final class RecordServiceOverwriteGuardTest extends IntegrationTestCase
      *
      * เดิมขึ้นข้อความ "รายได้ (มียอด 0.00 อยู่แล้ว)" ซึ่งอ่านแล้วไม่มีเหตุผล และทำให้
      * คนที่ลงวันที่ยิงแอดแต่ไม่มียอด นำเข้าไฟล์ซ้ำไม่ได้เลย
+     *
+     * ⚠️⚠️ [2026-08-07] ตั้งแต่เจ้าของระบบตัดสินให้ "ช่องยอดว่างในไฟล์ CSV = ปฏิเสธ"
+     * ตัวอ่านไฟล์จะไม่ปล่อยแถวที่ยอดว่างมาถึงตัวกันนี้อีกแล้ว **สำหรับช่องยอด**
+     * (ช่องโน้ตยังมาถึงได้ตามปกติ — ดูเคสด้านบน)
+     *
+     * เทสต์ 3 ตัวด้านล่างจึงเรียก `upsertManyRecords()` ตรง ๆ พร้อมตั้งธง `revenue_was_blank`
+     * เอง — เป็นการยืนยัน **สัญญาของเมธอด** ไม่ใช่เส้นทางที่ผู้ใช้เดินได้จริงแล้ว
+     * เก็บไว้เป็นด่านที่สอง เผื่อวันหนึ่งมีคนคลายกติกาของตัวอ่านไฟล์กลับ
      */
     public function testAnExistingZeroDoesNotBlockABlankCell(): void
     {
@@ -123,9 +131,9 @@ final class RecordServiceOverwriteGuardTest extends IntegrationTestCase
         $shopId = $this->createShop($userId);
         $this->createRecord($shopId, '2026-08-01', 0.0, 900.0, null);
 
-        $service = $this->makeService();
-        $parsed = $service->parseImportCsv("date,revenue,ad_cost,note\n2026-08-01,,900,\n");
-        $result = $service->upsertManyRecords($userId, $shopId, $parsed['rows']);
+        $result = $this->makeService()->upsertManyRecords($userId, $shopId, [
+            $this->blankRevenueRow(1, '2026-08-01', '900'),
+        ]);
 
         $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
     }
@@ -137,9 +145,9 @@ final class RecordServiceOverwriteGuardTest extends IntegrationTestCase
         $shopId = $this->createShop($userId);
         $this->createRecord($shopId, '2026-08-01', 5200.0, 900.0, null);
 
-        $service = $this->makeService();
-        $parsed = $service->parseImportCsv("date,revenue,ad_cost,note\n2026-08-01,,900,\n");
-        $result = $service->upsertManyRecords($userId, $shopId, $parsed['rows']);
+        $result = $this->makeService()->upsertManyRecords($userId, $shopId, [
+            $this->blankRevenueRow(1, '2026-08-01', '900'),
+        ]);
 
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('5,200.00', (string)$result['error']);
@@ -153,13 +161,32 @@ final class RecordServiceOverwriteGuardTest extends IntegrationTestCase
         $this->createRecord($shopId, '2026-08-01', 1000.0, 100.0, null);
         $this->createRecord($shopId, '2026-08-09', 2000.0, 200.0, null);
 
-        // ไฟล์เรียงวันใหม่ก่อน: แถว 2 = 08-09, แถว 3 = 08-01
-        $csv = "date,revenue,ad_cost,note\n2026-08-09,,200,\n2026-08-01,,100,\n";
-        $service = $this->makeService();
-        $parsed = $service->parseImportCsv($csv);
-        $result = $service->upsertManyRecords($userId, $shopId, $parsed['rows']);
+        // เรียงวันใหม่ก่อน: แถว 2 = 08-09, แถว 3 = 08-01
+        $result = $this->makeService()->upsertManyRecords($userId, $shopId, [
+            $this->blankRevenueRow(2, '2026-08-09', '200'),
+            $this->blankRevenueRow(3, '2026-08-01', '100'),
+        ]);
 
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('แถวที่ 2', (string)$result['error']);
+    }
+
+    /**
+     * แถวที่ "ช่องรายได้ว่าง" แบบที่ตัวอ่านไฟล์เคยส่งมา — ประกอบเองเพราะตัวอ่านไม่ส่งแล้ว
+     *
+     * @return array<string,mixed>
+     */
+    private function blankRevenueRow(int $rowNumber, string $date, string $adCost): array
+    {
+        return [
+            'row_number' => $rowNumber,
+            'record_date' => $date,
+            'revenue' => '0',
+            'ad_cost' => $adCost,
+            'note' => null,
+            'revenue_was_blank' => true,
+            'ad_cost_was_blank' => false,
+            'note_was_missing' => false,
+        ];
     }
 }

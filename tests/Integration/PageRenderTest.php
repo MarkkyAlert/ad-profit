@@ -249,4 +249,39 @@ final class PageRenderTest extends ControllerTestCase
             'ปีที่จบไปแล้วยังบอกให้รอเดือนจบ ทั้งที่จอเดียวกันบอกว่าปีนั้นไม่มีข้อมูล'
         );
     }
+
+    /**
+     * ⭐ หน้าแรก (`/`) พาไปถูกที่ทั้งตอนล็อกอินอยู่และไม่ได้ล็อกอิน
+     *
+     * ⚠️ `index.php` ไม่เคยมีเทสต์คุมเลย (coverage gap จาก logic review 2026-08-07)
+     * มันเป็นประตูแรกที่ทุกคนเจอ และตัดสินทางแยกจาก `$_SESSION['user_id']` ตรง ๆ
+     */
+    public function testTheHomePageSendsAVisitorToLogin(): void
+    {
+        $response = $this->get('/index.php');
+
+        $this->assertSame(302, $response['status'], 'หน้าแรกไม่ได้พาไปไหนเลย');
+        $this->assertStringContainsString(
+            'login.php',
+            (string)($response['headers']['location'] ?? ''),
+            'คนที่ยังไม่ล็อกอินต้องถูกพาไปหน้าเข้าสู่ระบบ'
+        );
+    }
+
+    /** ล็อกอินแล้วต้องเข้าแดชบอร์ดเลย ไม่ใช่ให้ล็อกอินซ้ำ */
+    public function testTheHomePageSendsALoggedInUserToTheDashboard(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId, 'ร้านทดสอบ');
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->get('/index.php', $session);
+
+        $this->assertSame(302, $response['status']);
+        $this->assertStringContainsString(
+            'dashboard.php',
+            (string)($response['headers']['location'] ?? ''),
+            'คนที่ล็อกอินแล้วถูกพากลับไปหน้าเข้าสู่ระบบอีก'
+        );
+    }
 }
