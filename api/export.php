@@ -42,15 +42,15 @@ $exportService = new ExportService($recordService, $shopRepository);
 //
 // ใช้กติกาเดียวกับหน้าประวัติ: เดือนอนาคตที่ "มีข้อมูลจริง" เท่านั้นจึงยอมให้ผ่าน
 $requestedMonth = trim((string)($_GET['month'] ?? ''));
-if (
-    preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth) === 1
-    && $requestedMonth > $selectedMonth
-) {
-    $futureMonth = $recordService->getMonthlyRecords($userId, $shopId, $requestedMonth);
-    if (($futureMonth['success'] ?? false) === true && !empty($futureMonth['data']['records'])) {
-        $selectedMonth = $requestedMonth;
+$selectedMonth = resolve_month_allowing_legacy_future(
+    $requestedMonth,
+    $selectedMonth,
+    static function (string $month) use ($recordService, $userId, $shopId): bool {
+        $futureMonth = $recordService->getMonthlyRecords($userId, $shopId, $month);
+
+        return ($futureMonth['success'] ?? false) === true && !empty($futureMonth['data']['records']);
     }
-}
+);
 
 $result = $exportService->buildMonthlyCsvPayload($userId, $shopId, $selectedMonth);
 

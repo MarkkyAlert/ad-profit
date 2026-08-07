@@ -25,27 +25,32 @@ $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 $historyError = null;
 $historyResult = $recordService->getMonthlyRecords($userId, $shopId, $selectedMonth);
 
-if (
-    preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth) === 1
-    && $requestedMonth > $selectedMonth
-) {
-    $futureHistoryResult = $recordService->getMonthlyRecords($userId, $shopId, $requestedMonth);
-    if (
-        ($futureHistoryResult['success'] ?? false) === true
-        && !empty($futureHistoryResult['data']['records'])
-    ) {
-        $selectedMonth = $requestedMonth;
-        $historyResult = $futureHistoryResult;
+// กติกากลาง — ปุ่ม Export ใช้ตัวเดียวกัน (เดิมเขียนแยกกัน แล้วได้ไฟล์คนละเดือนกับหน้าจอ)
+$futureHistoryResult = null;
+$selectedMonth = resolve_month_allowing_legacy_future(
+    $requestedMonth,
+    $selectedMonth,
+    function (string $month) use (&$futureHistoryResult, $recordService, $userId, $shopId): bool {
+        $futureHistoryResult = $recordService->getMonthlyRecords($userId, $shopId, $month);
+
+        return ($futureHistoryResult['success'] ?? false) === true
+            && !empty($futureHistoryResult['data']['records']);
     }
+);
+
+if ($selectedMonth === $requestedMonth && $futureHistoryResult !== null) {
+    $historyResult = $futureHistoryResult;
 }
 
 // ⚠️ ขอเดือนอนาคตที่ไม่มีข้อมูล = ถูกหดกลับมาเป็นเดือนปัจจุบัน ต้องบอกผู้ใช้ด้วย
 // ไม่งั้นตัวเลือกเดือนเด้งกลับมาเองโดยไม่มีคำอธิบาย (หน้าอื่นมี max= กันไว้ แต่หน้านี้
 // ต้องเปิดเดือนอนาคตที่มีข้อมูลได้ จึงใส่ max ไม่ได้ — บอกด้วยข้อความแทน)
+// ⚠️ เทียบกับ "เดือนที่กำลังแสดงจริง" ไม่ใช่เขียนเงื่อนไข "เดือนอนาคต" ขึ้นใหม่
+// (กติกาว่าเดือนไหนเปิดได้อยู่ที่ resolve_month_allowing_legacy_future() ที่เดียว)
 $historyMonthNotice = null;
 if (
     preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth) === 1
-    && $requestedMonth > $selectedMonth
+    && $requestedMonth !== $selectedMonth
 ) {
     $historyMonthNotice = 'เดือน ' . formatThaiMonth($requestedMonth) . ' ยังไม่มีรายการ '
         . 'ระบบจึงแสดงเดือน ' . formatThaiMonth($selectedMonth) . ' ให้แทน';

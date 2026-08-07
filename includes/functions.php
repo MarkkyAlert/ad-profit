@@ -748,6 +748,37 @@ function money_total(float $value): float
 }
 
 /**
+ * ⭐⭐ เดือนอนาคตเปิดได้เมื่อ "มีข้อมูลอยู่จริง" เท่านั้น — จุดเดียวของกติกานี้
+ *
+ * รายงานหดเดือนอนาคตกลับมาเสมอ (ตัวเลขของช่วงที่ยังไม่เกิดไม่มีความหมาย) แต่หน้าประวัติ
+ * เป็นหน้า **จัดการรายการ** ถ้าหดด้วย แถวเก่าที่ลงวันล่วงหน้าไว้ก่อนกติกา actuals
+ * จะแก้หรือลบผ่านหน้าเว็บไม่ได้เลยตลอดกาล
+ *
+ * ⚠️⚠️ กติกานี้เคยอยู่ที่ `history.php` ที่เดียว ส่วนปุ่ม Export ไม่มี → **กดปุ่มแล้วได้ไฟล์คนละเดือน
+ * กับที่หน้าจอแสดงอยู่** วัดจริง: ดูหน้าประวัติเดือน ก.ย. (2 รายการ ฿110,000) กด Export
+ * ได้ไฟล์เดือน ส.ค. (3 แถว ฿3,000) ชื่อไฟล์ก็คนละเดือน โดยไม่มีข้อความบอกอะไรเลย
+ *
+ * ผู้เรียกส่ง callback มาบอกว่าเดือนนั้นมีรายการไหม (helper ตัวนี้ไม่รู้จัก service/DB)
+ *
+ * @param callable(string):bool $monthHasRecords
+ */
+function resolve_month_allowing_legacy_future(
+    string $requestedMonth,
+    string $resolvedMonth,
+    callable $monthHasRecords
+): string {
+    if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth) !== 1) {
+        return $resolvedMonth;
+    }
+
+    if ($requestedMonth <= $resolvedMonth) {
+        return $resolvedMonth;
+    }
+
+    return $monthHasRecords($requestedMonth) === true ? $requestedMonth : $resolvedMonth;
+}
+
+/**
  * ⭐ ข้อความเมื่อ "ดีสุด/แย่สุด" เทียบกันไม่ได้ — จุดเดียวของถ้อยคำนี้
  *
  * ⚠️ ห้ามบอกสาเหตุที่เดาเอา · เดิมเขียนตายตัวว่า "มีเดือนที่จบแล้วเดือนเดียว"

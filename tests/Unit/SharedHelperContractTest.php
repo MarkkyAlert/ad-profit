@@ -451,4 +451,73 @@ final class SharedHelperContractTest extends TestCase
         $this->assertSame(-1234.56, money_total(-1234.56), 'ค่าติดลบเพี้ยน');
         $this->assertSame(0.0, money_total(0.0));
     }
+
+    /**
+     * ⭐⭐ `resolve_month_allowing_legacy_future()` — เดือนอนาคตเปิดได้เมื่อมีข้อมูลจริงเท่านั้น
+     *
+     * ⚠️ เคยอยู่ที่ `history.php` ที่เดียว ปุ่ม Export ไม่มี → กดแล้วได้ไฟล์คนละเดือน
+     * กับที่หน้าจอแสดงอยู่ (ดูหน้าประวัติเดือน ก.ย. ฿110,000 กด Export ได้ไฟล์ ส.ค. ฿3,000)
+     */
+    public function testAFutureMonthOpensOnlyWhenItActuallyHasRecords(): void
+    {
+        $withRecords = static fn(string $month): bool => true;
+        $empty = static fn(string $month): bool => false;
+
+        $this->assertSame(
+            '2026-09',
+            resolve_month_allowing_legacy_future('2026-09', '2026-08', $withRecords),
+            'เดือนอนาคตที่มีรายการเก่าอยู่จริงเปิดไม่ได้ — แถวพวกนั้นจะแก้/ลบไม่ได้ตลอดกาล'
+        );
+        $this->assertSame(
+            '2026-08',
+            resolve_month_allowing_legacy_future('2026-09', '2026-08', $empty),
+            'เดือนอนาคตที่ว่างเปล่าไม่ถูกหดกลับ'
+        );
+    }
+
+    /** ⚠️ เดือนในอดีต/ปัจจุบัน ต้องไม่ไปถามฐานข้อมูลเลย (helper เดิมหดให้อยู่แล้ว) */
+    public function testAPastOrCurrentMonthNeverAsksTheDatabase(): void
+    {
+        $asked = 0;
+        $counter = static function (string $month) use (&$asked): bool {
+            $asked++;
+
+            return true;
+        };
+
+        foreach (['2026-07', '2026-08', '', 'abc', '2026-13', '2026-1'] as $requested) {
+            $this->assertSame(
+                '2026-08',
+                resolve_month_allowing_legacy_future($requested, '2026-08', $counter),
+                'ค่า ' . var_export($requested, true) . ' ไม่ควรเปลี่ยนเดือนที่เลือก'
+            );
+        }
+
+        $this->assertSame(0, $asked, 'ไปถามฐานข้อมูลทั้งที่ยังไม่ใช่เดือนอนาคตที่ถูกรูปแบบ');
+    }
+
+    /** ⚠️ กติกานี้เคยถูกคัดลอกไว้ 2 ที่ แล้วที่หนึ่งตกสำรวจ */
+    public function testNobodyReimplementsTheLegacyFutureMonthRule(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/*.php'),
+            (array)glob($root . '/api/*.php')
+        );
+
+        $offenders = [];
+        foreach ($files as $file) {
+            $code = (string)file_get_contents((string)$file);
+            if (preg_match('/\$requestedMonth\s*>\s*\$selectedMonth/', $code) === 1) {
+                $offenders[] = basename((string)$file);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'เขียนกติกา "เดือนอนาคตที่มีข้อมูล" ซ้ำใน: ' . implode(', ', $offenders)
+            . ' — ให้เรียก resolve_month_allowing_legacy_future() แทน'
+        );
+    }
 }
