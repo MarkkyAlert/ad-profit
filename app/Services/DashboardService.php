@@ -76,7 +76,7 @@ class DashboardService
 
             $summary = $this->buildSummaryFromRecords($records);
             $dailyChart = $this->buildDailyChart($records);
-            $sixMonthChart = $this->buildSixMonthChart($shopId, (string)$rangeData['end_date']);
+            $sixMonthChart = $this->buildSixMonthChart($shopId, (string)$rangeData['end_date'], $today);
             $comparison = $this->buildMonthlyComparison($shopId, $rangeData, $today);
             $goalMonth = $this->resolveGoalMonth($rangeData);
             $goalProgress = $this->buildGoalProgress($shopId, $goalMonth, $today);
@@ -454,11 +454,26 @@ class DashboardService
         ];
     }
 
-    private function buildSixMonthChart(int $shopId, string $rangeEndDate): array
+    private function buildSixMonthChart(int $shopId, string $rangeEndDate, ?string $today = null): array
     {
         $endDate = DateTimeImmutable::createFromFormat('Y-m-d', $rangeEndDate);
         if (!$endDate) {
             $endDate = new DateTimeImmutable('today');
+        }
+
+        // ⚠️⚠️ กราฟนี้มีป้ายของตัวเองว่า "ย้อนหลัง 6 เดือน" จึงต้องไม่ยื่นไปข้างหน้า
+        //
+        // ช่วง "กำหนดเอง" ตั้งใจไม่ถูกตัดที่วันนี้ (ผู้ใช้เลือกเองย่อมตั้งใจ) แต่ค่านั้น
+        // ถูกส่งมาเป็นจุดสิ้นสุดของกราฟด้วย · วัดจริง: วันนี้ 7 ส.ค. เลือกช่วง
+        // 1 ก.ค. – 31 ธ.ค. → กราฟออกมาเป็น ก.ค. ฿93,000 · ส.ค. ฿21,000 ·
+        // **ก.ย. ต.ค. พ.ย. ธ.ค. = ฿0 ทั้งหมด** 4 ใน 6 แท่งเป็นเดือนที่ยังมาไม่ถึง
+        // แต่วาดเป็นเส้นดิ่งลงศูนย์ ซึ่งอ่านแล้วเหมือนธุรกิจกำลังพัง
+        $todayObject = DateTimeImmutable::createFromFormat('!Y-m-d', (string)$today);
+        if (!$todayObject) {
+            $todayObject = new DateTimeImmutable('today');
+        }
+        if ($endDate > $todayObject) {
+            $endDate = $todayObject;
         }
 
         $endMonthStart = $endDate->modify('first day of this month');
