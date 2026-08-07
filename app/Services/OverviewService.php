@@ -142,14 +142,7 @@ class OverviewService
         //
         // เกณฑ์รองไว้กันอันดับสลับไปมาเวลากำไรเท่ากันเป๊ะ (query ไม่การันตีลำดับ):
         // กรอกครบกว่าอยู่บน → เท่ากันอีกเรียงตามชื่อ
-        usort($rows, static function (array $left, array $right): int {
-            $leftHasData = ((int)$left['days_count']) > 0;
-            $rightHasData = ((int)$right['days_count']) > 0;
-
-            return [$rightHasData, $right['profit'], $right['days_count']]
-                <=> [$leftHasData, $left['profit'], $left['days_count']]
-                ?: strcmp((string)$left['shop_name'], (string)$right['shop_name']);
-        });
+        usort($rows, 'compare_shop_rows_for_ranking');
 
         return $rows;
     }

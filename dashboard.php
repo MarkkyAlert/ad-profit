@@ -588,9 +588,7 @@ require __DIR__ . '/includes/header.php';
     // มีตัวกันแบบนี้อยู่แล้ว (ต้องมี ≥ 2 ตัวอย่าง และไม่ไฮไลต์ถ้าดีสุด = แย่สุด)
     $bestDayRow = isset($statistics['best_day']) && is_array($statistics['best_day']) ? $statistics['best_day'] : null;
     $worstDayRow = isset($statistics['worst_day']) && is_array($statistics['worst_day']) ? $statistics['worst_day'] : null;
-    $dayExtremesComparable = $bestDayRow !== null
-        && $worstDayRow !== null
-        && (string)($bestDayRow['record_date'] ?? '') !== (string)($worstDayRow['record_date'] ?? '');
+    $dayExtremesComparable = extremes_are_comparable($bestDayRow, $worstDayRow, 'record_date');
     ?>
     <article class="stat-card s-best">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันกำไรดีสุด</p>

@@ -148,9 +148,7 @@ $noFinishedMonthText = $isFinishedYear ? 'ไม่มีข้อมูลใ�
 // เดือนเดียวกัน ตัวเลขเดียวกัน สีตรงข้ามกัน · เกิดกับทุกร้านใน 1–2 เดือนแรกที่ใช้ระบบ
 //
 // เป็นกติกาเดียวกับการ์ดคู่ "วันดีสุด/แย่สุด" ซึ่งมีตัวกันนี้อยู่แล้ว — ระดับเดือนตกสำรวจ
-$monthExtremesComparable = $bestMonth !== null
-    && $worstMonth !== null
-    && (int)($bestMonth['month'] ?? 0) !== (int)($worstMonth['month'] ?? 0);
+$monthExtremesComparable = extremes_are_comparable($bestMonth, $worstMonth, 'month');
 
 $singleMonthText = 'ยังเทียบไม่ได้ — มีเดือนที่จบแล้วเดือนเดียว';
 

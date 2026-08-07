@@ -511,8 +511,7 @@ require __DIR__ . '/includes/header.php';
                             // ⚠️ "แย่สุด" ต้องเป็นคนละวันกับ "ดีสุด" ถึงจะมีความหมาย
                             // ไม่งั้นวันเดียวกันตัวเลขเดียวกันจะโผล่สองที่ ที่หนึ่งเขียว ที่หนึ่งแดง
                             // (เกิดตอนกรอกวันเดียว หรือทุกวันกำไรเท่ากันหมด)
-                            $dayExtremesComparable = $dayWorst !== null
-                                && (string)($dayWorst['record_date'] ?? '') !== (string)($dayBest['record_date'] ?? '');
+                            $dayExtremesComparable = extremes_are_comparable($dayBest, $dayWorst, 'record_date');
                             ?>
                             <?php if ($dayExtremesComparable): ?>
                                 <span class="text-slate-600">·</span>
@@ -850,9 +849,7 @@ require __DIR__ . '/includes/header.php';
                 // ⚠️⚠️ "ดีสุด" กับ "แย่สุด" ต้องเป็นคนละเดือนจริง ๆ — ร้านที่มีเดือนที่จบแล้ว
                 // เดือนเดียวจะเห็นเดือนเดียวกันตัวเลขเดียวกันโผล่สองที่ ที่หนึ่งเขียว ที่หนึ่งเทา
                 // (กติกาเดียวกับการ์ดคู่ "วันดีสุด/แย่สุด" ซึ่งมีตัวกันอยู่แล้ว)
-                $monthExtremesComparable = $yearlyBestMonth !== null
-                    && $yearlyWorstMonth !== null
-                    && (int)($yearlyBestMonth['month'] ?? 0) !== (int)($yearlyWorstMonth['month'] ?? 0);
+                $monthExtremesComparable = extremes_are_comparable($yearlyBestMonth, $yearlyWorstMonth, 'month');
 
                 if (!$monthExtremesComparable) {
                     $bestMonthProfit = null;

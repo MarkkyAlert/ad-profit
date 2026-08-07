@@ -654,6 +654,51 @@ function resolve_comparison_cutoff_day(string $selectedMonth, ?string $today = n
  *
  * @param string $monthKey รูปแบบ Y-m
  */
+/**
+ * ⭐⭐ ลำดับร้านในตารางเปรียบเทียบ — จุดเดียวของกติกานี้ ห้ามเขียนซ้ำที่อื่น
+ *
+ * ⚠️⚠️ **ร้านที่ยังไม่มีข้อมูลต้องอยู่ท้ายเสมอ** — กำไร `0.0` ของร้านที่ไม่ได้กรอก
+ * "มากกว่า" ร้านที่ขาดทุนจริง ถ้าเรียงด้วยกำไรล้วนมันจะขึ้นอันดับ 1
+ * (วัดจริง: ร้าน A/B กรอกครบ 219 วันแต่ขาดทุน · ร้าน C ไม่เคยกรอก → อันดับ 1 = ร้าน C)
+ * ร้านที่ไม่มีข้อมูลแปลว่า "ยังไม่รู้" ไม่ใช่ "ดีที่สุด"
+ *
+ * ⚠️ เคยเขียนซ้ำ 2 ที่ (มุมเดือน/มุมรายปี) แล้วมุมรายปีไม่มีกติกานี้เลย → สองแท็บ
+ * ของหน้าเดียวกันบนข้อมูลชุดเดียวกันตอบตรงกันข้าม
+ *
+ * เกณฑ์รองกันอันดับสลับไปมาเวลากำไรเท่ากันเป๊ะ (query ไม่การันตีลำดับ):
+ * กรอกครบกว่าอยู่บน → เท่ากันอีกเรียงตามชื่อ
+ *
+ * @param array<string,mixed> $left
+ * @param array<string,mixed> $right
+ */
+function compare_shop_rows_for_ranking(array $left, array $right): int
+{
+    $leftDays = (int)($left['days_count'] ?? 0);
+    $rightDays = (int)($right['days_count'] ?? 0);
+
+    return [$rightDays > 0, (float)($right['profit'] ?? 0), $rightDays]
+        <=> [$leftDays > 0, (float)($left['profit'] ?? 0), $leftDays]
+        ?: strcmp((string)($left['shop_name'] ?? ''), (string)($right['shop_name'] ?? ''));
+}
+
+/**
+ * ⭐ "ดีสุด" กับ "แย่สุด" เป็นคนละอันจริงไหม — จุดเดียวของกติกานี้
+ *
+ * ⚠️ ข้อมูลชุดเดียว (หรือทุกอันเท่ากัน) ทำให้อันเดียวกันโผล่สองการ์ด ที่หนึ่งเขียว
+ * ที่หนึ่งแดง · เป็นสิ่งแรกที่ผู้ใช้ใหม่เห็น · เคยเจอทั้งระดับ "วัน" และระดับ "เดือน"
+ * โดยตัวกันมีอยู่แค่ระดับวัน
+ *
+ * @param array<string,mixed>|null $best
+ * @param array<string,mixed>|null $worst
+ * @param string $key คีย์ที่ใช้ระบุตัวตน เช่น `record_date` หรือ `month`
+ */
+function extremes_are_comparable(?array $best, ?array $worst, string $key): bool
+{
+    return $best !== null
+        && $worst !== null
+        && (string)($best[$key] ?? '') !== (string)($worst[$key] ?? '');
+}
+
 function month_is_unfinished(string $monthKey, DateTimeImmutable $today): bool
 {
     return $today->format('Y-m') === $monthKey

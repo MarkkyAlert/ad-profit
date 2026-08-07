@@ -250,4 +250,75 @@ final class SharedHelperContractTest extends TestCase
             . ' — ให้เรียก month_is_unfinished() แทน'
         );
     }
+
+    /**
+     * ⭐⭐ `compare_shop_rows_for_ranking()` — ร้านที่ยังไม่มีข้อมูลต้องอยู่ท้ายเสมอ
+     *
+     * ⚠️ กำไร ฿0 ของร้านที่ไม่ได้กรอก "มากกว่า" ร้านที่ขาดทุนจริง เรียงด้วยกำไรล้วน
+     * มันจะขึ้นอันดับ 1 · เคยเขียนซ้ำ 2 ที่ แล้วมุมรายปีไม่มีกติกานี้เลย
+     */
+    public function testShopsWithoutDataAlwaysSortLast(): void
+    {
+        $rows = [
+            ['shop_name' => 'ไม่เคยกรอก', 'profit' => 0.0, 'days_count' => 0],
+            ['shop_name' => 'ขาดทุนหนัก', 'profit' => -65700.0, 'days_count' => 219],
+            ['shop_name' => 'ขาดทุนน้อย', 'profit' => -21900.0, 'days_count' => 219],
+        ];
+
+        usort($rows, 'compare_shop_rows_for_ranking');
+
+        $this->assertSame(
+            ['ขาดทุนน้อย', 'ขาดทุนหนัก', 'ไม่เคยกรอก'],
+            array_column($rows, 'shop_name'),
+            'ร้านที่ไม่มีข้อมูลไม่ได้อยู่ท้าย — กำไร ฿0 ชนะร้านที่ขาดทุนจริง'
+        );
+    }
+
+    /** กำไรเท่ากันเป๊ะต้องได้ลำดับเดิมทุกครั้ง (query ไม่การันตีลำดับ) */
+    public function testEqualProfitsSortStably(): void
+    {
+        $make = static fn(): array => [
+            ['shop_name' => 'ร้าน ข', 'profit' => 5000.0, 'days_count' => 10],
+            ['shop_name' => 'ร้าน ก', 'profit' => 5000.0, 'days_count' => 10],
+        ];
+
+        $first = $make();
+        usort($first, 'compare_shop_rows_for_ranking');
+        $second = $make();
+        usort($second, 'compare_shop_rows_for_ranking');
+
+        $this->assertSame(array_column($first, 'shop_name'), array_column($second, 'shop_name'));
+        $this->assertSame('ร้าน ก', $first[0]['shop_name'], 'กำไรเท่ากันแล้วไม่ได้เรียงตามชื่อ');
+    }
+
+    /**
+     * ⭐ `extremes_are_comparable()` — "ดีสุด" กับ "แย่สุด" ต้องเป็นคนละอันจริง ๆ
+     *
+     * ⚠️ ข้อมูลชุดเดียว (หรือทุกอันเท่ากัน) ทำให้อันเดียวกันโผล่สองการ์ด
+     * ที่หนึ่งเขียว ที่หนึ่งแดง — เป็นสิ่งแรกที่ผู้ใช้ใหม่เห็น
+     *
+     * @return array<string,array{0:array<string,mixed>|null,1:array<string,mixed>|null,2:string,3:bool}>
+     */
+    public static function extremesProvider(): array
+    {
+        return [
+            'วันเดียวกัน' => [['record_date' => '2026-08-07'], ['record_date' => '2026-08-07'], 'record_date', false],
+            'คนละวัน' => [['record_date' => '2026-08-07'], ['record_date' => '2026-08-01'], 'record_date', true],
+            'เดือนเดียวกัน' => [['month' => 7], ['month' => 7], 'month', false],
+            'คนละเดือน' => [['month' => 7], ['month' => 3], 'month', true],
+            'ไม่มีดีสุด' => [null, ['month' => 7], 'month', false],
+            'ไม่มีแย่สุด' => [['month' => 7], null, 'month', false],
+            'ไม่มีทั้งคู่' => [null, null, 'month', false],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('extremesProvider')]
+    public function testExtremesAreComparableOnlyWhenTheyDiffer(
+        ?array $best,
+        ?array $worst,
+        string $key,
+        bool $expected
+    ): void {
+        $this->assertSame($expected, extremes_are_comparable($best, $worst, $key));
+    }
 }

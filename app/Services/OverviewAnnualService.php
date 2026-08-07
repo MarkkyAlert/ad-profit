@@ -261,18 +261,7 @@ class OverviewAnnualService
         // และไฟล์ Excel ชีต "เทียบร้าน" ใช้ลำดับนี้จึงผิดตามไปด้วย
         //
         // ร้านที่ไม่มีข้อมูลแปลว่า "ยังไม่รู้" ไม่ใช่ "ดีที่สุด"
-        usort(
-            $shopsRows,
-            // เสมอกันตัดด้วยจำนวนวันที่กรอก แล้วชื่อร้าน (query ไม่การันตีลำดับ)
-            static function (array $left, array $right): int {
-                $leftHasData = ((int)($left['days_count'] ?? 0)) > 0;
-                $rightHasData = ((int)($right['days_count'] ?? 0)) > 0;
-
-                return [$rightHasData, $right['profit'], (int)($right['days_count'] ?? 0)]
-                    <=> [$leftHasData, $left['profit'], (int)($left['days_count'] ?? 0)]
-                    ?: strcmp((string)($left['shop_name'] ?? ''), (string)($right['shop_name'] ?? ''));
-            }
-        );
+        usort($shopsRows, 'compare_shop_rows_for_ranking');
 
         return [
             'success' => true,
