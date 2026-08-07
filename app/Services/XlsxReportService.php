@@ -987,7 +987,9 @@ class XlsxReportService
             // ⚠️ สัดส่วนกำไรของแถวรวม = 100% ตามนิยาม ห้ามบวกค่าที่ปัดแล้วทีละแถว
             // และ "วันที่กรอก" ใช้ค่ามากสุด ไม่ใช่ผลบวกข้ามร้าน (กติกาเดียวกับหน้าเว็บ)
             $sheet->setCellValue('G' . $totalRow, 100.0);
-            $sheet->setCellValue('H' . $totalRow, $totalDays);
+            // ⚠️ เขียนเป็นข้อความ "สูงสุด N วัน" เหมือนหน้าเว็บ — ตัวเลขเปล่าในคอลัมน์นี้
+            // อ่านเป็นผลบวกของแถวบน ซึ่งบวกไม่ลง (3 ร้าน × 31 วัน ≠ 93 วันในเดือนที่มี 31 วัน)
+            $sheet->setCellValueExplicit('H' . $totalRow, 'สูงสุด ' . $totalDays . ' วัน', DataType::TYPE_STRING);
             $sheet->getStyle('A' . $totalRow . ':H' . $totalRow)->getFont()->setBold(true);
             if ($totalProfit < 0) {
                 $sheet->getStyle('D' . $totalRow)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);

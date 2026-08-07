@@ -358,7 +358,8 @@ final class XlsxReportServiceComparisonTest extends TestCase
         $this->assertSame(175200.0, (float)$sheet->getCell('D' . $totalRow)->getValue(), 'กำไรรวมผิด');
         // ⚠️ สัดส่วนกำไรของแถวรวม = 100% ตามนิยาม · "วันที่กรอก" ใช้ค่ามากสุด ไม่ใช่ผลบวก
         $this->assertSame(100.0, (float)$sheet->getCell('G' . $totalRow)->getValue());
-        $this->assertSame(31, (int)$sheet->getCell('H' . $totalRow)->getValue(), 'วันที่กรอกของแถวรวมถูกบวกข้ามร้าน');
+        // ⚠️ เขียนเป็นข้อความเหมือนหน้าเว็บ — ตัวเลขเปล่าอ่านเป็นผลบวกที่บวกไม่ลง
+        $this->assertSame('สูงสุด 31 วัน', (string)$sheet->getCell('H' . $totalRow)->getValue(), 'วันที่กรอกของแถวรวมถูกบวกข้ามร้าน');
 
         $sheet->getParent()->disconnectWorksheets();
     }

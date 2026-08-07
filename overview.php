@@ -100,6 +100,7 @@ $yearlyWorstMonth = null;
 $yearlyPrevYear = $selectedYear - 1;
 $yearlyPrevProfit = null;
 $yearlyPrevHasData = false;
+$yearlyPrevUnavailable = false;
 $yearlyYoyPercent = null;
 $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
 $yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
@@ -236,6 +237,7 @@ if ($view === 'day') {
         ? (float)$yearlySummary['prev_year_profit']
         : null;
     $yearlyPrevHasData = ($yearlySummary['prev_year_has_data'] ?? false) === true;
+    $yearlyPrevUnavailable = ($yearlySummary['prev_year_unavailable'] ?? false) === true;
     $yearlyYoyChange = isset($yearlySummary['yoy_profit_change']) && $yearlySummary['yoy_profit_change'] !== null
         ? (float)$yearlySummary['yoy_profit_change']
         : null;
@@ -812,7 +814,11 @@ require __DIR__ . '/includes/header.php';
                         <?php if ($yearlyYoyPercent === null): ?>
                             <?php /* null = เทียบเป็น % ไม่ได้ ไม่ใช่ "ไม่มีข้อมูล" — ดูคอมเมนต์ใน annual.php */ ?>
                             <span class="text-base font-bold text-slate-400">
-                                <?= $yearlyPrevHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                                <?php if ($yearlyPrevUnavailable): ?>
+                                    โหลดข้อมูลปีก่อนไม่สำเร็จ — เทียบให้ไม่ได้ตอนนี้
+                                <?php else: ?>
+                                    <?= $yearlyPrevHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                                <?php endif; ?>
                             </span>
                         <?php else: ?>
                             <span class="text-base font-bold <?= e($yearlyYoyTone($yearlyYoyPercent)) ?>">
@@ -837,13 +843,29 @@ require __DIR__ . '/includes/header.php';
                 // ⚠️ ยังไม่มีเดือนที่จบ ≠ ไม่มีข้อมูล — การ์ดนี้ไม่นับเดือนปัจจุบันที่ยังไม่จบ
                 // ผู้ใช้ที่เพิ่งเริ่มใช้เดือนนี้จะไม่มีเดือนไหนเข้าเกณฑ์เลย · ขีด (–) อ่านได้ว่า
                 // "ข้อมูลหาย" ซึ่งไม่จริงและน่าตกใจ (ข้อความเดียวกับหน้ารายปี)
-                $noFinishedMonthText = 'รอให้จบเดือนก่อน';
-                $bestMonthLabel = $yearlyBestMonth !== null
+                $noFinishedMonthText = $selectedYear < (int)date('Y')
+                    ? 'ไม่มีข้อมูลในปีนี้'
+                    : 'รอให้จบเดือนก่อน';
+
+                // ⚠️⚠️ "ดีสุด" กับ "แย่สุด" ต้องเป็นคนละเดือนจริง ๆ — ร้านที่มีเดือนที่จบแล้ว
+                // เดือนเดียวจะเห็นเดือนเดียวกันตัวเลขเดียวกันโผล่สองที่ ที่หนึ่งเขียว ที่หนึ่งเทา
+                // (กติกาเดียวกับการ์ดคู่ "วันดีสุด/แย่สุด" ซึ่งมีตัวกันอยู่แล้ว)
+                $monthExtremesComparable = $yearlyBestMonth !== null
+                    && $yearlyWorstMonth !== null
+                    && (int)($yearlyBestMonth['month'] ?? 0) !== (int)($yearlyWorstMonth['month'] ?? 0);
+
+                if (!$monthExtremesComparable) {
+                    $bestMonthProfit = null;
+                    $worstMonthProfit = null;
+                }
+
+                $singleMonthText = 'ยังเทียบไม่ได้ — มีเดือนที่จบแล้วเดือนเดียว';
+                $bestMonthLabel = $monthExtremesComparable
                     ? ($thaiMonths[(int)($yearlyBestMonth['month'] ?? 0)] ?? $noFinishedMonthText)
-                    : $noFinishedMonthText;
-                $worstMonthLabel = $yearlyWorstMonth !== null
+                    : ($yearlyBestMonth !== null ? $singleMonthText : $noFinishedMonthText);
+                $worstMonthLabel = $monthExtremesComparable
                     ? ($thaiMonths[(int)($yearlyWorstMonth['month'] ?? 0)] ?? $noFinishedMonthText)
-                    : $noFinishedMonthText;
+                    : ($yearlyWorstMonth !== null ? $singleMonthText : $noFinishedMonthText);
                 ?>
                 <section class="section-card mt-4 px-4 py-3 sm:px-5">
                     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-400">
@@ -1101,9 +1123,19 @@ require __DIR__ . '/includes/header.php';
                                     <?= $rowProfitShare !== null ? e(formatPercent($rowProfitShare)) : '—' ?>
                                 </td>
                                 <td class="px-3 py-1.5 font-medium">
-                                    <?php $rowChangeBadge = format_change_badge($rowChangePercent, 'ใหม่'); ?>
+                                    <?php
+                                    // ⚠️⚠️ ห้ามเขียน "ใหม่" ตายตัว — % เป็น null ได้ 2 กรณี
+                                    // วัดจริง: ร้านที่กรอกทุกวันมา 2 ปีครึ่ง แต่เดือนก่อนบังเอิญเท่าทุน
+                                    // พอดี ถูกป้ายว่า "ใหม่" พร้อม tooltip "ไม่มีข้อมูลเดือนก่อน"
+                                    // ซึ่งไม่จริงทั้งคู่ · ร้านเก่าที่แค่เว้นไม่กรอกเดือนก่อนก็โดนเหมือนกัน
+                                    $rowPrevHasData = ($row['prev_has_data'] ?? false) === true;
+                                    $rowNoCompareReason = $rowPrevHasData
+                                        ? 'เดือนก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้'
+                                        : 'ไม่มีข้อมูลเดือนก่อน';
+                                    $rowChangeBadge = format_change_badge($rowChangePercent, '–');
+                                    ?>
                                     <?php if ($rowChangePercent === null): ?>
-                                        <span class="text-slate-500" title="ไม่มีข้อมูลเดือนก่อน"><?= e($rowChangeBadge['text']) ?></span>
+                                        <span class="text-slate-500" title="<?= e($rowNoCompareReason) ?>"><?= e($rowChangeBadge['text']) ?></span>
                                     <?php else: ?>
                                         <span class="<?= e($rowChangeBadge['class']) ?>"><?= e($rowChangeBadge['text']) ?></span>
                                         <span class="text-xs text-slate-500">(<?= e(formatMoney($rowChange)) ?>)</span>

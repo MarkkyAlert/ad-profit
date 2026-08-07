@@ -162,4 +162,52 @@ final class AnnualServiceCutoffTest extends TestCase
         $this->assertNull($data['summary']['best_month']);
         $this->assertNull($data['summary']['worst_month']);
     }
+
+    /**
+     * ⭐⭐ อ่านข้อมูล "ปีก่อน" ไม่สำเร็จ ต้องไม่ถูกยุบไปรวมกับ "ปีก่อนไม่มีข้อมูล"
+     *
+     * ⚠️ วัดจริงก่อนแก้: ปีก่อนมีกำไรจริง ฿219,000 · ทำให้ query ของปีก่อนล้มอย่างเดียว
+     * → หน้าเว็บขึ้น "ไม่มีข้อมูลปีก่อน" คู่กับ "ปีก่อนช่วงเดียวกัน ฿0" และ**ไม่มีแถบแดง
+     * เตือนอะไรเลย** — ระบบพูดสิ่งที่ไม่จริงอย่างมั่นใจ
+     */
+    public function testAFailedPreviousYearReadIsNotReportedAsNoData(): void
+    {
+        $recordRepository = $this->createStub(RecordRepository::class);
+        $recordRepository->method('getMonthlyTotalsByMonthRange')->willReturnCallback(
+            static function (int $shopId, string $start, string $end, ?string $notAfter = null): array {
+                if (str_starts_with($start, '2025')) {
+                    throw new \RuntimeException('จำลอง query ปีก่อนล้ม');
+                }
+
+                return [[
+                    'month_key' => '2026-01',
+                    'total_revenue' => 40000.0,
+                    'total_ad_cost' => 9000.0,
+                    'days_count' => 31,
+                ]];
+            }
+        );
+
+        $shopRepository = $this->createStub(ShopRepository::class);
+        $shopRepository->method('userCanAccessShop')->willReturn(true);
+
+        $summary = (new AnnualService($recordRepository, $shopRepository, $this->createStub(GoalRepository::class)))
+            ->buildYearlySummary(1, 1, 2026, self::TODAY)['data']['summary'] ?? [];
+
+        $this->assertTrue(
+            $summary['prev_year_unavailable'] ?? false,
+            'อ่านปีก่อนไม่สำเร็จแต่ไม่ได้บอกไว้ หน้าเว็บจึงเขียนว่า "ไม่มีข้อมูลปีก่อน"'
+        );
+        $this->assertFalse($summary['prev_year_has_data'] ?? true);
+    }
+
+    /** อ่านสำเร็จแต่ปีก่อนไม่มีข้อมูลจริง ๆ ต้องไม่ถูกรายงานว่าอ่านไม่สำเร็จ */
+    public function testAnEmptyPreviousYearIsNotReportedAsUnavailable(): void
+    {
+        $summary = $this->makeService($this->totalsFor(2026, [[1, 40000.0, 9000.0]]))
+            ->buildYearlySummary(1, 1, 2026, self::TODAY)['data']['summary'] ?? [];
+
+        $this->assertFalse($summary['prev_year_unavailable'] ?? true, 'อ่านสำเร็จแต่บอกว่าล้ม');
+        $this->assertFalse($summary['prev_year_has_data'] ?? true);
+    }
 }

@@ -97,6 +97,7 @@ class OverviewAnnualService
         // (ปีนี้ถึงแค่ ส.ค. ก็ต้องเทียบ ม.ค.–ส.ค. ของปีก่อน ไม่ใช่ทั้ง 12 เดือน)
         $previousYearProfit = null;
         $previousTotals = [];
+        $previousYearReadFailed = false;
         if ($lastMonth > 0) {
             $previousYear = $year - 1;
 
@@ -117,8 +118,10 @@ class OverviewAnnualService
                     $previousNotAfterDate
                 );
             } catch (Throwable $exception) {
+                // ⚠️ อ่านปีก่อนไม่สำเร็จ ≠ ปีก่อนไม่มีข้อมูล (เหตุผลเต็มอยู่ใน AnnualService)
                 error_log('[overview-annual] buildYearlyOverview previous year failed: ' . $exception->getMessage());
                 $previousTotals = [];
+                $previousYearReadFailed = true;
             }
 
             $previousYearProfit = 0.0;
@@ -293,6 +296,7 @@ class OverviewAnnualService
                     'prev_year_profit' => $previousYearProfit,
                     // ⚠️ "ปีก่อนไม่มีข้อมูล" ≠ "ปีก่อนเท่าทุนพอดี" — เหตุผลเต็มอยู่ใน AnnualService
                     'prev_year_has_data' => $previousTotals !== [],
+                    'prev_year_unavailable' => $previousYearReadFailed,
                     'yoy_profit_change' => $previousYearProfit !== null ? $profit - $previousYearProfit : null,
                     'yoy_profit_change_percent' => $previousYearProfit !== null
                         ? $this->calculateChangePercent($profit, $previousYearProfit)

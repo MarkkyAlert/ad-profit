@@ -199,4 +199,54 @@ final class PageRenderTest extends ControllerTestCase
             $path . ' ไม่ได้หดกลับมาเป็นช่วงปัจจุบัน'
         );
     }
+
+    /**
+     * ⭐⭐ เดือนเดียวกันต้องไม่โผล่เป็นทั้ง "เดือนกำไรดีสุด" และ "เดือนกำไรแย่สุด"
+     *
+     * ⚠️ วัดจริงก่อนแก้ — ร้านที่เริ่มกรอกเดือนก่อน (มีเดือนที่จบแล้วเดือนเดียว):
+     *   เดือนกำไรดีสุด   ก.ค. (฿31,000)   ← เขียว
+     *   เดือนกำไรแย่สุด  ก.ค. (฿31,000)   ← เทา
+     * เกิดกับ **ทุกร้านในช่วง 1–2 เดือนแรกที่ใช้ระบบ**
+     *
+     * ตัวกันแบบนี้มีอยู่แล้วสำหรับการ์ดคู่ "วันดีสุด/แย่สุด" — ระดับเดือนตกสำรวจ
+     */
+    public function testOneFinishedMonthIsNotShownAsBothBestAndWorst(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        // เดือนก่อนหน้าเดือนปัจจุบัน = เดือนเดียวที่จบแล้ว
+        $lastMonth = (new \DateTimeImmutable('first day of last month'))->format('Y-m');
+        foreach ([1, 2, 3] as $day) {
+            $this->createRecord($shopId, sprintf('%s-%02d', $lastMonth, $day), 10000.0, 3000.0);
+        }
+
+        $body = (string)$this->get('/annual.php', $session)['body'];
+        $text = preg_replace('/\s+/u', ' ', strip_tags($body)) ?? '';
+
+        $this->assertStringContainsString(
+            'ยังเทียบไม่ได้',
+            $text,
+            'มีเดือนที่จบแล้วเดือนเดียว แต่ยังโชว์เป็นทั้งดีสุดและแย่สุด'
+        );
+    }
+
+    /** ⚠️ ปีที่จบไปแล้วไม่มี "เดือนที่ยังไม่จบ" ให้รอ — ข้อความต้องไม่ขัดกับแถบ "ไม่มีข้อมูล" */
+    public function testAFinishedYearWithNoDataDoesNotSayWaitForTheMonthToEnd(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $pastYear = (int)date('Y') - 2;
+        $body = (string)$this->get('/annual.php?year=' . $pastYear, $session)['body'];
+        $text = preg_replace('/\s+/u', ' ', strip_tags($body)) ?? '';
+
+        $this->assertStringNotContainsString(
+            'รอให้จบเดือนก่อน',
+            $text,
+            'ปีที่จบไปแล้วยังบอกให้รอเดือนจบ ทั้งที่จอเดียวกันบอกว่าปีนั้นไม่มีข้อมูล'
+        );
+    }
 }

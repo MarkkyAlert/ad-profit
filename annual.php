@@ -136,20 +136,40 @@ $monthLabel = static function (array $row) use ($thaiMonths): string {
 // การ์ดนี้ไม่นับเดือนปัจจุบันที่ยังไม่จบ (เทียบยอดสะสมกับเดือนที่กรอกครบไม่ได้)
 // ผู้ใช้ที่เพิ่งเริ่มใช้เดือนนี้จึงไม่มีเดือนไหนเข้าเกณฑ์เลย · ขีด (–) อ่านได้ว่า
 // "ไม่มีข้อมูล" หรือ "ข้อมูลที่กรอกหายไป" ซึ่งทั้งคู่ไม่จริงและน่าตกใจ
-$noFinishedMonthText = 'รอให้จบเดือนก่อน';
+// ⚠️ ปีที่จบไปแล้วไม่มี "เดือนที่ยังไม่จบ" ให้รอ — ถ้ายังใช้ข้อความเดิมจะขัดกับ
+// แถบ "ปี 2567 ยังไม่มีข้อมูลยอดขาย" ที่อยู่บนจอเดียวกัน
+$isFinishedYear = $selectedYear < (int)date('Y');
+$noFinishedMonthText = $isFinishedYear ? 'ไม่มีข้อมูลในปีนี้' : 'รอให้จบเดือนก่อน';
+
+// ⚠️⚠️ "ดีสุด" กับ "แย่สุด" ต้องเป็นคนละเดือนจริง ๆ ถึงจะมีความหมาย
+//
+// วัดจริง: ร้านที่เริ่มกรอกเดือน ก.ค. แล้วเปิดหน้านี้วันที่ 7 ส.ค. (มีเดือนที่จบแล้ว
+// เดือนเดียว) → "เดือนกำไรดีสุด ก.ค. (฿31,000)" คู่กับ "เดือนกำไรแย่สุด ก.ค. (฿31,000)"
+// เดือนเดียวกัน ตัวเลขเดียวกัน สีตรงข้ามกัน · เกิดกับทุกร้านใน 1–2 เดือนแรกที่ใช้ระบบ
+//
+// เป็นกติกาเดียวกับการ์ดคู่ "วันดีสุด/แย่สุด" ซึ่งมีตัวกันนี้อยู่แล้ว — ระดับเดือนตกสำรวจ
+$monthExtremesComparable = $bestMonth !== null
+    && $worstMonth !== null
+    && (int)($bestMonth['month'] ?? 0) !== (int)($worstMonth['month'] ?? 0);
+
+$singleMonthText = 'ยังเทียบไม่ได้ — มีเดือนที่จบแล้วเดือนเดียว';
 
 $bestMonthText = $noFinishedMonthText;
 $bestMonthProfit = null;
 if ($bestMonth !== null) {
-    $bestMonthProfit = (float)($bestMonth['profit'] ?? 0);
-    $bestMonthText = $monthLabel($bestMonth) . ' (' . formatMoney($bestMonthProfit) . ')';
+    $bestMonthProfit = $monthExtremesComparable ? (float)($bestMonth['profit'] ?? 0) : null;
+    $bestMonthText = $monthExtremesComparable
+        ? $monthLabel($bestMonth) . ' (' . formatMoney((float)($bestMonth['profit'] ?? 0)) . ')'
+        : $singleMonthText;
 }
 
 $worstMonthText = $noFinishedMonthText;
 $worstMonthProfit = null;
 if ($worstMonth !== null) {
-    $worstMonthProfit = (float)($worstMonth['profit'] ?? 0);
-    $worstMonthText = $monthLabel($worstMonth) . ' (' . formatMoney($worstMonthProfit) . ')';
+    $worstMonthProfit = $monthExtremesComparable ? (float)($worstMonth['profit'] ?? 0) : null;
+    $worstMonthText = $monthExtremesComparable
+        ? $monthLabel($worstMonth) . ' (' . formatMoney((float)($worstMonth['profit'] ?? 0)) . ')'
+        : $singleMonthText;
 }
 
 // ประมาณการสิ้นปี — "ไม่ใช่ตัวเลขจริง" ต้องแยกออกจากการ์ดสรุปให้ชัด
@@ -230,6 +250,8 @@ $yoyPercent = isset($summary['yoy_profit_change_percent']) && $summary['yoy_prof
 // เดิมเขียนว่า "ไม่มีข้อมูลปีก่อน" ตายตัว ซึ่งขัดกับบรรทัดถัดลงมาบนจอเดียวกัน
 // ที่พิมพ์ "ปีก่อนช่วงเดียวกัน ฿0" (อ่านว่าเป็นตัวเลขจริง)
 $prevYearHasData = ($summary['prev_year_has_data'] ?? false) === true;
+// อ่านข้อมูลปีก่อนไม่สำเร็จ — ต้องบอกตามจริง ไม่ใช่บอกว่า "ไม่มีข้อมูล" พร้อม ฿0
+$prevYearUnavailable = ($summary['prev_year_unavailable'] ?? false) === true;
 
 // แสดง % การเปลี่ยนแปลง — helper กลาง (null ต้องไม่กลายเป็น 0%)
 $formatYoyPercent = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
@@ -361,7 +383,11 @@ require __DIR__ . '/includes/header.php';
         </span>
         <?php if ($yoyPercent === null): ?>
             <span class="text-base font-bold text-slate-400">
-                <?= $prevYearHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                <?php if ($prevYearUnavailable): ?>
+                    โหลดข้อมูลปีก่อนไม่สำเร็จ — เทียบให้ไม่ได้ตอนนี้
+                <?php else: ?>
+                    <?= $prevYearHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                <?php endif; ?>
             </span>
         <?php else: ?>
             <span class="text-base font-bold <?= e($yoyToneClass($yoyPercent)) ?>">

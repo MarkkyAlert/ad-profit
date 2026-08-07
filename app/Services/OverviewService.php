@@ -224,6 +224,12 @@ class OverviewService
 
             $rows[$index]['prev_profit'] = $previousProfit;
             $rows[$index]['profit_change'] = $change;
+            // ⚠️⚠️ "เดือนก่อนไม่มีข้อมูล" ≠ "เดือนก่อนเท่าทุนพอดี" — ทั้งคู่ทำให้ % เป็น null
+            //
+            // วัดจริง: ร้านที่กรอกทุกวันตั้งแต่ ม.ค. 2567 แต่เดือนก่อนบังเอิญเท่าทุนพอดี
+            // ถูกป้ายว่า **"ใหม่"** พร้อม tooltip "ไม่มีข้อมูลเดือนก่อน" ซึ่งไม่จริงทั้งคู่
+            // (`sumProfitByShopId` คืนแผนที่ที่ *ไม่มีคีย์* เมื่อไม่มีแถวเลย จึงแยกได้)
+            $rows[$index]['prev_has_data'] = array_key_exists($shopId, $previousProfitByShopId);
             $rows[$index]['profit_change_percent'] = abs($previousProfit) > 0.00001
                 ? round(($change / abs($previousProfit)) * 100, 1)
                 : null;

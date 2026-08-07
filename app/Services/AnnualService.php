@@ -87,6 +87,7 @@ class AnnualService
         // จนกลายเป็น 0.0% เฉพาะวันสุดท้ายของเดือนเท่านั้น
         // (`comparison_range_end()` หดวันตัดให้พอดีเดือนสั้น เช่น 31 มี.ค. → ก.พ.)
         $previousTotalsByMonthKey = [];
+        $previousYearReadFailed = false;
         if ($lastMonth > 0) {
             $previousYear = $year - 1;
             $previousNotAfterDate = $notAfterDate === null
@@ -104,8 +105,14 @@ class AnnualService
                     $previousNotAfterDate
                 );
             } catch (Throwable $exception) {
+                // ⚠️⚠️ อ่านปีก่อนไม่สำเร็จ ≠ ปีก่อนไม่มีข้อมูล
+                //
+                // เดิมกลืน error แล้วปล่อยให้ผ่านไป หน้าเว็บจึงขึ้นว่า "ไม่มีข้อมูลปีก่อน"
+                // คู่กับ "ปีก่อนช่วงเดียวกัน ฿0" ทั้งที่ปีก่อนมีกำไรจริง ฿219,000
+                // และไม่มีแถบแดงเตือนอะไรเลย — ระบบพูดสิ่งที่ไม่จริงอย่างมั่นใจ
                 error_log('[annual] buildYearlySummary previous year failed: ' . $exception->getMessage());
                 $previousTotals = [];
+                $previousYearReadFailed = true;
             }
 
             foreach ($previousTotals as $row) {
@@ -298,6 +305,8 @@ class AnnualService
                     // ทั้งที่บรรทัดถัดลงมาบนจอเดียวกันพิมพ์ "ปีก่อนช่วงเดียวกัน ฿0"
                     // ซึ่งอ่านว่าเป็นตัวเลขจริง — สองบรรทัดขัดกันเอง
                     'prev_year_has_data' => $previousTotalsByMonthKey !== [],
+                    // อ่านไม่สำเร็จ — หน้าเว็บต้องบอกตามจริง ไม่ใช่บอกว่า "ไม่มีข้อมูล"
+                    'prev_year_unavailable' => $previousYearReadFailed,
                     'yoy_profit_change' => $profit - $previousYearProfit,
                     'yoy_profit_change_percent' => $this->calculateChangePercent($profit, $previousYearProfit),
                     'projection' => $this->calculateYearEndProjection(
@@ -548,7 +557,15 @@ class AnnualService
                         ? (float)$totals['total_revenue'] - (float)$totals['total_ad_cost']
                         : null,
                     'has_data' => $totals !== null,
-                    'is_unfinished' => $gridYear === $currentYear && $month === $currentMonth,
+                    // ⚠️⚠️ ต้องใช้กติกาเดียวกับการ์ด "เดือนกำไรดีสุด/แย่สุด" เป๊ะ ๆ
+                    // (`$isUnfinishedCurrentMonth` ด้านบน) — **รวมเงื่อนไข "ยังไม่ถึงวันสุดท้าย
+                    // ของเดือน" ด้วย** ไม่งั้นในวันสุดท้ายของเดือน (1 วัน/เดือน) การ์ดจะบอกว่า
+                    // เดือนนี้จบแล้วและยกให้เป็นเดือนกำไรดีสุด ขณะที่กริดใต้การ์ดบนจอเดียวกัน
+                    // ยังระบายเทาว่า "ยังตัดสินไม่ได้" · ซ้ำร้ายค่าสูงสุดที่ใช้ normalize
+                    // ก็ตัดเดือนที่กำไรสูงสุดของปีออกไป ทำให้ทุกช่องที่เหลือเข้มเกินจริง
+                    'is_unfinished' => $gridYear === $currentYear
+                        && $month === $currentMonth
+                        && (int)$todayObject->format('j') < (int)$todayObject->format('t'),
                 ];
             }
 
