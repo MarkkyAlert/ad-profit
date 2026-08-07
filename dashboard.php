@@ -11,7 +11,9 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 // ⚠️ ต้องซ่อม session ก่อนดึงข้อมูล — ร้านอาจถูกลบจากอุปกรณ์อื่นไปแล้ว
 // (เดิมการซ่อมอยู่ใน header.php ซึ่ง include ท้ายไฟล์ หน้าจึงขึ้น "ไม่มีสิทธิ์" + ฿0 หนึ่งครั้ง)
 $shopId = resolve_current_shop_id($pdo, $userId);
-$selectedRangeType = (string)($_GET['range'] ?? 'month_this');
+// ⚠️ ต้อง `trim()` ให้เหมือน `api/dashboard-data.php` — ไม่งั้น `?range=%20month_last`
+// ทำให้หน้าเว็บกับ endpoint ตอบคนละช่วงเวลาจาก URL เดียวกัน
+$selectedRangeType = isset($_GET['range']) ? trim((string)$_GET['range']) : 'month_this';
 $customStartDateInput = isset($_GET['start_date']) ? trim((string)$_GET['start_date']) : null;
 $customEndDateInput = isset($_GET['end_date']) ? trim((string)$_GET['end_date']) : null;
 $selectedMonthInput = isset($_GET['month']) ? trim((string)$_GET['month']) : null;

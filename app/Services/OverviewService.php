@@ -61,7 +61,10 @@ class OverviewService
             $comparisonRows = $this->attachProfitShare($comparisonRows, $totals);
             $comparisonRows = $this->attachProfitMomentum($comparisonRows, $shops, $monthDate, $today);
             $barChart = $this->buildBarChart($comparisonRows);
-            $sixMonthTrend = $this->buildSixMonthTrend($shops, $selectedMonth, $today);
+            // ⚠️ ส่ง `$comparisonRows` (เรียงตามกำไรแล้ว) ไม่ใช่ `$shops` (เรียงตาม id)
+            // ไม่งั้นลำดับเส้นในกราฟกับลำดับแถวในตารางบนจอเดียวกันไม่ตรงกัน
+            // และสีที่แต่ละร้านได้ก็ผูกกับลำดับนี้
+            $sixMonthTrend = $this->buildSixMonthTrend($comparisonRows, $selectedMonth, $today);
         } catch (Throwable $exception) {
             error_log('[overview] buildOverview failed: ' . $exception->getMessage());
             return [
@@ -280,6 +283,15 @@ class OverviewService
         $profits = [];
 
         foreach ($rows as $row) {
+            // ⚠️⚠️ ร้านที่ยังไม่เคยกรอกต้องไม่อยู่ในกราฟ — แท่ง/เส้นที่ ฿0 อ่านว่า
+            // "เท่าทุน" ซึ่งดูดีกว่าร้านที่ขาดทุนจริง · ตารางข้าง ๆ ดันร้านพวกนี้ไปท้าย
+            // อยู่แล้ว แต่กราฟใต้ตารางเดียวกันยังวาดให้อยู่บนสุด (วัดจริง: เส้นร้านที่
+            // ไม่เคยกรอกอยู่เหนือร้านที่ขาดทุนทั้ง 6 เดือน) · ร้านนั้นยังอยู่ในตารางอยู่
+            // ผู้ใช้จึงไม่ได้ขาดข้อมูลว่ามีร้านนี้อยู่
+            if ((int)($row['days_count'] ?? 0) <= 0) {
+                continue;
+            }
+
             $revenue = (float)($row['total_revenue'] ?? 0);
             $adCost = (float)($row['total_ad_cost'] ?? 0);
 
@@ -322,7 +334,9 @@ class OverviewService
 
         $shopIds = [];
         foreach ($shops as $shop) {
-            $shopId = (int)($shop['id'] ?? 0);
+            // ⚠️ รับได้ทั้งแถวร้านดิบ (`id`) และแถวตารางเปรียบเทียบ (`shop_id`)
+            // ตัวเรียกส่งแบบหลังมาเพื่อให้ลำดับเส้นตรงกับตาราง
+            $shopId = (int)($shop['id'] ?? $shop['shop_id'] ?? 0);
             if ($shopId > 0) {
                 $shopIds[] = $shopId;
             }
@@ -349,13 +363,20 @@ class OverviewService
         }
 
         foreach ($shops as $shop) {
-            $shopId = (int)($shop['id'] ?? 0);
+            $shopId = (int)($shop['id'] ?? $shop['shop_id'] ?? 0);
             if ($shopId <= 0) {
                 continue;
             }
 
-            $shopName = (string)($shop['name'] ?? 'ร้านค้า');
             $rowByMonth = $rowByShopIdAndMonth[$shopId] ?? [];
+
+            // ⚠️ ร้านที่ไม่มีข้อมูลเลยตลอด 6 เดือนต้องไม่มีเส้นในกราฟ — เส้น ฿0 แบน ๆ
+            // จะอยู่เหนือร้านที่ขาดทุนจริงตลอดทั้งกราฟ ซึ่งอ่านว่าเป็นร้านที่ดีที่สุด
+            if ($rowByMonth === []) {
+                continue;
+            }
+
+            $shopName = (string)($shop['name'] ?? $shop['shop_name'] ?? 'ร้านค้า');
 
             $revenues = [];
             $profits = [];

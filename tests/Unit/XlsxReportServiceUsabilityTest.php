@@ -194,7 +194,9 @@ final class XlsxReportServiceUsabilityTest extends TestCase
         $this->assertNotNull($sheet);
 
         $this->assertSame('ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)', $sheet->getCell('A15')->getValue());
-        $this->assertSame('21,000.00 – 29,000.00 (กลาง 25,000.00)', $sheet->getCell('A16')->getValue());
+        // ⚠️ ใช้ `formatMoney()` เหมือนหน้าเว็บ — เดิมเป็น `number_format()` ดิบ ทำให้ในแผ่น
+        // เดียวกันมี "฿219,000.00" (ช่องตัวเลข) อยู่ไม่กี่บรรทัดเหนือ "219,000.00" (ช่องข้อความ)
+        $this->assertSame('฿21,000 – ฿29,000 (กลาง ฿25,000)', $sheet->getCell('A16')->getValue());
         $this->assertStringContainsString('ไม่ใช่ตัวเลขที่เกิดขึ้นจริง', (string)$sheet->getCell('A17')->getValue());
         // ตัวเอียง = สัญญาณสายตาว่าไม่ใช่ข้อมูลจริง
         $this->assertTrue($sheet->getStyle('A16')->getFont()->getItalic());

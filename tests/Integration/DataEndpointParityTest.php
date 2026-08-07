@@ -190,9 +190,15 @@ final class DataEndpointParityTest extends ControllerTestCase
         $oneShop = $this->json('/api/overview-data.php', $session);
         $this->assertFalse((bool)($oneShop['data']['can_view'] ?? true), 'ร้านเดียวก็ดูภาพรวมได้');
 
+        // ⚠️ ดูไม่ได้ = ต้องไม่ส่งตาราง/กราฟมาด้วย — หน้าเว็บในสถานการณ์เดียวกัน
+        // ไม่เรนเดอร์อะไรเลย และ endpoint พี่น้อง (รายวัน/รายปี) ก็คืนแค่สถานะ
+        $this->assertArrayNotHasKey('comparison', (array)($oneShop['data'] ?? []), 'ส่งตารางมาทั้งที่ดูไม่ได้');
+        $this->assertArrayNotHasKey('charts', (array)($oneShop['data'] ?? []), 'ส่งกราฟมาทั้งที่ดูไม่ได้');
+
         $this->createShop($userId, 'ร้านที่สอง');
         $twoShops = $this->json('/api/overview-data.php', $session);
         $this->assertTrue((bool)($twoShops['data']['can_view'] ?? false), 'มี 2 ร้านแล้วยังดูภาพรวมไม่ได้');
+        $this->assertArrayHasKey('charts', (array)($twoShops['data'] ?? []), 'มี 2 ร้านแล้วแต่ไม่ส่งกราฟมา');
     }
 
     /** ⭐ endpoint ต้องไม่ปล่อยข้อมูลของร้านคนอื่นออกมา */

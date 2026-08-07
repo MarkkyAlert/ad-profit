@@ -412,8 +412,8 @@ class XlsxReportService
                     self::changeArrow($percentValue),
                     number_format(abs($percentValue), 1),
                     $change >= 0 ? '+' : '-',
-                    number_format(abs($change), 2),
-                    number_format((float)($summary['prev_year_profit'] ?? 0), 2)
+                    formatMoney(abs($change)),
+                    formatMoney((float)($summary['prev_year_profit'] ?? 0))
                 ),
                 DataType::TYPE_STRING
             );
@@ -690,6 +690,8 @@ class XlsxReportService
         $this->repeatHeaderOnPrint($sheet, $headerRow);
 
         $rowNumber = $headerRow + 1;
+        /** @var array<int,int> $unfinishedByRow แถว → หมายเลขคอลัมน์ของเดือนที่ยังไม่จบ */
+        $unfinishedByRow = [];
         foreach ($years as $gridYear) {
             $sheet->setCellValueExplicit(
                 'A' . $rowNumber,
@@ -707,6 +709,17 @@ class XlsxReportService
 
                 $column = Coordinate::stringFromColumnIndex($month + 1);
                 $sheet->setCellValue($column . $rowNumber, (float)$cell['profit']);
+
+                // ⚠️⚠️ เดือนที่ยังไม่จบต้องไม่ถูกระบายสีเหมือนเดือนที่จบแล้ว
+                //
+                // แท็บนี้มีไว้ตอบว่า "เดือนไหนขายดีซ้ำ ๆ ทุกปี" ผู้ใช้จึงอ่านคอลัมน์
+                // เดือนเดียวกันข้ามปี · ร้านที่ทำกำไรวันละเท่ากันเป๊ะทุกวันจะเห็น
+                // 31,000 → 31,000 → 7,000 (เดือนนี้เพิ่งผ่าน 7 จาก 31 วัน) แล้วสรุปว่า
+                // เดือนนี้ตกไป 77% · หน้าเว็บระบายเทาไว้แล้วเพื่อบอกว่า "ยังตัดสินไม่ได้"
+                // แต่ไฟล์ยังเขียวเหมือนอีกสองปีทุกอย่าง — กติกาลงถึงหน้าจอแต่ไม่ถึงไฟล์
+                if (($cell['is_unfinished'] ?? false) === true) {
+                    $unfinishedByRow[$rowNumber] = $month + 1;
+                }
             }
 
             $rowNumber++;
@@ -716,7 +729,36 @@ class XlsxReportService
         if ($lastRow >= $headerRow + 1) {
             $dataRange = 'B' . ($headerRow + 1) . ':M' . $lastRow;
             $sheet->getStyle($dataRange)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
-            $sheet->setConditionalStyles($dataRange, $this->buildProfitConditionals());
+            // ⚠️⚠️ กฎสีอัตโนมัติต้อง **ไม่ครอบ** ช่องของเดือนที่ยังไม่จบตั้งแต่แรก
+            // (ระบายทับทีหลังไม่ได้ผล — ใน Excel กฎอัตโนมัติชนะสีพื้นที่ตั้งไว้ตรง ๆ)
+            // จึงใส่กฎทีละแถว และแถวที่มีเดือนยังไม่จบก็ตัดช่องนั้นออกจากช่วง
+            $conditionals = $this->buildProfitConditionals();
+            for ($row = $headerRow + 1; $row <= $lastRow; $row++) {
+                $skipColumn = $unfinishedByRow[$row] ?? null;
+
+                if ($skipColumn === null) {
+                    $sheet->setConditionalStyles('B' . $row . ':M' . $row, $conditionals);
+                    continue;
+                }
+
+                if ($skipColumn > 2) {
+                    $sheet->setConditionalStyles(
+                        'B' . $row . ':' . Coordinate::stringFromColumnIndex($skipColumn - 1) . $row,
+                        $conditionals
+                    );
+                }
+                if ($skipColumn < 13) {
+                    $sheet->setConditionalStyles(
+                        Coordinate::stringFromColumnIndex($skipColumn + 1) . $row . ':M' . $row,
+                        $conditionals
+                    );
+                }
+
+                // สีกลาง ๆ เหมือนบนหน้าเว็บ = "ยังตัดสินไม่ได้" ไม่ใช่เขียว/แดง
+                $sheet->getStyle(Coordinate::stringFromColumnIndex($skipColumn) . $row)->getFill()
+                    ->setFillType(Fill::FILL_SOLID)
+                    ->getStartColor()->setARGB('FFE2E8F0');
+            }
             // ไม่ band — กริดนี้ใช้ conditional formatting ระบายสีอยู่แล้ว จะตีกัน
             $this->styleTableBody(
                 $sheet,
@@ -915,6 +957,44 @@ class XlsxReportService
             $rowNumber++;
         }
 
+        // ⚠️⚠️ แถวรวมท้ายตาราง — ตารางเดียวกันบนหน้าเว็บมี แต่ไฟล์ไม่มี
+        //
+        // ผลคือ **ยอดขายรวมและค่าแอดรวมของทุกร้านไม่ปรากฏที่ไหนเลยทั้งไฟล์**
+        // (บล็อกสรุปใต้ตารางมีแต่กำไรรวม) ทั้งที่หน้าเว็บแสดงครบทั้ง 5 ค่า
+        $totalRow = null;
+        if ($rowNumber > $headerRow + 1) {
+            $totalRow = $rowNumber;
+            $totalRevenue = 0.0;
+            $totalAdCost = 0.0;
+            $totalDays = 0;
+            foreach ($shops as $shop) {
+                $totalRevenue += (float)($shop['total_revenue'] ?? 0);
+                $totalAdCost += (float)($shop['total_ad_cost'] ?? 0);
+                $totalDays = max($totalDays, (int)($shop['days_count'] ?? 0));
+            }
+            $totalProfit = $totalRevenue - $totalAdCost;
+
+            $sheet->setCellValueExplicit('A' . $totalRow, 'รวมทุกร้าน', DataType::TYPE_STRING);
+            $sheet->setCellValue('B' . $totalRow, $totalRevenue);
+            $sheet->setCellValue('C' . $totalRow, $totalAdCost);
+            $sheet->setCellValue('D' . $totalRow, $totalProfit);
+            if ($totalAdCost > 0) {
+                $sheet->setCellValue('E' . $totalRow, round($totalRevenue / $totalAdCost, 2));
+            }
+            if ($totalRevenue > 0) {
+                $sheet->setCellValue('F' . $totalRow, round(($totalProfit / $totalRevenue) * 100, 1));
+            }
+            // ⚠️ สัดส่วนกำไรของแถวรวม = 100% ตามนิยาม ห้ามบวกค่าที่ปัดแล้วทีละแถว
+            // และ "วันที่กรอก" ใช้ค่ามากสุด ไม่ใช่ผลบวกข้ามร้าน (กติกาเดียวกับหน้าเว็บ)
+            $sheet->setCellValue('G' . $totalRow, 100.0);
+            $sheet->setCellValue('H' . $totalRow, $totalDays);
+            $sheet->getStyle('A' . $totalRow . ':H' . $totalRow)->getFont()->setBold(true);
+            if ($totalProfit < 0) {
+                $sheet->getStyle('D' . $totalRow)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);
+            }
+            $rowNumber++;
+        }
+
         $lastShopRow = $rowNumber - 1;
         if ($lastShopRow >= $headerRow + 1) {
             $sheet->getStyle('B' . ($headerRow + 1) . ':D' . $lastShopRow)
@@ -923,7 +1003,8 @@ class XlsxReportService
                 ->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
             $sheet->getStyle('F' . ($headerRow + 1) . ':G' . $lastShopRow)
                 ->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
-            $sheet->setAutoFilter('A' . $headerRow . ':H' . $lastShopRow);
+            // ⚠️ ตัวกรองต้องไม่คลุมแถวรวม ไม่งั้นกรองแล้วแถวรวมหายหรือถูกจัดเรียงปนไปด้วย
+            $sheet->setAutoFilter('A' . $headerRow . ':H' . ($totalRow !== null ? $totalRow - 1 : $lastShopRow));
             $this->styleTableBody($sheet, $headerRange, 'A' . ($headerRow + 1) . ':H' . $lastShopRow);
         }
 
@@ -1001,8 +1082,8 @@ class XlsxReportService
                 self::changeArrow($percentValue),
                 number_format(abs($percentValue), 1),
                 $change >= 0 ? '+' : '-',
-                number_format(abs($change), 2),
-                number_format((float)($summary['prev_year_profit'] ?? 0), 2)
+                formatMoney(abs($change)),
+                formatMoney((float)($summary['prev_year_profit'] ?? 0))
             ),
             DataType::TYPE_STRING
         );
@@ -1040,9 +1121,9 @@ class XlsxReportService
             'A' . $startRow,
             sprintf(
                 '%s – %s (กลาง %s)',
-                number_format((float)($projection['projection_low'] ?? 0), 2),
-                number_format((float)($projection['projection_high'] ?? 0), 2),
-                number_format((float)($projection['projection_mid'] ?? 0), 2)
+                formatMoney((float)($projection['projection_low'] ?? 0)),
+                formatMoney((float)($projection['projection_high'] ?? 0)),
+                formatMoney((float)($projection['projection_mid'] ?? 0))
             ),
             DataType::TYPE_STRING
         );
@@ -1106,7 +1187,10 @@ class XlsxReportService
 
         $label = self::THAI_MONTHS[(int)($month['month'] ?? 0)] ?? '–';
 
-        return sprintf('%s (%s)', $label, number_format((float)($month['profit'] ?? 0), 2));
+        // ⚠️ ช่องที่เป็น "ประโยค" ต้องใช้ `formatMoney()` เหมือนหน้าเว็บ — ไม่งั้นในแผ่น
+        // เดียวกันจะมี "฿219,000.00" (ช่องตัวเลข) อยู่ไม่กี่บรรทัดเหนือ "219,000.00"
+        // (ช่องข้อความ) ซึ่งไม่มี ฿ และบังคับ 2 ตำแหน่งเสมอ ต่างจากทั้งไฟล์และหน้าจอ
+        return sprintf('%s (%s)', $label, formatMoney((float)($month['profit'] ?? 0)));
     }
 
     /**

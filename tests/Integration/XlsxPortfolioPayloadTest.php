@@ -7,6 +7,7 @@ namespace Tests\Integration;
 require_once __DIR__ . '/IntegrationTestCase.php';
 
 use OverviewAnnualService;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use RecordRepository;
 use ShopRepository;
 use XlsxReportService;
@@ -18,6 +19,38 @@ use XlsxReportService;
 final class XlsxPortfolioPayloadTest extends IntegrationTestCase
 {
     private const TODAY = '2026-08-15';
+
+    /**
+     * หาแถวของบล็อกสรุปจาก "ป้ายกำกับ" ไม่ใช่เลขแถวตายตัว
+     *
+     * ⚠️ เดิมล็อก B7/B8/… ไว้ พอเพิ่มแถวรวมท้ายตาราง (ซึ่งหน้าเว็บมีอยู่แล้ว)
+     * บล็อกสรุปเลื่อนลง 1 แถว เทสต์แดงทั้งที่พฤติกรรมที่ผู้ใช้เห็นถูกต้อง
+     * — ล็อกเลขแถวคือล็อกการจัดวาง ไม่ใช่ล็อกสิ่งที่ต้องเป็นจริง
+     */
+    private function summaryCell(Worksheet $sheet, string $labelPrefix): mixed
+    {
+        foreach ($sheet->getRowIterator() as $row) {
+            $index = $row->getRowIndex();
+            $label = trim((string)$sheet->getCell('A' . $index)->getValue());
+            if ($label !== '' && str_starts_with($label, $labelPrefix)) {
+                return $sheet->getCell('B' . $index)->getValue();
+            }
+        }
+
+        return null;
+    }
+
+    /** แถวรวมท้ายตาราง — มีในไฟล์เหมือนที่หน้าเว็บมี */
+    private function totalsRowIndex(Worksheet $sheet): ?int
+    {
+        foreach ($sheet->getRowIterator() as $row) {
+            if (trim((string)$sheet->getCell('A' . $row->getRowIndex())->getValue()) === 'รวมทุกร้าน') {
+                return $row->getRowIndex();
+            }
+        }
+
+        return null;
+    }
 
     private function makeService(): OverviewAnnualService
     {
@@ -59,10 +92,10 @@ final class XlsxPortfolioPayloadTest extends IntegrationTestCase
         // สัดส่วนรวม = 100%
         $this->assertSame(100.0, $sheet->getCell('G4')->getValue() + $sheet->getCell('G5')->getValue());
 
-        $this->assertSame(5000.0, $sheet->getCell('B7')->getValue());
-        $this->assertSame('ม.ค. (6,000.00)', $sheet->getCell('B8')->getValue());
-        $this->assertSame('ก.ค. (-1,000.00)', $sheet->getCell('B9')->getValue());
-        $this->assertSame('ไม่มีข้อมูลปีก่อน', $sheet->getCell('B10')->getValue());
+        $this->assertSame(5000.0, $this->summaryCell($sheet, 'กำไรรวมทุกร้าน'));
+        $this->assertSame('ม.ค. (฿6,000)', $this->summaryCell($sheet, 'เดือนกำไรดีสุด'));
+        $this->assertSame('ก.ค. (฿-1,000)', $this->summaryCell($sheet, 'เดือนกำไรแย่สุด'));
+        $this->assertSame('ไม่มีข้อมูลปีก่อน', $this->summaryCell($sheet, 'เทียบ 2568'));
     }
 
     public function testYearOverYearReachesTheSheet(): void
@@ -80,8 +113,7 @@ final class XlsxPortfolioPayloadTest extends IntegrationTestCase
         $sheet = $this->renderSheet($data);
 
         // 2 ร้าน → ตารางจบแถว 5 · สรุปเริ่มแถว 7 → YoY อยู่แถว 10
-        $this->assertSame('เทียบ 2568 (ช่วงเดียวกัน)', $sheet->getCell('A10')->getValue());
-        $this->assertSame('↑100.0% (+2,000.00) · ปีก่อน 2,000.00', $sheet->getCell('B10')->getValue());
+        $this->assertSame('↑100.0% (+฿2,000) · ปีก่อน ฿2,000', $this->summaryCell($sheet, 'เทียบ 2568'));
     }
 
     public function testFutureMonthsAreExcludedFromThePortfolio(): void
@@ -98,7 +130,7 @@ final class XlsxPortfolioPayloadTest extends IntegrationTestCase
 
         $this->assertSame(2000.0, $sheet->getCell('D4')->getValue());
         $this->assertSame(0.0, $sheet->getCell('D5')->getValue());
-        $this->assertSame(2000.0, $sheet->getCell('B7')->getValue());
+        $this->assertSame(2000.0, $this->summaryCell($sheet, 'กำไรรวมทุกร้าน'));
     }
 
     public function testSingleShopUserCannotViewPortfolio(): void
@@ -133,8 +165,9 @@ final class XlsxPortfolioPayloadTest extends IntegrationTestCase
         $this->assertCount(2, $data['shops']);
         $this->assertSame('ร้าน A', $sheet->getCell('A4')->getValue());
         $this->assertSame('ร้าน B', $sheet->getCell('A5')->getValue());
-        $this->assertNull($sheet->getCell('A6')->getValue());
-        $this->assertSame(3000.0, $sheet->getCell('B7')->getValue());
+        // แถว 6 = แถวรวม (ไม่ใช่ร้านที่สาม) — ยืนยันว่ามีแค่ 2 ร้านจริง
+        $this->assertSame(6, $this->totalsRowIndex($sheet), 'มีแถวร้านเกินมา');
+        $this->assertSame(3000.0, $this->summaryCell($sheet, 'กำไรรวมทุกร้าน'));
     }
 
     /**

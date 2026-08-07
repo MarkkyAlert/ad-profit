@@ -266,12 +266,18 @@ class OverviewDailyService
         $revenues = [];
         $adCosts = [];
         $profits = [];
+        $complete = [];
 
         foreach ($dailyRows as $row) {
             $dates[] = (string)($row['record_date'] ?? '');
             $revenues[] = (float)($row['total_revenue'] ?? 0);
             $adCosts[] = (float)($row['total_ad_cost'] ?? 0);
             $profits[] = (float)($row['profit'] ?? 0);
+            // ⚠️ วันที่บางร้านยังไม่กรอกมียอดต่ำโดยธรรมชาติ — การ์ดสรุปตัดวันพวกนี้
+            // ออกจากค่าเฉลี่ย/วันดีสุด-แย่สุดแล้ว และหน้าเว็บก็เขียนกำกับว่า
+            // "ยอดรวมของวันเหล่านั้นเทียบกับวันอื่นตรง ๆ ไม่ได้" แต่กราฟยังวาดเทียบ
+            // ตรง ๆ โดยไม่มีเครื่องหมายอะไรเลย → ส่งธงไปให้กราฟทำเครื่องหมายได้
+            $complete[] = ($row['is_complete'] ?? true) === true;
         }
 
         return [
@@ -279,6 +285,7 @@ class OverviewDailyService
             'revenue' => $revenues,
             'ad_cost' => $adCosts,
             'profit' => $profits,
+            'is_complete' => $complete,
         ];
     }
 

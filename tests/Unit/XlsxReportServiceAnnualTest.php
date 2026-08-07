@@ -108,7 +108,7 @@ final class XlsxReportServiceAnnualTest extends TestCase
 
         $this->assertSame('เทียบ 2568 (ช่วงเดียวกัน)', $sheet->getCell('A7')->getValue());
         $this->assertSame(
-            'กำไร ↑375.0% (+7,500.00) · ปีก่อน 2,000.00',
+            'กำไร ↑375.0% (+฿7,500) · ปีก่อน ฿2,000',
             $sheet->getCell('A8')->getValue()
         );
         $this->assertSame('FF107C41', $sheet->getStyle('A8')->getFont()->getColor()->getARGB());
@@ -123,7 +123,7 @@ final class XlsxReportServiceAnnualTest extends TestCase
         ]));
 
         $this->assertSame(
-            'กำไร ↓52.5% (-10,500.00) · ปีก่อน 20,000.00',
+            'กำไร ↓52.5% (-฿10,500) · ปีก่อน ฿20,000',
             $sheet->getCell('A8')->getValue()
         );
         $this->assertSame('FFC00000', $sheet->getStyle('A8')->getFont()->getColor()->getARGB());
@@ -142,9 +142,9 @@ final class XlsxReportServiceAnnualTest extends TestCase
 
         $this->assertSame('เดือนที่โดดเด่น', $sheet->getCell('A10')->getValue());
         $this->assertSame('เดือนกำไรดีสุด', $sheet->getCell('A11')->getValue());
-        $this->assertSame('ม.ค. (7,000.00)', $sheet->getCell('C11')->getValue());
+        $this->assertSame('ม.ค. (฿7,000)', $sheet->getCell('C11')->getValue());
         $this->assertSame('เดือนกำไรแย่สุด', $sheet->getCell('A12')->getValue());
-        $this->assertSame('ก.ค. (-2,500.00)', $sheet->getCell('C12')->getValue());
+        $this->assertSame('ก.ค. (฿-2,500)', $sheet->getCell('C12')->getValue());
         $this->assertSame('เดือนที่มีข้อมูล', $sheet->getCell('A13')->getValue());
         $this->assertSame('4 เดือน · กำไร 3 / ขาดทุน 1', $sheet->getCell('C13')->getValue());
     }

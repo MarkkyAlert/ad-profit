@@ -162,6 +162,12 @@ if ($view === 'day') {
         'revenue' => array_values(array_map(static fn($v): float => (float)$v, (array)($chartRaw['revenue'] ?? []))),
         'ad_cost' => array_values(array_map(static fn($v): float => (float)$v, (array)($chartRaw['ad_cost'] ?? []))),
         'profit' => array_values(array_map(static fn($v): float => (float)$v, (array)($chartRaw['profit'] ?? []))),
+        // ⚠️ วันที่กรอกไม่ครบทุกร้านต้องมีเครื่องหมายบนกราฟ — ไม่งั้นกราฟวาดเทียบตรง ๆ
+        // ทั้งที่ข้อความเหนือกราฟบอกว่าเทียบไม่ได้ และการ์ดสรุปตัดวันพวกนั้นออกไปแล้ว
+        'is_complete' => array_values(array_map(
+            static fn($v): bool => $v === true,
+            (array)($chartRaw['is_complete'] ?? [])
+        )),
     ];
 } elseif ($view === 'year') {
     $overviewAnnualService = new OverviewAnnualService($recordRepository, $shopRepository);
@@ -683,6 +689,14 @@ require __DIR__ . '/includes/header.php';
                         return;
                     }
 
+                    // ⚠️ วันที่ยังกรอกไม่ครบทุกร้านวาดจาง ๆ — ยอดของวันนั้นต่ำโดยธรรมชาติ
+                    // เทียบกับวันอื่นตรง ๆ ไม่ได้ · การ์ดสรุปตัดวันพวกนี้ออกไปแล้ว และ
+                    // ข้อความเหนือกราฟก็เขียนว่าเทียบไม่ได้ เหลือกราฟตัวเดียวที่ยังทำอยู่
+                    const completeFlags = chartPayload.is_complete || [];
+                    const barColor = (solid) => (ctx) => (
+                        completeFlags[ctx.dataIndex] === false ? solid + '55' : solid
+                    );
+
                     new Chart(chartCanvas, {
                         type: 'bar',
                         data: {
@@ -690,17 +704,17 @@ require __DIR__ . '/includes/header.php';
                             datasets: [{
                                     label: 'ยอดขาย',
                                     data: chartPayload.revenue,
-                                    backgroundColor: '#f97316'
+                                    backgroundColor: barColor('#f97316')
                                 },
                                 {
                                     label: 'ค่าแอด',
                                     data: chartPayload.ad_cost,
-                                    backgroundColor: '#06b6d4'
+                                    backgroundColor: barColor('#06b6d4')
                                 },
                                 {
                                     label: 'กำไร',
                                     data: chartPayload.profit,
-                                    backgroundColor: '#22c55e'
+                                    backgroundColor: barColor('#22c55e')
                                 }
                             ]
                         },
@@ -1218,7 +1232,15 @@ require __DIR__ . '/includes/header.php';
 
                     const trendCanvas = document.getElementById('overview-trend-chart');
                     if (trendCanvas) {
-                        const colors = ['#f97316', '#06b6d4', '#22c55e', '#eab308', '#a78bfa', '#f43f5e'];
+                        // ⚠️ ระบบให้สร้างได้ถึง 20 ร้าน — มีแค่ 6 สีแล้ววนซ้ำ ทำให้ร้านที่ 7
+                        // ได้สีเดียวกับร้านที่ 1 เป๊ะ ๆ แยกไม่ออกว่าเส้นไหนของร้านไหน
+                        // (คำอธิบายสัญลักษณ์ก็เป็นสี่เหลี่ยมสีเดียวกันสองอัน)
+                        const colors = [
+                            '#f97316', '#06b6d4', '#22c55e', '#eab308', '#a78bfa', '#f43f5e',
+                            '#14b8a6', '#f472b6', '#84cc16', '#38bdf8', '#fb923c', '#c084fc',
+                            '#4ade80', '#facc15', '#2dd4bf', '#fb7185', '#60a5fa', '#a3e635',
+                            '#e879f9', '#fbbf24',
+                        ];
                         const datasets = (trendPayload.series || []).map((series, index) => {
                             const color = colors[index % colors.length];
 

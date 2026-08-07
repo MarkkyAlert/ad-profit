@@ -33,7 +33,21 @@ if (($result['success'] ?? false) !== true) {
     ], 422);
 }
 
+$data = (array)($result['data'] ?? []);
+
+// ⚠️ มุมรวมร้านดูได้เมื่อมี ≥ 2 ร้านเท่านั้น — คืนเฉพาะสถานะ ไม่ต้องส่งตาราง/กราฟ
+// ให้ตรงกับหน้าเว็บที่ไม่เรนเดอร์อะไรเลยในสถานการณ์นี้ และตรงกับ endpoint พี่น้อง
+// (`overview` มุมรายวัน/รายปี ตัดจบที่ชั้น service อยู่แล้ว ส่วนมุมเดือนตัดที่นี่
+//  เพราะ service ตัวนั้นถูกใช้ทดสอบตัวสร้างกราฟด้วยร้านเดียว)
+if (($data['can_view'] ?? false) !== true) {
+    $data = [
+        'selected_month' => $data['selected_month'] ?? $selectedMonth,
+        'shops_count' => (int)($data['shops_count'] ?? 0),
+        'can_view' => false,
+    ];
+}
+
 jsonResponse([
     'success' => true,
-    'data' => $result['data'] ?? [],
+    'data' => $data,
 ]);

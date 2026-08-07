@@ -232,8 +232,15 @@ final class XlsxReportServiceGoalSeasonTest extends TestCase
     {
         $sheet = $this->seasonSheet($this->seasonPayload());
 
-        $conditionals = $sheet->getConditionalStyles('B5:M7');
-        $this->assertCount(2, $conditionals);
+        // ⚠️ ตรวจ "ทุกแถวของกริดมีกฎสี" ไม่ใช่ "กฎอยู่ในช่วงชื่อนี้" — ช่วงถูกแบ่งเป็น
+        // รายแถว (และตัดช่องของเดือนที่ยังไม่จบออก) การล็อกชื่อช่วงจึงล็อกวิธีเขียนโค้ด
+        // ไม่ใช่พฤติกรรมที่ผู้ใช้เห็น
+        $conditionals = [];
+        foreach ([5, 6, 7] as $row) {
+            $rowConditionals = $sheet->getConditionalStyles('B' . $row . ':M' . $row);
+            $this->assertCount(2, $rowConditionals, 'แถวที่ ' . $row . ' ไม่มีกฎสี');
+            $conditionals = $rowConditionals;
+        }
 
         $operators = array_map(
             static fn(Conditional $c): string => $c->getOperatorType(),
@@ -276,7 +283,14 @@ final class XlsxReportServiceGoalSeasonTest extends TestCase
         unlink($file);
 
         // เขียนลงไฟล์จริงแล้วต้องมี conditionalFormatting — ไม่ใช่แค่อยู่ในหน่วยความจำ
-        $this->assertStringContainsString('<conditionalFormatting sqref="B5:M7">', $xml);
+        // ⚠️ ตรวจว่าทุกแถวของกริดถูกครอบ ไม่ใช่ล็อกว่าเป็นช่วงเดียวชื่อ B5:M7
+        foreach ([5, 6, 7] as $row) {
+            $this->assertStringContainsString(
+                '<conditionalFormatting sqref="B' . $row . ':M' . $row . '">',
+                $xml,
+                'แถวที่ ' . $row . ' ไม่มีกฎสีในไฟล์ที่บันทึกจริง'
+            );
+        }
         $this->assertStringContainsString('operator="greaterThan"', $xml);
         $this->assertStringContainsString('operator="lessThan"', $xml);
     }
@@ -322,6 +336,71 @@ final class XlsxReportServiceGoalSeasonTest extends TestCase
             $spreadsheet->getSheetNames()
         );
         $this->assertSame(0, $spreadsheet->getActiveSheetIndex());
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    /**
+     * ⭐⭐ แท็บ "ฤดูกาล" ต้องไม่ระบายสีเดือนที่ยังไม่จบ เหมือนที่หน้าเว็บไม่ระบาย
+     *
+     * ⚠️ แท็บนี้มีไว้ตอบว่า "เดือนไหนขายดีซ้ำ ๆ ทุกปี" ผู้ใช้จึงอ่านคอลัมน์เดือนเดียวกัน
+     * ข้ามปี · ร้านที่ทำกำไรวันละเท่ากันเป๊ะทุกวันจะเห็น 31,000 → 31,000 → 7,000
+     * (เดือนนี้เพิ่งผ่าน 7 จาก 31 วัน) แล้วสรุปว่าเดือนนี้ตกไป 77%
+     *
+     * ⚠️⚠️ คอมมิตที่แก้เรื่องนี้บนหน้าเว็บ (`annual.php` + `AnnualService`) **ไม่ได้แตะ
+     * ไฟล์ Excel** — กติกาลงถึงหน้าจอแต่ไม่ถึงไฟล์ที่ผู้ใช้ดาวน์โหลดไปเปิดดู
+     * เป็นรูปแบบเดิมที่เจอซ้ำ ๆ: กติกาถูกบังคับใช้แค่บางที่
+     */
+    public function testTheSeasonSheetDoesNotColourTheUnfinishedMonth(): void
+    {
+        $grid = [];
+        $years = [2024, 2025, 2026];
+        foreach ($years as $year) {
+            for ($month = 1; $month <= 12; $month++) {
+                $isFuture = $year === 2026 && $month > 8;
+                $isUnfinished = $year === 2026 && $month === 8;
+                $grid[$year][$month] = [
+                    'month' => $month,
+                    'profit' => $isFuture ? null : ($isUnfinished ? 7000.0 : 31000.0),
+                    'has_data' => !$isFuture,
+                    'is_unfinished' => $isUnfinished,
+                ];
+            }
+        }
+
+        $service = new XlsxReportService();
+        $spreadsheet = $service->buildDailySheet([
+            'rows' => [],
+            'totals' => ['revenue' => 0.0, 'ad_cost' => 0.0, 'profit' => 0.0, 'roas' => null],
+            'note_column_index' => 6,
+        ]);
+        $service->buildSeasonSheet($spreadsheet, ['years' => $years, 'grid' => $grid, 'comparable' => true]);
+
+        $sheet = $spreadsheet->getSheetByName('ฤดูกาล');
+        $this->assertNotNull($sheet);
+
+        // หาแถวของแต่ละปีจากคอลัมน์ A (ปี พ.ศ.)
+        $rowByYear = [];
+        foreach ($sheet->getRowIterator() as $row) {
+            $label = trim((string)$sheet->getCell('A' . $row->getRowIndex())->getValue());
+            if ($label !== '' && ctype_digit($label)) {
+                $rowByYear[(int)$label - 543] = $row->getRowIndex();
+            }
+        }
+
+        $this->assertArrayHasKey(2026, $rowByYear, 'ไม่มีแถวของปีปัจจุบันในแท็บฤดูกาล');
+
+        // คอลัมน์ I = เดือนที่ 8
+        $this->assertCount(
+            0,
+            $sheet->getConditionalStyles('I' . $rowByYear[2026]),
+            'ช่องของเดือนที่ยังไม่จบยังถูกระบายสีเทียบกับปีอื่น'
+        );
+        $this->assertNotCount(
+            0,
+            $sheet->getConditionalStyles('I' . $rowByYear[2025]),
+            'เดือนที่จบแล้วกลับไม่ถูกระบายสี — ตัดออกเกินไป'
+        );
 
         $spreadsheet->disconnectWorksheets();
     }

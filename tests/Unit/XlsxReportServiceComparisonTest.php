@@ -45,6 +45,27 @@ final class XlsxReportServiceComparisonTest extends TestCase
      * @param array{0:string,1:float,2:float,3:float|null,4:int} $row [ชื่อ, รายได้, ค่าแอด, สัดส่วน, วัน]
      * @return array<string,mixed>
      */
+    /**
+     * หาแถวของบล็อกสรุปจาก "ป้ายกำกับ" ไม่ใช่เลขแถวตายตัว
+     *
+     * ⚠️ เดิมเทสต์ล็อก A7/A8/… ไว้ พอเพิ่มแถวรวมท้ายตาราง บล็อกสรุปเลื่อนลง 1 แถว
+     * เทสต์ก็แดงทั้งที่พฤติกรรมที่ผู้ใช้เห็นถูกต้อง — ล็อกเลขแถวคือล็อกการจัดวาง
+     * ไม่ใช่ล็อกสิ่งที่ต้องเป็นจริง
+     */
+    private function summaryValue(Worksheet $sheet, string $label): ?string
+    {
+        foreach ($sheet->getRowIterator() as $row) {
+            $index = $row->getRowIndex();
+            if (trim((string)$sheet->getCell('A' . $index)->getValue()) === $label) {
+                $value = $sheet->getCell('B' . $index)->getValue();
+
+                return $value === null ? null : (string)$value;
+            }
+        }
+
+        return null;
+    }
+
     private function shop(array $row): array
     {
         $profit = $row[1] - $row[2];
@@ -167,14 +188,10 @@ final class XlsxReportServiceComparisonTest extends TestCase
         ));
 
         // ใต้ตาราง (2 ร้าน → แถว 4-5) เว้น 1 บรรทัด → เริ่มแถว 7
-        $this->assertSame('กำไรรวมทุกร้าน', $sheet->getCell('A7')->getValue());
-        $this->assertSame(5000.0, $sheet->getCell('B7')->getValue());
-        $this->assertSame('เดือนกำไรดีสุด', $sheet->getCell('A8')->getValue());
-        $this->assertSame('ม.ค. (6,000.00)', $sheet->getCell('B8')->getValue());
-        $this->assertSame('เดือนกำไรแย่สุด', $sheet->getCell('A9')->getValue());
-        $this->assertSame('ก.ค. (-1,000.00)', $sheet->getCell('B9')->getValue());
-        $this->assertSame('เทียบ 2568 (ช่วงเดียวกัน)', $sheet->getCell('A10')->getValue());
-        $this->assertSame('↑100.0% (+2,500.00) · ปีก่อน 2,500.00', $sheet->getCell('B10')->getValue());
+        $this->assertSame('5000', $this->summaryValue($sheet, 'กำไรรวมทุกร้าน'));
+        $this->assertSame('ม.ค. (฿6,000)', $this->summaryValue($sheet, 'เดือนกำไรดีสุด'));
+        $this->assertSame('ก.ค. (฿-1,000)', $this->summaryValue($sheet, 'เดือนกำไรแย่สุด'));
+        $this->assertSame('↑100.0% (+฿2,500) · ปีก่อน ฿2,500', $this->summaryValue($sheet, 'เทียบ 2568 (ช่วงเดียวกัน)'));
     }
 
     public function testNullYoySaysNoPreviousYear(): void
@@ -184,8 +201,7 @@ final class XlsxReportServiceComparisonTest extends TestCase
             ['profit' => 6000.0, 'yoy_profit_change_percent' => null]
         ));
 
-        $this->assertSame('เทียบ 2568 (ช่วงเดียวกัน)', $sheet->getCell('A9')->getValue());
-        $this->assertSame('ไม่มีข้อมูลปีก่อน', $sheet->getCell('B9')->getValue());
+        $this->assertSame('ไม่มีข้อมูลปีก่อน', $this->summaryValue($sheet, 'เทียบ 2568 (ช่วงเดียวกัน)'));
     }
 
     public function testNegativeYoyIsFlaggedRed(): void
@@ -200,8 +216,16 @@ final class XlsxReportServiceComparisonTest extends TestCase
             ]
         ));
 
-        $this->assertSame('↓75.0% (-1,500.00) · ปีก่อน 2,000.00', $sheet->getCell('B9')->getValue());
-        $this->assertSame('FFC00000', $sheet->getStyle('B9')->getFont()->getColor()->getARGB());
+        $this->assertSame('↓75.0% (-฿1,500) · ปีก่อน ฿2,000', $this->summaryValue($sheet, 'เทียบ 2568 (ช่วงเดียวกัน)'));
+        $yoyRow = null;
+        foreach ($sheet->getRowIterator() as $row) {
+            if (str_starts_with(trim((string)$sheet->getCell('A' . $row->getRowIndex())->getValue()), 'เทียบ 2568')) {
+                $yoyRow = $row->getRowIndex();
+                break;
+            }
+        }
+        $this->assertNotNull($yoyRow);
+        $this->assertSame('FFC00000', $sheet->getStyle('B' . $yoyRow)->getFont()->getColor()->getARGB());
     }
 
     public function testMissingBestWorstMonthShowsDash(): void
@@ -209,10 +233,8 @@ final class XlsxReportServiceComparisonTest extends TestCase
         $sheet = $this->buildSheet($this->payload([$this->shop(['ร้าน A', 0.0, 0.0, null, 0])]));
 
         // 1 ร้าน → ตารางจบแถว 4 · สรุปเริ่มแถว 6 (รวม/ดีสุด/แย่สุด/YoY)
-        $this->assertSame('เดือนกำไรดีสุด', $sheet->getCell('A7')->getValue());
-        $this->assertSame('–', $sheet->getCell('B7')->getValue());
-        $this->assertSame('เดือนกำไรแย่สุด', $sheet->getCell('A8')->getValue());
-        $this->assertSame('–', $sheet->getCell('B8')->getValue());
+        $this->assertSame('–', $this->summaryValue($sheet, 'เดือนกำไรดีสุด'));
+        $this->assertSame('–', $this->summaryValue($sheet, 'เดือนกำไรแย่สุด'));
     }
 
     public function testComparisonSheetHasNoChartAndSitsLast(): void
@@ -306,5 +328,38 @@ final class XlsxReportServiceComparisonTest extends TestCase
         $webDirection = format_change_badge($percent)['direction'];
         $webArrow = $webDirection > 0 ? '↑' : ($webDirection < 0 ? '↓' : '');
         $this->assertSame($webArrow, $arrow->invoke(null, $percent), 'Excel กับหน้าเว็บใช้กติกาคนละอย่าง');
+    }
+
+    /**
+     * ⭐⭐ แท็บ "เทียบร้าน" ต้องมีแถวรวม เหมือนตารางเดียวกันบนหน้าเว็บ
+     *
+     * ⚠️ เดิมไฟล์จบตารางที่แถวร้านสุดท้าย แล้วข้ามไปบล็อกสรุปที่มี **กำไรอย่างเดียว**
+     * → ยอดขายรวมและค่าแอดรวมของทุกร้าน **ไม่ปรากฏที่ไหนเลยทั้งไฟล์**
+     * (แท็บอื่นเป็นข้อมูลร้านเดียว) ทั้งที่หน้าเว็บแสดงครบทั้ง 5 ค่าในแถว tfoot
+     */
+    public function testTheShopSheetHasATotalsRow(): void
+    {
+        $sheet = $this->buildSheet($this->payload([
+            $this->shop(['ร้าน A', 500000.0, 400000.0, 57.1, 31]),
+            $this->shop(['ร้าน B', 376000.0, 300800.0, 42.9, 31]),
+        ]));
+
+        $totalRow = null;
+        foreach ($sheet->getRowIterator() as $row) {
+            if (trim((string)$sheet->getCell('A' . $row->getRowIndex())->getValue()) === 'รวมทุกร้าน') {
+                $totalRow = $row->getRowIndex();
+                break;
+            }
+        }
+
+        $this->assertNotNull($totalRow, 'ไม่มีแถวรวมในแท็บเทียบร้าน — ยอดขายรวม/ค่าแอดรวมหายไปทั้งไฟล์');
+        $this->assertSame(876000.0, (float)$sheet->getCell('B' . $totalRow)->getValue(), 'ยอดขายรวมผิด');
+        $this->assertSame(700800.0, (float)$sheet->getCell('C' . $totalRow)->getValue(), 'ค่าแอดรวมผิด');
+        $this->assertSame(175200.0, (float)$sheet->getCell('D' . $totalRow)->getValue(), 'กำไรรวมผิด');
+        // ⚠️ สัดส่วนกำไรของแถวรวม = 100% ตามนิยาม · "วันที่กรอก" ใช้ค่ามากสุด ไม่ใช่ผลบวก
+        $this->assertSame(100.0, (float)$sheet->getCell('G' . $totalRow)->getValue());
+        $this->assertSame(31, (int)$sheet->getCell('H' . $totalRow)->getValue(), 'วันที่กรอกของแถวรวมถูกบวกข้ามร้าน');
+
+        $sheet->getParent()->disconnectWorksheets();
     }
 }
