@@ -115,4 +115,88 @@ final class VerifyEmailPageTest extends ControllerTestCase
             'เปลี่ยนอีเมลแล้วต้องถูกเตะออกทุกเครื่อง — อีเมลคือช่องทางกู้บัญชี'
         );
     }
+
+    /** ข้อความที่ผู้ใช้อ่านได้จริง (ตัด CSS/สคริปต์ออกก่อน) */
+    private function visibleText(string $html): string
+    {
+        $withoutAssets = (string)preg_replace('#<(style|script|head)\b[^>]*>.*?</\1>#si', ' ', $html);
+
+        return trim((string)preg_replace('/\s+/u', ' ', strip_tags($withoutAssets)));
+    }
+
+    /**
+     * ⭐⭐ คำอธิบายใต้หัวข้อต้องตรงกับสาเหตุจริง ห้ามเป็นข้อความตายตัว
+     *
+     * ⚠️ เดิมทุกกรณีที่ล้มเหลวพิมพ์บรรทัดเดียวกันหมด:
+     *   "ลิงก์อาจหมดอายุหรือถูกใช้ไปแล้ว — … ขอลิงก์ใหม่ได้จากหน้าโปรไฟล์"
+     * ซึ่งขัดกับหัวข้อที่อยู่เหนือมันบนจอเดียวกัน:
+     *   หัวข้อ: "ลิงก์นี้เป็นของบัญชีอื่น … กรุณาออกจากระบบก่อนแล้วกดลิงก์อีกครั้ง"
+     *           (= ลิงก์ยังดีอยู่)
+     *   บรรทัดถัดมา: "ลิงก์อาจหมดอายุหรือถูกใช้ไปแล้ว" (= ลิงก์เสียแล้ว)
+     *
+     * ผู้ใช้ที่ทำตามบรรทัดล่างจะไปขอลิงก์ใหม่โดยไม่จำเป็น — และขอไม่ได้ด้วย
+     * เพราะเจ้าของลิงก์คือคนอื่น เป็นหลักเดียวกับ `extremes_not_comparable_text()`
+     * (ห้ามเดาสาเหตุแทนข้อมูล)
+     */
+    public function testTheHintDoesNotContradictTheHeadlineForALinkOfAnotherAccount(): void
+    {
+        $victimId = $this->createUser('victim@example.com', 'VictimPass123');
+        $shopId = $this->createShop($victimId);
+        $session = $this->startSession($victimId, $shopId);
+
+        $attackerId = $this->createUser('attacker@evil.test', 'AttackPass123');
+        $token = $this->makeToken($attackerId, 'attacker-new@evil.test');
+
+        $page = $this->visibleText($this->get('/verify-email.php?token=' . $token, $session)['body']);
+
+        $this->assertStringContainsString(
+            'ลิงก์นี้เป็นของบัญชีอื่น',
+            $page,
+            'ต้องบอกสาเหตุจริงว่าเป็นลิงก์ของบัญชีอื่น'
+        );
+        $this->assertStringNotContainsString(
+            'ลิงก์อาจหมดอายุหรือถูกใช้ไปแล้ว',
+            $page,
+            'บรรทัดนี้ขัดกับหัวข้อที่บอกว่าให้ออกจากระบบแล้วกดลิงก์เดิมอีกครั้ง'
+        );
+    }
+
+    /**
+     * ⭐ ปัญหาอยู่ที่ "อีเมลปลายทาง" ไม่ใช่ที่ลิงก์ — บอกให้ขอลิงก์ใหม่ = วนซ้ำที่เดิม
+     *
+     * ⚠️ ขอลิงก์ใหม่ไปที่อีเมลเดิมจะล้มเหมือนเดิมทุกครั้ง เพราะอีเมลนั้นมีคนใช้แล้ว
+     * สิ่งที่ต้องทำคือเปลี่ยน **อีเมลปลายทาง** ข้อความจึงต้องพาไปทางนั้น
+     */
+    public function testTheHintPointsAtTheDestinationAddressWhenItIsAlreadyTaken(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OwnerPass123');
+        $this->createUser('taken@example.com', 'OtherPass123');
+        $token = $this->makeToken($userId, 'taken@example.com');
+
+        $page = $this->visibleText($this->get('/verify-email.php?token=' . $token)['body']);
+
+        $this->assertStringContainsString('อีเมลนี้ถูกใช้งานแล้ว', $page);
+        $this->assertStringNotContainsString(
+            'ลิงก์อาจหมดอายุหรือถูกใช้ไปแล้ว',
+            $page,
+            'ลิงก์ไม่ได้หมดอายุ — ที่ใช้ไม่ได้คืออีเมลปลายทาง'
+        );
+    }
+
+    /** ⭐ ส่วนกรณีที่ลิงก์เสียจริง ๆ ข้อความเดิมถูกอยู่แล้ว ต้องไม่หายไป */
+    public function testAnExpiredLinkStillSaysTheLinkExpired(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OwnerPass123');
+        $token = $this->makeToken($userId, 'moved@example.com');
+        $this->pdo->exec('UPDATE email_change_requests SET expires_at = NOW() - INTERVAL 1 HOUR');
+
+        $page = $this->visibleText($this->get('/verify-email.php?token=' . $token)['body']);
+
+        $this->assertStringContainsString(
+            'ลิงก์อาจหมดอายุหรือถูกใช้ไปแล้ว',
+            $page,
+            'กรณีนี้ข้อความเดิมตรงกับความจริง ห้ามแก้ทิ้ง'
+        );
+        $this->assertStringContainsString('อีเมลของบัญชียังเป็นอันเดิม', $page);
+    }
 }

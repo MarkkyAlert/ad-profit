@@ -68,19 +68,26 @@ class ProfileService
      * ⚠️ เช็ก "อีเมลนี้ถูกใช้ไปแล้วหรือยัง" **ซ้ำอีกครั้งตรงนี้** — ระหว่างที่ลิงก์รออยู่
      * อาจมีคนอื่นสมัครด้วยอีเมลนั้นไปแล้ว
      *
-     * @return array{success:bool,error?:string,data?:array<string,mixed>}
+     * ⚠️ คืน `reason` มาด้วยเสมอเมื่อไม่สำเร็จ — หน้าเว็บใช้เลือกคำแนะนำที่ตรงสาเหตุ
+     * ห้ามให้หน้าเว็บเดาเอาจากข้อความไทย (ข้อความเปลี่ยนเมื่อไหร่ คำแนะนำจะเพี้ยนเงียบ ๆ)
+     *
+     * @return array{success:bool,error?:string,reason?:string,data?:array<string,mixed>}
      */
     public function confirmEmailChange(string $token): array
     {
         $token = trim($token);
         if ($token === '') {
-            return ['success' => false, 'error' => 'ลิงก์ยืนยันอีเมลไม่ถูกต้อง'];
+            return ['success' => false, 'error' => 'ลิงก์ยืนยันอีเมลไม่ถูกต้อง', 'reason' => 'bad_link'];
         }
 
         if ($this->emailChangeRepository === null || !$this->emailChangeRepository->isReady()) {
             error_log('[profile] confirmEmailChange called but the pending-request table is missing');
 
-            return ['success' => false, 'error' => 'ระบบเปลี่ยนอีเมลยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแล'];
+            return [
+                'success' => false,
+                'error' => 'ระบบเปลี่ยนอีเมลยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแล',
+                'reason' => 'system_unavailable',
+            ];
         }
 
         $startedTransaction = false;
@@ -110,7 +117,11 @@ class ProfileService
                     $this->db->rollBack();
                 }
 
-                return ['success' => false, 'error' => 'ลิงก์ยืนยันอีเมลไม่ถูกต้องหรือหมดอายุแล้ว'];
+                return [
+                    'success' => false,
+                    'error' => 'ลิงก์ยืนยันอีเมลไม่ถูกต้องหรือหมดอายุแล้ว',
+                    'reason' => 'bad_link',
+                ];
             }
 
             $userId = (int)$request['user_id'];
@@ -124,7 +135,11 @@ class ProfileService
                     $this->db->commit();
                 }
 
-                return ['success' => false, 'error' => 'อีเมลนี้ถูกใช้งานแล้ว กรุณาใช้อีเมลอื่น'];
+                return [
+                    'success' => false,
+                    'error' => 'อีเมลนี้ถูกใช้งานแล้ว กรุณาใช้อีเมลอื่น',
+                    'reason' => 'email_taken',
+                ];
             }
 
             if (!$this->userRepository->updateEmail($userId, $newEmail)) {
@@ -132,7 +147,7 @@ class ProfileService
                     $this->db->rollBack();
                 }
 
-                return ['success' => false, 'error' => 'ไม่สามารถเปลี่ยนอีเมลได้'];
+                return ['success' => false, 'error' => 'ไม่สามารถเปลี่ยนอีเมลได้', 'reason' => 'failed'];
             }
 
             // อีเมลคือช่องทางกู้บัญชี — เปลี่ยนแล้วต้องเตะ session อื่นเหมือนตอนเปลี่ยนรหัสผ่าน
@@ -156,7 +171,11 @@ class ProfileService
 
             error_log('[profile] confirmEmailChange failed: ' . $exception->getMessage());
 
-            return ['success' => false, 'error' => write_failure_message($exception, 'ไม่สามารถเปลี่ยนอีเมลได้')];
+            return [
+                'success' => false,
+                'error' => write_failure_message($exception, 'ไม่สามารถเปลี่ยนอีเมลได้'),
+                'reason' => 'failed',
+            ];
         }
     }
 

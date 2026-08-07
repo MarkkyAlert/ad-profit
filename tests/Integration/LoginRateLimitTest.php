@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration;
 
 require_once __DIR__ . '/IntegrationTestCase.php';
+require_once __DIR__ . '/StubEmailService.php';
 
 use AuthService;
 use PasswordResetRepository;
@@ -72,7 +73,10 @@ final class LoginRateLimitTest extends IntegrationTestCase
             $this->pdo,
             new UserRepository($this->pdo),
             new ShopRepository($this->pdo),
-            new PasswordResetRepository($this->pdo)
+            // ⚠️ ต้องมีระบบอีเมลที่พร้อมใช้งาน ไม่งั้น `requestPasswordReset()` ปฏิเสธ
+            // ตั้งแต่ต้นโดยไม่แตะตัวนับเลย แล้วเทสต์โควตาจะเขียวโดยไม่ได้ตรวจอะไร
+            new PasswordResetRepository($this->pdo),
+            new StubEmailService()
         );
     }
 

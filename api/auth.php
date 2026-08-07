@@ -118,16 +118,12 @@ if ($action === 'forgot_password') {
     // ⚠️ ใช้ `mail_ready` (สถานะของระบบ) ไม่ใช่ `email_sent` (ผลของคำขอนี้)
     // `email_sent` มีเฉพาะตอนอีเมลนั้นมีบัญชีจริง ถ้าเอามาตัดสินจะตอบคนละแบบ
     // ระหว่างอีเมลที่มีบัญชีกับไม่มี = บอกใบ้ว่าใครสมัครไว้แล้ว
+    //
+    // ⚠️ ตัวการตัดสินใจย้ายไปอยู่ที่ `AuthService::requestPasswordReset()` แล้ว
+    // เพราะต้องปฏิเสธ **ก่อน** จองโควตาและก่อนสร้าง token (ไม่งั้นลิงก์ใบเดิม
+    // ที่ผู้ใช้ถืออยู่ตายฟรี ๆ และผู้ใช้ถูกกัน 1 นาทีทั้งที่ทำตามที่หน้าจอบอก)
+    // ที่นี่เหลือหน้าที่เดียว: แปลงเป็นรหัสสถานะให้ตรงความหมาย
     $mailReady = ($result['mail_ready'] ?? true) !== false;
-    $devLinkShown = APP_ENV === 'development' && EXPOSE_DEV_RESET_LINK;
-
-    if (($result['success'] ?? false) === true && !$mailReady && !$devLinkShown) {
-        $respond([
-            'success' => false,
-            'error' => 'ระบบส่งอีเมลไม่สำเร็จในขณะนี้ กรุณาลองใหม่อีกครั้ง '
-                . 'หากยังไม่ได้รับอีเมล กรุณาติดต่อผู้ดูแลระบบ',
-        ], 503, '/forgot-password.php');
-    }
 
     if (($result['success'] ?? false) === true) {
         $responseData = [
@@ -144,10 +140,11 @@ if ($action === 'forgot_password') {
         $respond($responseData, 200, '/forgot-password.php?sent=1');
     }
 
+    // 503 = ระบบยังส่งอีเมลไม่ได้ (ปัญหาของเซิร์ฟเวอร์ ไม่ใช่ของสิ่งที่ผู้ใช้กรอก)
     $respond([
         'success' => false,
         'error' => (string)($result['error'] ?? 'ไม่สามารถขอรีเซ็ตรหัสผ่านได้'),
-    ], 422, '/forgot-password.php');
+    ], $mailReady ? 422 : 503, '/forgot-password.php');
 }
 
 if ($action === 'reset_password') {

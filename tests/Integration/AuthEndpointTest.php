@@ -29,6 +29,34 @@ final class AuthEndpointTest extends ControllerTestCase
         return $token;
     }
 
+    /**
+     * ⚠️⚠️ คลาสนี้ต้องรันบนเซิร์ฟเวอร์ที่ **ตั้งค่าอีเมลแล้ว**
+     *
+     * `requestPasswordReset()` ปฏิเสธตั้งแต่ต้นเมื่อระบบอีเมลยังไม่พร้อม (ก่อนจองโควตา
+     * ก่อนสร้าง token) ถ้าปล่อยให้ปิดอยู่ตามค่าปริยาย เทสต์ทุกตัวที่ตรวจเรื่อง token
+     * จะไปตกทางที่ถูกปฏิเสธ แล้วเขียวโดยไม่ได้ตรวจสิ่งที่ชื่อเทสต์บอก
+     *
+     * ชี้ไปโฮสต์ `.invalid` = "ตั้งค่าแล้วแต่ส่งไม่ออก" ซึ่งเป็นสภาพจริงบนเซิร์ฟเวอร์
+     * ตอน SMTP ล่มชั่วคราว · token ยังต้องถูกสร้างตามปกติ
+     *
+     * ส่วนกรณี "ยังไม่ได้ตั้งค่าเลย" อยู่ที่ `EmailSystemNotConfiguredTest`
+     * (คลาสนั้นตั้งใจไม่เขียนทับ env เพื่อให้ได้เซิร์ฟเวอร์ที่อีเมลปิดอยู่)
+     *
+     * @return array<string,string>
+     */
+    protected static function serverEnvironmentOverrides(): array
+    {
+        return [
+            'MAIL_ENABLED' => 'true',
+            'MAIL_HOST' => 'smtp.example.invalid',
+            'MAIL_USERNAME' => 'test@example.invalid',
+            'MAIL_PASSWORD' => 'not-a-real-password',
+            'MAIL_FROM_ADDRESS' => 'no-reply@example.invalid',
+            'MAIL_RETRY_ATTEMPTS' => '0',
+            'MAIL_TIMEOUT_SECONDS' => '5',
+        ];
+    }
+
     /** token ของหน้าเข้าสู่ระบบ (ใช้ส่งฟอร์มที่ยังไม่ได้ล็อกอิน) */
     private function guestCsrf(string $sessionId): string
     {
@@ -306,67 +334,6 @@ final class AuthEndpointTest extends ControllerTestCase
         $this->assertSame(
             $userId,
             (int)$this->pdo->query('SELECT user_id FROM password_reset_tokens LIMIT 1')->fetchColumn()
-        );
-    }
-
-    /**
-     * ⭐⭐ ส่งอีเมลไม่ได้ ต้องบอกผู้ใช้ ไม่ใช่บอกว่า "คุณจะได้รับลิงก์"
-     *
-     * ⚠️ ค่าปริยายคือ `MAIL_ENABLED=false` · ถ้าขึ้นเซิร์ฟเวอร์แล้วลืมตั้ง SMTP
-     * ผู้ใช้ที่ลืมรหัสผ่านจะได้กล่องเขียว "คุณจะได้รับลิงก์" แล้วนั่งรอลิงก์ที่ไม่มีวันมา
-     * = **กู้บัญชีไม่ได้เลย** และไม่มีใครรู้ทั้งผู้ใช้และเจ้าของระบบ
-     */
-    public function testForgotPasswordSaysSoWhenTheMailSystemIsDown(): void
-    {
-        $this->createUser('owner@example.com', 'OldPass123');
-        $guest = $this->startSession(0, 0);
-
-        $response = $this->postJson('/api/auth.php', [
-            'action' => 'forgot_password',
-            'csrf_token' => $this->guestCsrf($guest),
-            'email' => 'owner@example.com',
-        ], $guest);
-
-        $this->assertSame(503, $response['status'], 'บอกว่าสำเร็จทั้งที่ส่งอีเมลไม่ออก');
-        $this->assertStringContainsString('ส่งอีเมลไม่สำเร็จ', (string)$response['body']);
-    }
-
-    /**
-     * ⭐⭐ ข้อความ "ส่งอีเมลไม่ได้" ต้องเหมือนกันทั้งอีเมลที่มีบัญชีและไม่มี
-     *
-     * ⚠️ กับดักที่เจอตอนแก้: `email_sent` มีเฉพาะตอนอีเมลนั้นมีบัญชีจริง
-     * ถ้าเอามาตัดสิน คำขอของอีเมลที่มีบัญชีจะตอบ 503 ส่วนที่ไม่มีตอบ 200
-     * = **บอกใบ้ว่าใครสมัครไว้แล้ว** ซึ่งเป็นสิ่งที่ข้อความกลาง ๆ ตั้งใจปิดไว้
-     * จึงต้องตัดสินจาก "ระบบส่งอีเมลพร้อมไหม" ซึ่งเป็นสถานะของระบบ ไม่ใช่ของบัญชี
-     */
-    public function testTheMailFailureMessageDoesNotRevealWhetherTheAccountExists(): void
-    {
-        $this->createUser('owner@example.com', 'OldPass123');
-        $guest = $this->startSession(0, 0);
-
-        $known = $this->postJson('/api/auth.php', [
-            'action' => 'forgot_password',
-            'csrf_token' => $this->guestCsrf($guest),
-            'email' => 'owner@example.com',
-        ], $guest);
-
-        $this->pdo->exec('TRUNCATE TABLE auth_rate_limits');
-
-        $unknown = $this->postJson('/api/auth.php', [
-            'action' => 'forgot_password',
-            'csrf_token' => $this->guestCsrf($guest),
-            'email' => 'never-signed-up@example.com',
-        ], $guest);
-
-        $this->assertSame(
-            $known['status'],
-            $unknown['status'],
-            'ตอบคนละรหัสสถานะตอนระบบเมลล่ม = บอกใบ้ว่ามีบัญชีอยู่จริง'
-        );
-        $this->assertSame(
-            (string)$known['body'],
-            (string)$unknown['body'],
-            'ตอบคนละข้อความ = บอกใบ้ว่ามีบัญชีอยู่จริง'
         );
     }
 

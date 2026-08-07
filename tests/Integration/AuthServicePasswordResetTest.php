@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration;
 
 require_once __DIR__ . '/IntegrationTestCase.php';
+require_once __DIR__ . '/StubEmailService.php';
 
 use AuthService;
 use PasswordResetRepository;
@@ -15,7 +16,9 @@ use UserRepository;
  * ตาข่ายของ requestPasswordReset / resetPassword — ก่อนหน้านี้ไม่มีเทสต์เลยแม้แต่เคสเดียว
  * (มีแค่ฝั่ง repository ใน PasswordResetRepositoryTest)
  *
- * ส่ง emailService = null โดยตั้งใจ: ทดสอบตรรกะการออก/ใช้ token ไม่ใช่การส่งอีเมลจริง
+ * ⚠️ ต้องส่ง `StubEmailService` เข้าไป ไม่ใช่ null — `requestPasswordReset()` ปฏิเสธ
+ * ตั้งแต่ต้นเมื่อระบบอีเมลยังไม่พร้อม (ดูเหตุผลใน `StubEmailService`) การส่ง null
+ * จะทำให้ทุกเทสต์ในไฟล์นี้ไปตกทางที่ถูกปฏิเสธ แทนที่จะทดสอบตรรกะ token ตามชื่อ
  */
 final class AuthServicePasswordResetTest extends IntegrationTestCase
 {
@@ -42,7 +45,8 @@ final class AuthServicePasswordResetTest extends IntegrationTestCase
             $this->pdo,
             new UserRepository($this->pdo),
             new ShopRepository($this->pdo),
-            new PasswordResetRepository($this->pdo)
+            new PasswordResetRepository($this->pdo),
+            new StubEmailService()
         );
     }
 

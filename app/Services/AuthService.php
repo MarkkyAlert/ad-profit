@@ -345,6 +345,35 @@ class AuthService
 
         $normalizedEmail = normalize_email($email);
 
+        // ⚠️⚠️ "ระบบอีเมลยังไม่ได้ตั้งค่า" ต้องหยุดตรงนี้ **ก่อนจองโควตา** และก่อนสร้าง token
+        //
+        // กติกาเดียวกับ `ProfileService::changeEmail()` — แต่ทางนี้ตกสำรวจตอนเขียนกฎ
+        // (รูปแบบเดิมที่ CLAUDE.md เตือนไว้: เขียนกฎแล้วต้องไล่ตรวจว่าที่อื่นละเมิดอยู่ไหม)
+        //
+        // ⚠️ ทางนี้ร้ายแรงกว่าทางเปลี่ยนอีเมล เพราะคนที่มาถึงหน้านี้คือคนที่เข้าระบบไม่ได้แล้ว
+        // วัดจริงก่อนแก้ (เซิร์ฟเวอร์ที่ยังไม่ได้ตั้ง SMTP):
+        //   ครั้งที่ 1 → "ระบบส่งอีเมลไม่สำเร็จในขณะนี้ **กรุณาลองใหม่อีกครั้ง**"
+        //   ทำตามทันที → "ลองขอรีเซ็ตรหัสผ่านบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่"
+        // = สั่งให้ทำแล้วลงโทษที่ทำตาม · เพดานของทางนี้คือ 1 ครั้ง/นาที กินโควตา 1 คือหมดพอดี
+        // และ token ที่สร้างทิ้งไว้ยังทำให้ลิงก์ใบก่อนหน้า (ที่ผู้ใช้อาจถืออยู่) ตายฟรี ๆ
+        //
+        // ⚠️ เป็นสถานะของ **ระบบ** ไม่ใช่ของบัญชี จึงคำนวณก่อนดูว่าอีเมลนี้มีบัญชีไหม
+        // ตอบเหมือนกันทุกอีเมล = ไม่บอกใบ้ว่าใครสมัครไว้แล้ว
+        $mailReady = $this->emailService !== null && $this->emailService->isEnabled();
+        $devLinkShown = APP_ENV === 'development' && EXPOSE_DEV_RESET_LINK;
+
+        if (!$mailReady && !$devLinkShown) {
+            error_log('[auth][password_reset] mail is not configured (MAIL_ENABLED/credentials) '
+                . '- refusing before spending the user quota');
+
+            return [
+                'success' => false,
+                'error' => 'ระบบส่งอีเมลยังไม่พร้อมใช้งาน จึงยังส่งลิงก์รีเซ็ตรหัสผ่านให้ไม่ได้ '
+                    . 'กรุณาติดต่อผู้ดูแลระบบ',
+                'mail_ready' => false,
+            ];
+        }
+
         // เพดานแค่ 1 ครั้งต่อหน้าต่าง — ถ้าถามก่อนนับ คำขอที่มาพร้อมกันจะส่งอีเมล
         // ซ้ำหลายฉบับให้เจ้าของบัญชีเดียวกัน
         //
@@ -376,13 +405,6 @@ class AuthService
             ];
         }
 
-        // ⚠️⚠️ "ระบบส่งอีเมลพร้อมไหม" ต้องตอบเหมือนกันทุกคำขอ
-        //
-        // เป็นสถานะของ **ระบบ** ไม่ใช่ของบัญชี จึงคำนวณก่อนดูว่าอีเมลนี้มีบัญชีไหม
-        // ถ้าคำนวณทีหลัง คำขอของอีเมลที่มีบัญชีจะตอบคนละแบบกับที่ไม่มี
-        // = บอกใบ้ว่าอีเมลไหนสมัครไว้แล้ว ซึ่งเป็นสิ่งที่ข้อความกลาง ๆ ตั้งใจปิดไว้
-        $mailReady = $this->emailService !== null && $this->emailService->isEnabled();
-
         $user = $this->userRepository->findByEmail($normalizedEmail);
         if ($user === null) {
             return [
@@ -409,12 +431,10 @@ class AuthService
         $resetLink = app_url('/reset-password.php?token=' . $token);
         $emailSent = false;
 
-        // ไม่ได้ตั้ง SMTP = ระบบสร้าง token แล้วทิ้ง ผู้ใช้รอลิงก์ที่ไม่มีวันมา
-        // ต้องมีร่องรอยใน log เสมอ ไม่งั้นสืบไม่ได้ว่าทำไม "ลืมรหัสผ่าน" ใช้ไม่ได้
-        // (ข้อความที่ตอบผู้ใช้ยังเหมือนเดิมทุกกรณี เพื่อไม่ให้เดาได้ว่าอีเมลไหนมีในระบบ)
+        // มาถึงตรงนี้ได้ 2 ทาง: อีเมลพร้อมใช้งาน หรือโหมด dev ที่โชว์ลิงก์บนหน้าจอ
+        // (ทาง "ยังไม่ได้ตั้งค่า" ถูกปฏิเสธไปตั้งแต่ต้นแล้ว ก่อนกินโควตาและก่อนสร้าง token)
         if ($this->emailService === null || !$this->emailService->isEnabled()) {
-            error_log('[auth][password_reset] mail is not configured (MAIL_ENABLED/credentials) '
-                . '- reset link was generated but not delivered');
+            error_log('[auth][password_reset] reset link shown on screen (dev mode) - no mail was sent');
         } else {
             $emailSent = $this->emailService->sendPasswordResetEmail($normalizedEmail, $resetLink);
 
