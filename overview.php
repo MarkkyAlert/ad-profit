@@ -49,6 +49,8 @@ $overviewError = null;
 $comparisonRows = [];
 $totals = [];
 $hasOverviewData = false;
+// ⚠️ ประกาศก่อนเข้ากิ่ง — ส่วนเรนเดอร์อยู่นอกกิ่งที่กำหนดค่า (กติกาเดียวกับตัวแปรมุมรายปี)
+$shopsMissingFromCharts = 0;
 $barPayload = ['labels' => [], 'revenue' => [], 'ad_cost' => [], 'profit' => []];
 $trendPayload = ['labels' => [], 'months' => [], 'series' => []];
 
@@ -316,6 +318,16 @@ if ($view === 'day') {
         if ((int)($comparisonRow['days_count'] ?? 0) > 0) {
             $hasOverviewData = true;
             break;
+        }
+    }
+
+    // ⚠️ กราฟทั้งสองตัวข้ามร้านที่ยังไม่มีข้อมูล (กำไร ฿0 ของร้านที่ไม่ได้กรอกจะลอย
+    // อยู่เหนือร้านที่ขาดทุนจริง อ่านว่าเป็นร้านที่ดีที่สุด) — ถูกแล้ว **แต่หัวข้อกราฟ
+    // เขียนว่า "ทุกร้าน"** ผู้ใช้ที่มี 3 ร้านจึงเห็นตารางด้านบน 3 แถวคู่กับกราฟ 2 เส้น
+    // โดยไม่มีอะไรอธิบาย · นับไว้เพื่อบอกใต้หัวข้อ
+    foreach ($comparisonRows as $row) {
+        if ((int)($row['days_count'] ?? 0) <= 0) {
+            $shopsMissingFromCharts++;
         }
     }
 
@@ -1182,6 +1194,11 @@ require __DIR__ . '/includes/header.php';
                     <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งเปรียบเทียบระหว่างร้าน</h2>
                     <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
                 </div>
+                <?php if ($shopsMissingFromCharts > 0): ?>
+                    <p class="mb-3 text-xs text-slate-500">
+                        ไม่ได้วาด <?= e((string)$shopsMissingFromCharts) ?> ร้านที่ยังไม่มีข้อมูลในช่วงนี้ (อยู่ท้ายตารางด้านบน)
+                    </p>
+                <?php endif; ?>
                 <div class="h-80 w-full overflow-x-auto">
                     <div style="min-width: <?= max(100, count($barPayload['labels']) * 120) ?>px; height: 100%;">
                         <canvas id="overview-bar-chart"></canvas>
@@ -1191,9 +1208,14 @@ require __DIR__ . '/includes/header.php';
 
             <section class="section-card mt-6 p-5">
                 <div class="mb-3 flex items-center justify-between gap-2">
-                    <h2 class="text-lg font-semibold text-slate-100">กราฟเส้นแนวโน้มทุกร้าน (6 เดือนย้อนหลัง)</h2>
+                    <h2 class="text-lg font-semibold text-slate-100">กราฟเส้นแนวโน้มรายร้าน (6 เดือนย้อนหลัง)</h2>
                     <span class="text-xs text-slate-400">เส้นแต่ละร้าน = กำไรรายเดือน</span>
                 </div>
+                <?php if ($shopsMissingFromCharts > 0): ?>
+                    <p class="mb-3 text-xs text-slate-500">
+                        ไม่ได้วาด <?= e((string)$shopsMissingFromCharts) ?> ร้านที่ยังไม่มีข้อมูลในช่วงนี้ (อยู่ท้ายตารางด้านบน)
+                    </p>
+                <?php endif; ?>
                 <div class="h-80">
                     <canvas id="overview-trend-chart"></canvas>
                 </div>
