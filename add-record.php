@@ -588,6 +588,25 @@ require __DIR__ . '/includes/header.php';
             const adCostInput = row.querySelector('input[name="ad_cost[]"]');
             const noteInput = row.querySelector('input[name="note[]"]');
 
+            // ⚠️⚠️⚠️ ค่าที่ **ระบบเติมให้ของวันเก่า** ต้องถูกล้างก่อนโหลดวันใหม่
+            //
+            // เดิมไม่ล้าง แล้วด่าน "กรอกครบ 3 ช่องแล้วให้ออกทันที" ด้านล่างก็ทำงานพอดี
+            // เพราะการเติมของวันเก่าทำให้ครบทั้ง 3 ช่องเสมอ → เปลี่ยนวันแล้วไม่มีอะไรเกิดขึ้น
+            //
+            // วัดจริงจนถึงฐานข้อมูล (เลือกผิดเป็น 1 ส.ค. แล้วรู้ตัวแก้เป็น 3 ส.ค. แล้วกดบันทึก):
+            //   บนจอ  : วันที่ 3 ส.ค. · ยอด 5,000 / 2,000 · โน้ต "โน้ตเดิมวันที่ 1"
+            //   ข้อความ: "วันที่ **2026-08-01** มีข้อมูลอยู่แล้ว …" (ชี้วันเก่าที่ไม่ได้เลือกแล้ว)
+            //   ผลลัพธ์: 3 ส.ค. จากเดิม 4,000 / 3,000 / ไม่มีโน้ต **ถูกทับด้วยข้อมูลของ 1 ส.ค.**
+            //
+            // ธง `data-prefilled` แยก "ค่าที่ระบบเติม" ออกจาก "ค่าที่ผู้ใช้พิมพ์เอง"
+            // ผู้ใช้แตะช่องไหนเมื่อไหร่ ธงของช่องนั้นหลุดทันที (ดูตัวฟัง `input` ด้านล่าง)
+            [revenueInput, adCostInput, noteInput].forEach((field) => {
+                if (field && field.dataset.prefilled === '1') {
+                    field.value = '';
+                    delete field.dataset.prefilled;
+                }
+            });
+
             // ⚠️⚠️ เดิมออกทันทีเมื่อมีช่องไหนกรอกไว้แล้ว ผลคือคนที่พิมพ์ยอดก่อนแล้วค่อย
             // เลือกวันที่ (ท่าที่ใช้จริงบ่อย) **ไม่เคยได้โน้ตเดิมกลับมาเลย** แล้วการบันทึก
             // ซึ่งเขียนทับทุกช่อง ก็ลบโน้ตของวันนั้นทิ้งพร้อมข้อความว่า "บันทึกเรียบร้อยแล้ว"
@@ -641,14 +660,17 @@ require __DIR__ . '/includes/header.php';
                 let filledAnything = false;
                 if (revenueInput && revenueInput.value === '' && day.revenue !== null) {
                     revenueInput.value = String(day.revenue);
+                    revenueInput.dataset.prefilled = '1';
                     filledAnything = true;
                 }
                 if (adCostInput && adCostInput.value === '' && day.ad_cost !== null) {
                     adCostInput.value = String(day.ad_cost);
+                    adCostInput.dataset.prefilled = '1';
                     filledAnything = true;
                 }
                 if (noteInput && noteInput.value === '' && (day.note || '') !== '') {
                     noteInput.value = day.note;
+                    noteInput.dataset.prefilled = '1';
                     filledAnything = true;
                 }
 
@@ -664,6 +686,15 @@ require __DIR__ . '/includes/header.php';
                 const failedFlag = row.querySelector('input[name="note_checked[]"]');
                 if (failedFlag) { failedFlag.value = ''; }
                 showBulkNotice('โหลดข้อมูลเดิมของวันที่ ' + value + ' ไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก');
+            }
+        });
+
+        // ผู้ใช้พิมพ์เองเมื่อไหร่ ค่านั้นเลิกเป็น "ค่าที่ระบบเติม" ทันที
+        // (เปลี่ยนวันแล้วจะได้ไม่ถูกล้างทิ้ง — ตัวล้างด้านบนแตะเฉพาะของที่ระบบเติม)
+        tbody.addEventListener('input', (event) => {
+            const field = event.target;
+            if (field && field.dataset && field.dataset.prefilled === '1') {
+                delete field.dataset.prefilled;
             }
         });
 
