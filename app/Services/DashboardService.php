@@ -486,9 +486,15 @@ class DashboardService
             $shopId,
             $startMonth,
             $endMonth,
-            // ⚠️ แท่งสุดท้ายของกราฟคือเดือนนี้ ต้องตัดวันเหมือนการ์ดสรุปที่อยู่เหนือมัน
-            // ไม่งั้นการ์ดขึ้น ฿4,000 แต่แท่งในกราฟบนจอเดียวกันสูง ฿10,000
-            $endDate->format('Y-m-d')
+            // ⚠️⚠️ ตัดที่ **วันนี้** ไม่ใช่ปลายช่วงที่ผู้ใช้เลือก
+            //
+            // แต่ละแท่งแทน "ทั้งเดือน" มีแต่เดือนปัจจุบันที่ควรถูกตัด (ให้ตรงกับการ์ดสรุป
+            // ที่อยู่เหนือกราฟ) · เดิมส่งปลายช่วงที่เลือกมาตัด ซึ่งไปโดนแท่งที่ควรเต็ม:
+            //   · เลือก "สัปดาห์ก่อน" (จบ 2 ส.ค.) → แท่ง ส.ค. เหลือ ฿2,000 แทน ฿7,000
+            //   · เลือกช่วงเอง 1–10 มี.ค. → แท่ง มี.ค. เหลือ ฿10,000 แทน ฿31,000
+            // ร้านที่ทำกำไรวันละเท่ากันเป๊ะทุกวันจึงเห็นเส้นดิ่งลง 2 ใน 3 ในเดือนสุดท้าย
+            // และกดสลับตัวเลือกช่วงเวลาเฉย ๆ แท่งเดือนเดียวกันก็เปลี่ยนค่า
+            $todayObject->format('Y-m-d')
         );
         $mappedRows = [];
 
@@ -530,7 +536,10 @@ class DashboardService
      * คำนวณ "pace" ของเป้าหมาย — ต้องได้อีกวันละเท่าไรถึงจะถึงเป้า
      *
      * เป็น pure function (ไม่แตะ repository) รับตัวเลขที่คำนวณมาแล้วเข้ามาล้วน
-     * days_remaining นับ **รวมวันนี้** สำหรับเดือนปัจจุบัน
+     *
+     * ⚠️⚠️ `days_remaining` = "วันที่ยังหาเงินเพิ่มได้" ซึ่งขึ้นกับว่า **วันนี้กรอกไปแล้วหรือยัง**
+     * เพราะยอดของวันนี้ถ้ากรอกแล้วจะอยู่ใน `$actualProfit` เรียบร้อย จะเอามานับเป็น
+     * "วันที่เหลือ" อีกไม่ได้ ไม่งั้นนับซ้ำ 1 วัน
      *
      * @param string|null $today รูปแบบ Y-m-d — seam สำหรับเทสต์
      */
@@ -540,7 +549,8 @@ class DashboardService
         ?float $targetProfit,
         float $actualProfit,
         string $goalMonth,
-        ?string $today = null
+        ?string $today = null,
+        bool $todayAlreadyRecorded = false
     ): array {
         $default = [
             'pace_applicable' => false,
@@ -581,8 +591,16 @@ class DashboardService
 
         if ($goalMonth === $currentMonth) {
             $monthStatus = 'current';
-            // รวมวันนี้ด้วย เช่น วันสิ้นเดือน → เหลือ 1 วัน
-            $daysRemaining = $daysInMonth - (int)$todayObject->format('j') + 1;
+            // ⚠️⚠️ วันนี้กรอกแล้ว = ยอดของวันนี้อยู่ใน actual แล้ว ห้ามนับเป็นวันที่เหลืออีก
+            //
+            // วัดจริงตอนนับซ้ำ: เป้ากำไรเดือน ส.ค. ฿100,000 · กรอกครบ 1–7 ส.ค. ได้ ฿7,000
+            // หน้าจอแนะนำ "เหลือ 25 วัน · ต้องได้อีกวันละ ฿3,720"
+            // ทำตามเป๊ะ ๆ: 7,000 + (3,720 × 24 วันที่เหลือจริง) = ฿96,280 — ขาดอีกหนึ่งวันพอดี
+            // ตัวเลขที่ถูกคือ 93,000 ÷ 24 = ฿3,875
+            //
+            // ถ้ายังไม่กรอกวันนี้ วันนี้ยังหาเงินได้อยู่ จึงนับรวม (วันสิ้นเดือน → เหลือ 1 วัน)
+            $daysRemaining = $daysInMonth - (int)$todayObject->format('j')
+                + ($todayAlreadyRecorded ? 0 : 1);
         } else {
             $monthStatus = 'upcoming';
             $daysRemaining = $daysInMonth;
@@ -691,13 +709,26 @@ class DashboardService
         $isAchieved = !empty($configuredReached) && !in_array(false, $configuredReached, true);
 
         // pace คำนวณจากตัวเลขที่มีอยู่แล้ว — ไม่ fetch ซ้ำ
+        // ⚠️ วันนี้กรอกไปแล้วหรือยัง — ตัวชี้ขาดว่า "วันที่เหลือ" ต้องนับวันนี้ด้วยไหม
+        $todayIso = (resolve_comparison_cutoff_day($goalMonth, $today) === null)
+            ? ''
+            : comparison_range_end($goalMonth, resolve_comparison_cutoff_day($goalMonth, $today));
+        $todayAlreadyRecorded = false;
+        foreach ($monthRecords as $record) {
+            if ((string)($record['record_date'] ?? '') === $todayIso) {
+                $todayAlreadyRecorded = true;
+                break;
+            }
+        }
+
         $pace = $this->calculateGoalPace(
             $targetRevenue,
             $actualRevenue,
             $targetProfit,
             $actualProfit,
             $goalMonth,
-            $today
+            $today,
+            $todayAlreadyRecorded
         );
 
         return array_merge([

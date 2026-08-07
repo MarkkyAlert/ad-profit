@@ -251,4 +251,54 @@ final class OverviewDailyServiceAnalysisTest extends IntegrationTestCase
         $this->assertSame(2, $byDate['2026-06-02']['shops_tracked'] ?? null);
         $this->assertFalse($byDate['2026-06-02']['is_complete'], 'วันที่ขาดร้านหนึ่งไปกลับนับว่าครบ');
     }
+
+    /**
+     * ⭐⭐ วันที่ **ไม่มีใครกรอกเลย** ต้องถูกนับด้วย ไม่ใช่หายไปเฉย ๆ แล้วบอกว่า "ครบทุกวัน"
+     *
+     * ⚠️ query คืนเฉพาะวันที่มี record วันที่ไม่มีใครกรอกจึงไม่โผล่เป็นแถวในตาราง
+     * และไม่เคยถูกนับว่า "ไม่ครบ" → แถวรวมเขียนว่า "ครบทุกวัน"
+     *
+     * วัดจริง: 2 ร้านกรอกครบทั้งคู่แค่ 1–3 มิ.ย. แล้วหยุด (4 มิ.ย. เป็นต้นไปไม่มีใครกรอก)
+     * แถวรวมบอก "ครบทุกวัน" ขณะที่แดชบอร์ดบนข้อมูลชุดเดียวกันขึ้นแถบเหลืองว่า
+     * "คุณไม่ได้กรอกข้อมูลมา N วันแล้ว" — สองหน้าพูดคนละเรื่องจากข้อมูลชุดเดียวกัน
+     */
+    public function testDaysNobodyRecordedAreCounted(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        foreach (['2026-06-01', '2026-06-02', '2026-06-03'] as $date) {
+            $this->createRecord($shopA, $date, 1000.0, 200.0);
+            $this->createRecord($shopB, $date, 1000.0, 200.0);
+        }
+
+        // เดือน มิ.ย. จบไปแล้ว (today ปักไว้หลังจากนั้น) → ผ่านไปทั้ง 30 วัน กรอกแค่ 3
+        $summary = $this->makeService()->buildDailyOverview($userId, self::MONTH, '2026-08-07')['data']['summary'];
+
+        $this->assertSame(0, $summary['incomplete_days'], 'วันที่กรอกไว้ครบทั้งสองร้านอยู่แล้ว');
+        $this->assertSame(
+            27,
+            $summary['missing_days'] ?? -1,
+            'วันที่ไม่มีใครกรอกเลยหายไปจากการนับ แถวรวมจึงบอกว่า "ครบทุกวัน"'
+        );
+    }
+
+    /** กรอกครบทุกวันจริง ๆ ต้องไม่มีวันที่ขาด */
+    public function testNoMissingDaysWhenEveryElapsedDayIsRecorded(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        // ต้องมี ≥ 2 ร้าน ไม่งั้น can_view เป็น false แล้วไม่มี summary ให้ตรวจ
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        for ($day = 1; $day <= 30; $day++) {
+            $this->createRecord($shopA, sprintf('2026-06-%02d', $day), 1000.0, 200.0);
+            $this->createRecord($shopB, sprintf('2026-06-%02d', $day), 1000.0, 200.0);
+        }
+
+        $summary = $this->makeService()->buildDailyOverview($userId, self::MONTH, '2026-08-07')['data']['summary'];
+
+        $this->assertSame(0, $summary['missing_days'] ?? -1, 'กรอกครบทุกวันแต่ยังบอกว่ามีวันขาด');
+    }
 }

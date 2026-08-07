@@ -297,7 +297,8 @@ require __DIR__ . '/includes/header.php';
 
     <?php if (!$hasAnnualData && $annualError === null): ?>
         <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
-            ปีนี้ยังไม่มีข้อมูลยอดขาย ลองเริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
+            <?php /* ⚠️ ห้ามเขียน "ปีนี้" ตายตัว — ผู้ใช้เลือกดูปีอื่นได้ */ ?>
+            ปี <?= e((string)($selectedYear + 543)) ?> ยังไม่มีข้อมูลยอดขาย ลองเริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
         </div>
     <?php endif; ?>
 </section>

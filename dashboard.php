@@ -572,14 +572,41 @@ require __DIR__ . '/includes/header.php';
         <p class="mt-1 text-lg font-semibold text-slate-100"><?= e(formatPercent(isset($statistics['profit_margin']) ? (is_null($statistics['profit_margin']) ? null : (float)$statistics['profit_margin']) : null)) ?></p>
     </article>
 
+    <?php
+    // ⚠️⚠️ "ดีสุด" กับ "แย่สุด" ต้องเป็นคนละวันจริง ๆ ถึงจะมีความหมาย
+    //
+    // วัดจริงก่อนแก้ — ร้านใหม่กรอกวันแรกวันเดียว:
+    //   วันกำไรดีสุด   7 ส.ค. 2569 (฿1,000)   ← เขียว
+    //   วันกำไรแย่สุด  7 ส.ค. 2569 (฿1,000)   ← แดง
+    // วันเดียวกัน ตัวเลขเดียวกัน สีตรงข้ามกัน — และเป็นสิ่งแรกที่ผู้ใช้ใหม่เห็น
+    // เกิดเหมือนกันเมื่อทุกวันในช่วงกำไรเท่ากันหมด
+    //
+    // ตัวเลขจาก service ถูกต้องตามคณิตศาสตร์ (วันเดียวย่อมเป็นทั้งมากสุดและน้อยสุด)
+    // สิ่งที่ผิดคือการเอามาโชว์คู่กันเป็นขั้วตรงข้าม — ตารางกำไรตามวันในหน้าเดียวกัน
+    // มีตัวกันแบบนี้อยู่แล้ว (ต้องมี ≥ 2 ตัวอย่าง และไม่ไฮไลต์ถ้าดีสุด = แย่สุด)
+    $bestDayRow = isset($statistics['best_day']) && is_array($statistics['best_day']) ? $statistics['best_day'] : null;
+    $worstDayRow = isset($statistics['worst_day']) && is_array($statistics['worst_day']) ? $statistics['worst_day'] : null;
+    $dayExtremesComparable = $bestDayRow !== null
+        && $worstDayRow !== null
+        && (string)($bestDayRow['record_date'] ?? '') !== (string)($worstDayRow['record_date'] ?? '');
+    ?>
     <article class="stat-card s-best">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันกำไรดีสุด</p>
-        <p class="mt-1 text-sm font-semibold text-green-400"><?= e($formatDayMetric(isset($statistics['best_day']) && is_array($statistics['best_day']) ? $statistics['best_day'] : null)) ?></p>
+        <?php if ($dayExtremesComparable): ?>
+            <p class="mt-1 text-sm font-semibold text-green-400"><?= e($formatDayMetric($bestDayRow)) ?></p>
+        <?php else: ?>
+            <p class="mt-1 text-sm font-semibold text-slate-400">ยังเทียบไม่ได้</p>
+            <p class="text-xs text-slate-500">ต้องมีข้อมูลตั้งแต่ 2 วันขึ้นไปที่กำไรต่างกัน</p>
+        <?php endif; ?>
     </article>
 
     <article class="stat-card s-worst">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันกำไรแย่สุด</p>
-        <p class="mt-1 text-sm font-semibold text-red-400"><?= e($formatDayMetric(isset($statistics['worst_day']) && is_array($statistics['worst_day']) ? $statistics['worst_day'] : null)) ?></p>
+        <?php if ($dayExtremesComparable): ?>
+            <p class="mt-1 text-sm font-semibold text-red-400"><?= e($formatDayMetric($worstDayRow)) ?></p>
+        <?php else: ?>
+            <p class="mt-1 text-sm font-semibold text-slate-400">ยังเทียบไม่ได้</p>
+        <?php endif; ?>
     </article>
 </section>
 
@@ -753,7 +780,7 @@ require __DIR__ . '/includes/header.php';
                 <?php elseif ($weekdayComparable): ?>
                     <?php // มีค่าเฉลี่ยให้ดู แต่ยังน้อยเกินจะฟันธงว่าสูง/ต่ำกว่าปกติ ?>
                     <p class="text-xs text-slate-500">
-                        ยังมีวัน<?= e($weekdayName) ?>ไม่ถึง <?= e((string)RecordService::WEEKDAY_MIN_SAMPLE) ?> วันในเดือนนี้ — ยังสรุปแนวโน้มไม่ได้
+                        ยังมีวัน<?= e($weekdayName) ?>ไม่ถึง <?= e((string)RecordService::WEEKDAY_MIN_SAMPLE) ?> วันใน<?= e($weekdayMonthLabel) ?> — ยังสรุปแนวโน้มไม่ได้
                     </p>
                 <?php endif; ?>
                 <p class="text-xs text-slate-500">

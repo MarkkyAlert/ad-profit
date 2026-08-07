@@ -138,4 +138,51 @@ final class DashboardServiceSixMonthChartTest extends TestCase
         $this->assertSame('2026-05', end($months), 'ดูช่วงในอดีตแล้วกราฟกระโดดมาเดือนปัจจุบัน');
         $this->assertSame('2025-12', $months[0]);
     }
+
+    /**
+     * ⭐⭐ แต่ละแท่งแทน "ทั้งเดือน" — ปลายช่วงที่ผู้ใช้เลือกต้องไม่ไปตัดแท่งที่ควรเต็ม
+     *
+     * ⚠️ วัดจริงก่อนแก้ (ร้านทำกำไรวันละ ฿1,000 เท่ากันเป๊ะทุกวัน):
+     *   · เลือกช่วงเอง 1–10 มี.ค. → แท่ง มี.ค. เหลือ ฿10,000 แทนที่จะเป็น ฿31,000
+     *     เส้นดิ่งลง 2 ใน 3 ในเดือนสุดท้าย ทั้งที่ผลงานไม่เปลี่ยนเลย
+     *   · กดสลับ "สัปดาห์นี้" → "สัปดาห์ก่อน" เฉย ๆ แท่ง ส.ค. เปลี่ยนจาก ฿7,000 เป็น ฿2,000
+     */
+    public function testAPastMonthBarIsNotCutByTheSelectedRangeEnd(): void
+    {
+        $data = $this->makeService()
+            ->buildDashboard(1, 1, 'custom', '2026-03-01', '2026-03-10', null, self::TODAY)['data'];
+
+        $chart = $data['charts']['six_months'] ?? [];
+        $months = array_map('strval', (array)($chart['labels'] ?? $chart['months'] ?? []));
+        $profits = (array)($chart['profit'] ?? []);
+
+        $index = array_search('2026-03', $months, true);
+        $this->assertNotFalse($index, 'ไม่มีแท่งของเดือนที่เลือกในกราฟ');
+        $this->assertSame(
+            31 * self::PROFIT_PER_DAY,
+            (float)($profits[$index] ?? 0),
+            'แท่งของเดือนที่จบไปแล้วถูกตัดตามปลายช่วงที่ผู้ใช้เลือก แทนที่จะเป็นทั้งเดือน'
+        );
+    }
+
+    /** ⚠️ กดสลับช่วงเวลาเฉย ๆ แท่งของเดือนเดียวกันต้องไม่เปลี่ยนค่า */
+    public function testTheCurrentMonthBarIsTheSameWhicheverRangeIsSelected(): void
+    {
+        $service = $this->makeService();
+
+        $read = static function (array $data): float {
+            $chart = $data['charts']['six_months'] ?? [];
+            $months = array_map('strval', (array)($chart['labels'] ?? $chart['months'] ?? []));
+            $profits = (array)($chart['profit'] ?? []);
+            $index = array_search('2026-08', $months, true);
+
+            return $index === false ? -1.0 : (float)($profits[$index] ?? 0);
+        };
+
+        $thisWeek = $read($service->buildDashboard(1, 1, 'week_this', null, null, null, self::TODAY)['data']);
+        $lastWeek = $read($service->buildDashboard(1, 1, 'week_last', null, null, null, self::TODAY)['data']);
+
+        $this->assertSame(7 * self::PROFIT_PER_DAY, $thisWeek, 'แท่งเดือนนี้ไม่ได้ตัดที่วันนี้');
+        $this->assertSame($lastWeek, $thisWeek, 'กดสลับช่วงเวลาแล้วแท่งเดือนเดียวกันเปลี่ยนค่า');
+    }
 }

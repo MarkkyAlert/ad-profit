@@ -98,7 +98,14 @@ class OverviewDailyService
         }
 
         $dailyRows = $this->buildDailyRows($dailyTotals, $trackingSince);
-        $summary = $this->buildSummary($dailyRows, $shopsCount);
+        // ⚠️⚠️ วันที่ **ไม่มีใครกรอกเลย** ไม่โผล่เป็นแถวในตาราง (query คืนเฉพาะวันที่มี record)
+        // จึงไม่เคยถูกนับว่า "ไม่ครบ" → แถวรวมเขียนว่า "ครบทุกวัน"
+        //
+        // วัดจริง: 2 ร้านกรอกครบทั้งคู่แค่ 1–3 ส.ค. แล้วหยุด (4–7 ส.ค. ไม่มีข้อมูลของใครเลย)
+        // แถวรวมบอก "ครบทุกวัน" ขณะที่แดชบอร์ดของร้านเดียวกันบนข้อมูลชุดเดียวกัน
+        // ขึ้นแถบเหลืองว่า "คุณไม่ได้กรอกข้อมูลมา 4 วันแล้ว"
+        $elapsedDays = (int)(new DateTimeImmutable($endDate))->format('j');
+        $summary = $this->buildSummary($dailyRows, $shopsCount, $elapsedDays);
         $chart = $this->buildChart($dailyRows);
         $shopRows = $this->buildShopRows($shopTotals, $shopNameById);
 
@@ -182,7 +189,7 @@ class OverviewDailyService
         return $count;
     }
 
-    private function buildSummary(array $dailyRows, int $totalShops): array
+    private function buildSummary(array $dailyRows, int $totalShops, int $elapsedDays = 0): array
     {
         $totalRevenue = 0.0;
         $totalAdCost = 0.0;
@@ -248,6 +255,8 @@ class OverviewDailyService
             'worst_day' => $worstDay,
             'total_shops' => $totalShops,
             'incomplete_days' => $incompleteDays,
+            // วันที่ผ่านมาแล้วในเดือนนี้ แต่ไม่มีใครกรอกเลยสักร้าน (ไม่มีแถวในตาราง)
+            'missing_days' => max(0, $elapsedDays - $daysCount),
         ];
     }
 

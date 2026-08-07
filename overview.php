@@ -439,7 +439,10 @@ require __DIR__ . '/includes/header.php';
 
             <?php if (!$hasDailyData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
-                    เดือนนี้ยังไม่มีข้อมูลรายวันของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
+                    <?php /* ⚠️ ห้ามเขียน "เดือนนี้/ปีนี้" ตายตัว — ผู้ใช้เลือกดูเดือน/ปีอื่นได้
+     เดิมเปิด ?month=2025-05 แล้วขึ้นว่า "เดือนนี้ยังไม่มีข้อมูล" ทั้งที่ตัวเลือก
+     เดือนบนจอโชว์ 2025-05 อยู่ · แดชบอร์ดเขียนถูกอยู่แล้วว่า "ในช่วงเวลานี้" */ ?>
+                    <?= e(formatThaiMonth($selectedMonth)) ?> ยังไม่มีข้อมูลรายวันของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>
             <?php endif; ?>
 
@@ -493,7 +496,14 @@ require __DIR__ . '/includes/header.php';
                                 <?= e(formatThaiDate((string)($dayBest['record_date'] ?? ''))) ?>
                                 (<?= e(formatMoney($bestDayProfit)) ?>)
                             </span>
-                            <?php if ($dayWorst !== null): ?>
+                            <?php
+                            // ⚠️ "แย่สุด" ต้องเป็นคนละวันกับ "ดีสุด" ถึงจะมีความหมาย
+                            // ไม่งั้นวันเดียวกันตัวเลขเดียวกันจะโผล่สองที่ ที่หนึ่งเขียว ที่หนึ่งแดง
+                            // (เกิดตอนกรอกวันเดียว หรือทุกวันกำไรเท่ากันหมด)
+                            $dayExtremesComparable = $dayWorst !== null
+                                && (string)($dayWorst['record_date'] ?? '') !== (string)($dayBest['record_date'] ?? '');
+                            ?>
+                            <?php if ($dayExtremesComparable): ?>
                                 <span class="text-slate-600">·</span>
                                 แย่สุด
                                 <span class="font-bold <?= ($worstDayProfit ?? 0) >= 0 ? 'text-slate-300' : 'text-red-400' ?>">
@@ -566,8 +576,21 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-3 py-3 <?= $dayProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($dayProfit)) ?></td>
                                 <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($dayRoas)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($dayProfitMargin)) ?></td>
-                                <td class="px-3 py-3 <?= $dayIncompleteDays > 0 ? 'text-amber-400' : 'text-slate-300' ?>">
-                                    <?= e($dayIncompleteDays > 0 ? $dayIncompleteDays . ' วันไม่ครบ' : 'ครบทุกวัน') ?>
+                                <?php
+                                // ⚠️ "ครบทุกวัน" ต้องนับวันที่ไม่มีใครกรอกเลยด้วย — วันพวกนั้นไม่มีแถว
+                                // ในตาราง จึงไม่เคยถูกนับว่าไม่ครบ · เดิมเขียนว่า "ครบทุกวัน"
+                                // ขณะที่แดชบอร์ดบนข้อมูลชุดเดียวกันเตือนว่าไม่ได้กรอกมา 4 วันแล้ว
+                                $dayMissingDays = (int)($dailySummary['missing_days'] ?? 0);
+                                $dayGapParts = [];
+                                if ($dayIncompleteDays > 0) {
+                                    $dayGapParts[] = $dayIncompleteDays . ' วันไม่ครบ';
+                                }
+                                if ($dayMissingDays > 0) {
+                                    $dayGapParts[] = $dayMissingDays . ' วันยังไม่กรอก';
+                                }
+                                ?>
+                                <td class="px-3 py-3 <?= $dayGapParts !== [] ? 'text-amber-400' : 'text-slate-300' ?>">
+                                    <?= e($dayGapParts !== [] ? implode(' · ', $dayGapParts) : 'ครบทุกวัน') ?>
                                 </td>
                             </tr>
                         </tfoot>
@@ -724,7 +747,7 @@ require __DIR__ . '/includes/header.php';
 
             <?php if (!$hasYearlyData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
-                    ปีนี้ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
+                    ปี <?= e((string)($selectedYear + 543)) ?> ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>
             <?php endif; ?>
 
@@ -1008,7 +1031,7 @@ require __DIR__ . '/includes/header.php';
         <?php else: ?>
             <?php if (!$hasOverviewData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
-                    เดือนนี้ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
+                    <?= e(formatThaiMonth($selectedMonth)) ?> ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>
             <?php endif; ?>
 

@@ -188,4 +188,48 @@ final class DashboardServiceGoalPaceTest extends TestCase
         $this->assertFalse($result['pace_applicable']);
         $this->assertNull($result['days_remaining']);
     }
+
+    /**
+     * ⭐⭐ ทำตามคำแนะนำเป๊ะ ๆ แล้วต้องถึงเป้าพอดี ไม่ใช่ขาดไปหนึ่งวัน
+     *
+     * ⚠️ วัดจริงก่อนแก้: เป้ากำไรเดือน ส.ค. ฿100,000 · กรอกครบ 1–7 ส.ค. ได้ ฿7,000
+     * หน้าจอแนะนำ "เหลือ 25 วัน · ต้องได้อีกวันละ ฿3,720"
+     * ทำตามเป๊ะ ๆ: 7,000 + (3,720 × 24 วันที่เหลือจริง) = ฿96,280 — **ขาดอีก ฿3,720**
+     * (= หนึ่งวันพอดี) เพราะ 7 ส.ค. ถูกนับสองรอบ: อยู่ในยอดที่ทำได้แล้ว **และ**
+     * ยังถูกนับเป็น "วันที่เหลือ" อีก · ตัวเลขที่ถูกคือ 93,000 ÷ 24 = ฿3,875
+     */
+    public function testFollowingTheAdviceExactlyReachesTheGoal(): void
+    {
+        $target = 100000.0;
+        $actual = 7000.0;
+
+        $pace = (new DashboardService(
+            $this->createStub(RecordRepository::class),
+            $this->createStub(ShopRepository::class),
+            $this->createStub(GoalRepository::class)
+        ))->calculateGoalPace(null, 0.0, $target, $actual, '2026-08', '2026-08-07', true);
+
+        $days = (int)($pace['days_remaining'] ?? 0);
+        $perDay = (float)($pace['required_per_day_profit'] ?? 0);
+
+        $this->assertSame(24, $days, 'นับวันที่ 7 ส.ค. ซ้ำ ทั้งที่ยอดของวันนั้นอยู่ในยอดที่ทำได้แล้ว');
+        $this->assertEqualsWithDelta(
+            $target,
+            $actual + ($perDay * $days),
+            0.01,
+            'ทำตามคำแนะนำเป๊ะ ๆ แล้วยังไม่ถึงเป้า'
+        );
+    }
+
+    /** ⚠️ ยังไม่ได้กรอกวันนี้ = วันนี้ยังหาเงินได้อยู่ ต้องนับรวม */
+    public function testTodayStillCountsWhenItHasNotBeenRecordedYet(): void
+    {
+        $pace = (new DashboardService(
+            $this->createStub(RecordRepository::class),
+            $this->createStub(ShopRepository::class),
+            $this->createStub(GoalRepository::class)
+        ))->calculateGoalPace(null, 0.0, 100000.0, 6000.0, '2026-08', '2026-08-07', false);
+
+        $this->assertSame(25, (int)($pace['days_remaining'] ?? 0), 'ยังไม่กรอกวันนี้แต่ไม่ได้นับวันนี้ให้');
+    }
 }
