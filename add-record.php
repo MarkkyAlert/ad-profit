@@ -192,15 +192,25 @@ require __DIR__ . '/includes/header.php';
         </p>
         <p id="bulk-paste-notice" class="mb-3 hidden text-xs text-amber-200"></p>
 
+        <?php
+        // ⚠️⚠️ ต้องมี `min-w-[…]` ไม่ใช่แค่ `min-w-full`
+        //
+        // `min-w-full` = "อย่างน้อยเท่าความกว้างจอ" ตารางจึงบีบตัวเองให้พอดีจอมือถือ
+        // แทนที่จะกว้างตามเนื้อหาแล้วให้กล่องเลื่อนเอา · ช่องวันที่เป็น input ของระบบ
+        // ปฏิบัติการซึ่งย่อไม่ได้ (~150px) ช่องที่เหลือจึงถูกบีบจนหมด
+        //
+        // วัดจริงบนจอ 375px: รายได้ = 22px · ค่าแอด = 26px · โน้ต = 24px
+        // พิมพ์เลข 4 หลักแล้วเห็นทีละตัว — และนี่คือหน้าที่ใช้กรอกข้อมูลเป็นหลัก
+        ?>
         <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+            <table class="w-full min-w-[560px] text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-slate-400">
                         <th class="px-2 py-2 w-10">#</th>
-                        <th class="px-2 py-2">วันที่</th>
-                        <th class="px-2 py-2">รายได้ (฿)</th>
-                        <th class="px-2 py-2">ค่าแอด (฿)</th>
-                        <th class="px-2 py-2">โน้ต</th>
+                        <th class="px-2 py-2 min-w-[140px]">วันที่</th>
+                        <th class="px-2 py-2 min-w-[104px]">รายได้ (฿)</th>
+                        <th class="px-2 py-2 min-w-[104px]">ค่าแอด (฿)</th>
+                        <th class="px-2 py-2 min-w-[140px]">โน้ต</th>
                         <th class="px-2 py-2 w-12"></th>
                     </tr>
                 </thead>
