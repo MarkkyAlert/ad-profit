@@ -209,8 +209,7 @@ class OverviewAnnualService
             // (เดือนที่ยังไม่ได้กรอกมีกำไร 0 — ไม่ควรถูกยกเป็นเดือนแย่สุด)
             // ⚠️ เดือนปัจจุบันที่ยังไม่จบไม่เข้าแข่ง — เทียบด้วยยอดสะสม เดือนที่เพิ่งกรอก
             // ไม่กี่วันจึงชนะเดือนที่กรอกครบเสมอ (กติกาเดียวกับ `AnnualService`)
-            $isUnfinishedCurrentMonth = $todayObject->format('Y-m') === $monthKey
-                && (int)$todayObject->format('j') < (int)$todayObject->format('t');
+            $isUnfinishedCurrentMonth = month_is_unfinished($monthKey, $todayObject);
 
             if (isset($monthsWithRecord[$monthKey]) && !$isUnfinishedCurrentMonth) {
                 if ($bestMonth === null || $monthProfit > (float)$bestMonth['profit']) {

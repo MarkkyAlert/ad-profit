@@ -224,9 +224,7 @@ class AnnualService
                 //
                 // ยังไม่จบเดือน = ยังตัดสินไม่ได้ ไม่ใช่ "แย่" — หลักเดียวกับที่หน้ารวมร้าน
                 // ดันร้านที่ยังไม่มีข้อมูลไปท้ายตาราง แทนที่จะให้ขึ้นอันดับ 1 ด้วยกำไร 0
-                $isUnfinishedCurrentMonth = $month === $lastMonth
-                    && $todayObject->format('Y-m') === $monthKey
-                    && (int)$todayObject->format('j') < (int)$todayObject->format('t');
+                $isUnfinishedCurrentMonth = month_is_unfinished($monthKey, $todayObject);
 
                 if (!$isUnfinishedCurrentMonth) {
                     if ($bestMonth === null || $monthProfit > (float)$bestMonth['profit']) {
@@ -563,9 +561,7 @@ class AnnualService
                     // เดือนนี้จบแล้วและยกให้เป็นเดือนกำไรดีสุด ขณะที่กริดใต้การ์ดบนจอเดียวกัน
                     // ยังระบายเทาว่า "ยังตัดสินไม่ได้" · ซ้ำร้ายค่าสูงสุดที่ใช้ normalize
                     // ก็ตัดเดือนที่กำไรสูงสุดของปีออกไป ทำให้ทุกช่องที่เหลือเข้มเกินจริง
-                    'is_unfinished' => $gridYear === $currentYear
-                        && $month === $currentMonth
-                        && (int)$todayObject->format('j') < (int)$todayObject->format('t'),
+                    'is_unfinished' => month_is_unfinished(sprintf('%04d-%02d', $gridYear, $month), $todayObject),
                 ];
             }
 

@@ -180,4 +180,74 @@ final class SharedHelperContractTest extends TestCase
             'ฟันธงแนวโน้มวันในสัปดาห์จากตัวอย่างวันเดียว'
         );
     }
+
+    /**
+     * ⭐⭐ `month_is_unfinished()` — จุดเดียวของกติกา "เดือนนี้จบหรือยัง"
+     *
+     * ⚠️ เคยเขียนซ้ำ 3 ที่ แล้วที่หนึ่งลืมเงื่อนไข "ยังไม่ถึงวันสุดท้ายของเดือน"
+     * ผลคือ **ในวันสุดท้ายของทุกเดือน** (1 วัน/เดือน) การ์ด "เดือนกำไรดีสุด" ยกให้
+     * เดือนนี้ ขณะที่กริดฤดูกาลใต้การ์ดบนจอเดียวกันยังระบายเทาว่า "ยังตัดสินไม่ได้"
+     *
+     * @return array<string,array{0:string,1:string,2:bool}>
+     */
+    public static function unfinishedMonthProvider(): array
+    {
+        return [
+            'กลางเดือน' => ['2026-08', '2026-08-07', true],
+            'วันก่อนวันสุดท้าย' => ['2026-08', '2026-08-30', true],
+            'วันสุดท้ายของเดือน' => ['2026-08', '2026-08-31', false],
+            'เดือนที่ผ่านไปแล้ว' => ['2026-07', '2026-08-07', false],
+            'เดือนถัดไป' => ['2026-09', '2026-08-07', false],
+            'ก.พ. ปีปกติ วันสุดท้าย' => ['2026-02', '2026-02-28', false],
+            'ก.พ. ปีปกติ วันที่ 27' => ['2026-02', '2026-02-27', true],
+            'ก.พ. ปีอธิกสุรทิน วันที่ 28' => ['2028-02', '2028-02-28', true],
+            'ก.พ. ปีอธิกสุรทิน วันสุดท้าย' => ['2028-02', '2028-02-29', false],
+            'วันแรกของเดือน' => ['2026-08', '2026-08-01', true],
+            'ธ.ค. วันสุดท้ายของปี' => ['2026-12', '2026-12-31', false],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('unfinishedMonthProvider')]
+    public function testMonthIsUnfinishedKnowsWhenTheMonthHasEnded(
+        string $monthKey,
+        string $today,
+        bool $expected
+    ): void {
+        $this->assertSame(
+            $expected,
+            month_is_unfinished($monthKey, new \DateTimeImmutable($today)),
+            sprintf('เดือน %s เมื่อวันนี้คือ %s ตอบผิด', $monthKey, $today)
+        );
+    }
+
+    /**
+     * ⭐⭐ ห้ามมีใครเขียนกติกานี้ซ้ำอีก
+     *
+     * ⚠️ นิพจน์ `format('j') < ... format('t')` คือกติกา "เดือนยังไม่จบ" ถ้าเห็นมันอยู่
+     * นอก `month_is_unfinished()` แปลว่ามีคนกำลังเขียนกติกาซ้ำ ซึ่งเป็นรากของบั๊ก
+     * ที่เจอซ้ำ ๆ ในโปรเจกต์นี้ (แก้ที่หนึ่งแล้วอีกที่ไม่ตาม)
+     */
+    public function testNobodyReimplementsTheUnfinishedMonthRule(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/app/Services/*.php'),
+            (array)glob($root . '/*.php')
+        );
+
+        $offenders = [];
+        foreach ($files as $file) {
+            $code = (string)file_get_contents((string)$file);
+            if (preg_match("/format\('j'\)\s*<\s*\(int\)\\$\w+->format\('t'\)/", $code) === 1) {
+                $offenders[] = basename((string)$file);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'เขียนกติกา "เดือนยังไม่จบ" ซ้ำใน: ' . implode(', ', $offenders)
+            . ' — ให้เรียก month_is_unfinished() แทน'
+        );
+    }
 }
