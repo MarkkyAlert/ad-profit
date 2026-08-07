@@ -265,7 +265,10 @@ class ProfileService
             ];
         }
 
-        $normalizedDisplayName = trim($displayName);
+        // ⚠️ ต้องเป็น `trim_unicode_whitespace()` ไม่ใช่ `trim()` — กติกาเดียวกับชื่อร้าน
+        // `trim()` ไม่ตัด NBSP / ช่องว่างญี่ปุ่น / zero-width ด่าน "ชื่อว่าง" ข้างล่างจึง
+        // ถูกข้ามได้ด้วยตัวอักษรที่ผู้ใช้มองไม่เห็น แล้วชื่อกลายเป็นช่องเปล่าเงียบ ๆ
+        $normalizedDisplayName = trim_unicode_whitespace($displayName);
         if ($normalizedDisplayName === '') {
             return [
                 'success' => false,
@@ -289,7 +292,11 @@ class ProfileService
             ];
         }
 
-        $currentDisplayName = trim((string)($user['display_name'] ?? ''));
+        // ⚠️⚠️ เทียบกับค่าที่ **เก็บอยู่จริง** ไม่ใช่ค่าที่ normalize แล้ว
+        // ถ้า normalize ทั้งสองฝั่ง ชื่อเก่าที่ติดช่องว่างซ่อนอยู่จะ "เท่ากับ" ชื่อสะอาด
+        // ที่ผู้ใช้พิมพ์เสมอ → ตอบว่าสำเร็จโดยไม่ UPDATE อะไรเลย ล้างออกไม่ได้ตลอดกาล
+        // (บทเรียนเดียวกับชื่อร้าน — ดู CLAUDE.md)
+        $currentDisplayName = (string)($user['display_name'] ?? '');
         if ($currentDisplayName === $normalizedDisplayName) {
             return [
                 'success' => true,

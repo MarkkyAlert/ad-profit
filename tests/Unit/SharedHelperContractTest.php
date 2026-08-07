@@ -153,6 +153,46 @@ final class SharedHelperContractTest extends TestCase
         );
     }
 
+    /**
+     * ⚠️⚠️ **อีเมลก็ต้องตัดช่องว่างยูนิโค้ดเหมือนชื่อร้าน — เดิมใช้ `trim()` ธรรมดา**
+     *
+     * ก๊อปอีเมลจาก LINE/แชท/Word มาวางมักติดช่องว่างที่มองไม่เห็นมาด้วย
+     * `is_valid_email()` จึงตอบว่ารูปแบบผิด ทั้งที่บนจอดูถูกทุกตัวอักษร:
+     *   · สมัครสมาชิก → "กรุณากรอกอีเมลที่ถูกต้อง"
+     *   · **ลืมรหัสผ่าน → "กรุณากรอกอีเมลที่ถูกต้อง"** (คนที่มาถึงหน้านี้เข้าระบบไม่ได้แล้ว)
+     *   · เข้าสู่ระบบ (ติดข้างหน้า) → "อีเมลหรือรหัสผ่านไม่ถูกต้อง" ทั้งที่ทั้งคู่ถูก
+     *     แล้วการลองซ้ำ ๆ จะไปชนตัวจำกัดจำนวนครั้ง
+     *
+     * ⚠️ เดิมเข้าระบบได้เมื่อช่องว่างอยู่ **ท้ายสุด** — แต่นั่นเป็นความบังเอิญของ
+     * collation ของ MySQL ที่มองข้ามตัวท้ายให้ ไม่ใช่การออกแบบ · ฝั่ง PHP ยังถือว่า
+     * รูปแบบผิดอยู่ดี ทางอื่นจึงล้มหมด · **ห้ามพึ่งพฤติกรรมนั้น**
+     *
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function pastedEmailProvider(): array
+    {
+        return [
+            'NBSP ท้าย — ก๊อปมาจากแชท' => ["owner@example.com\u{00A0}", 'owner@example.com'],
+            'NBSP หน้า' => ["\u{00A0}owner@example.com", 'owner@example.com'],
+            'zero-width ท้าย' => ["owner@example.com\u{200B}", 'owner@example.com'],
+            'ช่องว่างญี่ปุ่นท้าย' => ["owner@example.com\u{3000}", 'owner@example.com'],
+            'ช่องว่างธรรมดายังตัดเหมือนเดิม' => ['  owner@example.com  ', 'owner@example.com'],
+            'ตัวพิมพ์ใหญ่ยังถูกลดรูปเหมือนเดิม' => ['OWNER@EXAMPLE.COM', 'owner@example.com'],
+        ];
+    }
+
+    #[DataProvider('pastedEmailProvider')]
+    public function testAPastedEmailIsStillReadAsAnEmail(string $input, string $expected): void
+    {
+        $normalized = normalize_email($input);
+
+        $this->assertSame($expected, $normalized, 'ตัดช่องว่างที่มองไม่เห็นออกจากอีเมลไม่ได้');
+        $this->assertTrue(
+            is_valid_email($normalized),
+            'อีเมลที่ก๊อปมาวางถูกตีว่ารูปแบบผิด — ผู้ใช้เห็นแต่ตัวอักษรที่ถูกต้องบนจอ'
+        );
+    }
+
     /** ⭐ ชื่อที่ต้องพิมพ์ยืนยันตอนลบร้าน ต้องตรงกับที่เบราว์เซอร์แสดง */
     public function testTheDeleteConfirmationMatchesWhatTheBrowserShows(): void
     {
