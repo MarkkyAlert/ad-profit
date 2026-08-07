@@ -61,17 +61,23 @@ jobs:
   #    job นี้จึงไม่ composer install แค่ php -l ทุกไฟล์ เพื่อพิสูจน์ว่า
   #    ไม่มี syntax ที่ PHP 8.2 (เวอร์ชันต่ำสุดที่โปรเจกต์รองรับ) ไม่รู้จัก
   #    ⚠️ พิสูจน์แค่ระดับ syntax — ไม่ครอบ runtime behavior บน 8.2
-  lint-php82:
+  lint-php83:
     name: Syntax lint (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
-    # ⚠️ ต้องมี 8.3 ด้วย — เป็นเวอร์ชันที่ **เซิร์ฟเวอร์จริงใช้** (Hostinger)
-    # เดิม lint แค่ 8.2 (ต่ำสุดที่รองรับ) และรัน runtime แค่ 8.4 → 8.3 ไม่มีอะไรแตะเลย
+    # ⚠️⚠️ 8.3 คือ **เพดานล่างจริง** ไม่ใช่ 8.2
+    #
+    # เดิม lint ที่ 8.2 ด้วย โดยเข้าใจว่า composer.json ประกาศ ">=8.2" ไว้ — แต่ job นี้
+    # รันแค่ `php -l` **ไม่เคยติดตั้ง dependency เลย** จึงเขียวตลอดทั้งที่ติดตั้งจริงบน 8.2 ไม่ได้:
+    #   maennchen/zipstream-php 3.2.2 (phpoffice/phpspreadsheet ลากมา) require php-64bit ^8.3
+    # ⚠️ มันประกาศไว้ใต้คีย์ `php-64bit` ไม่ใช่ `php` — อ่าน composer.lock เผิน ๆ จะมองไม่เห็น
+    #
+    # ถ้าจะกลับไปรองรับ 8.2 ต้องถอย zipstream เป็น 2.x ก่อน แล้วค่อยเพิ่ม '8.2' กลับเข้า matrix
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.2', '8.3']
+        php: ['8.3']
 
     steps:
       - uses: actions/checkout@v5
@@ -87,7 +93,7 @@ jobs:
           status=0
           while IFS= read -r -d '' file; do
             if ! php -l "$file" > /dev/null 2>&1; then
-              echo "::error file=${file}::PHP 8.2 syntax error"
+              echo "::error file=${file}::syntax error"
               php -l "$file" || true
               status=1
             fi
@@ -222,3 +228,96 @@ jobs:
             }
             echo "✅ ไลบรารีครบ — Excel และอีเมลใช้งานได้\n";
           '
+
+  # ── job 5: โค้ดของเราต้อง "รันได้จริง" บนเวอร์ชันที่เซิร์ฟเวอร์จริงใช้ ────────
+  #    ⚠️⚠️ ช่องว่างที่ job อื่นปิดไม่ได้:
+  #      · lint-php83   พิสูจน์แค่ syntax
+  #      · prod-install พิสูจน์แค่ว่าติดตั้ง dependency ได้
+  #      · integration  รัน runtime จริง แต่ต้องใช้ PHP 8.4+ (PHPUnit 13 บังคับ)
+  #    → พฤติกรรมตอนรันของโค้ดเราเอง **บน 8.3 ซึ่งเป็นเวอร์ชันของ production**
+  #      ไม่เคยมีใครพิสูจน์เลย · job นี้ยกเซิร์ฟเวอร์จริงแล้วเปิดทุกหน้าดู
+  smoke-php83:
+    name: Smoke test หน้าเว็บจริง (PHP 8.3 = เวอร์ชันของ production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mariadb:
+        image: mariadb:10.4
+        env:
+          MARIADB_DATABASE: ad_profit_smoke
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup PHP 8.3 (extension เท่าที่ production มี)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo, pdo_mysql, mbstring, zip, gd, curl
+          coverage: none
+
+      # ใช้ชุด production — ไม่ใช่ชุด dev ที่มี PHPUnit (ซึ่งลงบน 8.3 ไม่ได้อยู่แล้ว)
+      - name: composer install --no-dev
+        run: composer install --no-dev --optimize-autoloader --no-progress --no-interaction
+
+      - name: รอ MariaDB แล้วโหลด schema
+        run: |
+          php -r '
+          $pdo = null;
+          for ($i = 0; $i < 30; $i++) {
+              try { $pdo = new PDO("mysql:host=127.0.0.1;port=3306;dbname=ad_profit_smoke", "root", "root"); break; }
+              catch (Throwable $e) { sleep(2); }
+          }
+          if ($pdo === null) { fwrite(STDERR, "MariaDB ไม่พร้อมในเวลาที่กำหนด\n"); exit(1); }
+
+          // ⚠️ ต้องแยกเป็น statement แล้วข้าม CREATE DATABASE / USE
+          //    (schema.sql hardcode ชื่อ DB จริง `ad_profit` และ CREATE DATABASE กิน 3 บรรทัด
+          //     การ grep ทีละบรรทัดจะเหลือเศษ SQL ค้าง → import พังทันที)
+          $sql = file_get_contents("database/schema.sql");
+          foreach (explode(";", $sql) as $statement) {
+              $head = strtoupper(ltrim(preg_replace("/^\s*(--[^\n]*\n)+/", "", $statement)));
+              if (trim($statement) === "" || str_starts_with($head, "CREATE DATABASE") || str_starts_with($head, "USE ")) {
+                  continue;
+              }
+              $pdo->exec($statement);
+          }
+          echo "✅ โหลด schema แล้ว\n";
+          '
+
+      # ⚠️ ต้องเป็น APP_ENV=development ไม่งั้น display_errors ปิดอยู่
+      #    คำเตือนจะไม่ถูกพิมพ์ออกมา แล้ว smoke test จะเขียวโดยไม่ได้ตรวจอะไรเลย
+      - name: ยกเซิร์ฟเวอร์แล้วเปิดทุกหน้า
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_NAME: ad_profit_smoke
+          DB_USER: root
+          DB_PASS: root
+          APP_ENV: development
+        run: |
+          php -d error_reporting=E_ALL -S 127.0.0.1:8080 -t . > /tmp/smoke-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 20); do
+            if curl -sf -o /dev/null http://127.0.0.1:8080/login.php; then break; fi
+            sleep 1
+          done
+
+          php tests/smoke/pages.php http://127.0.0.1:8080
+          status=$?
+
+          if [ "$status" -ne 0 ]; then
+            echo "── log ของเซิร์ฟเวอร์ ──"
+            tail -40 /tmp/smoke-server.log
+          fi
+          exit $status

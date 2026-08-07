@@ -8,14 +8,24 @@
 
 ระบบบันทึกรายได้/ค่าโฆษณา/กำไรรายวัน แยกตามร้าน (multi-shop) — **PHP แบบไฟล์ล้วน ไม่มี framework** DB เป็น **MySQL/InnoDB** ฝั่งหน้าเว็บ render แบบ server-side (Chart.js + Tailwind ผ่าน CDN, ไม่มี build step)
 
-PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json แล้ว** (`"require": { "php": ">=8.2" }`) เหตุผลที่ยกจาก 8.1: `phpoffice/phpspreadsheet 5.x` (ใช้ทำ xlsx export) require `php ^8.2`. ทุกไฟล์มี `declare(strict_types=1)` · เซิร์ฟเวอร์ production = Hostinger PHP 8.3
+PHP ที่รองรับ: **≥ 8.3** — **enforce ใน composer.json แล้ว** (`"require": { "php": ">=8.3" }`) ทุกไฟล์มี `declare(strict_types=1)` · เซิร์ฟเวอร์ production = Hostinger PHP 8.3
+
+⚠️⚠️ **เพดานล่างคือ 8.3 ไม่ใช่ 8.2 — และเคยประกาศผิดมาก่อน** ตัวที่บังคับคือ `maennchen/zipstream-php 3.2.2` ที่ `phpoffice/phpspreadsheet` ลากมา ซึ่ง require `php-64bit ^8.3`
+· ⚠️ มันประกาศไว้ใต้คีย์ **`php-64bit`** ไม่ใช่ `php` — อ่าน `composer.lock` เผิน ๆ จะมองไม่เห็น ต้องลองติดตั้งจริงถึงเจอ
+· ⚠️ **CI job เดิม (`lint-php82`) เขียวตลอดทั้งที่ติดตั้งบน 8.2 ไม่ได้เลย** เพราะมันรันแค่ `php -l` ไม่เคยติดตั้ง dependency · วัดจริงด้วย `composer install --no-dev` บน PHP 8.2.4 → ล้มทันที ไม่มี vendor = เว็บเปิดไม่ขึ้นทั้งเว็บ
+· ถ้าวันหนึ่งต้องรองรับ 8.2 จริง ต้องถอย zipstream เป็น 2.x ก่อน
 
 ⚠️ **extension ที่ host ต้องมี** (นอกจาก pdo_mysql/mbstring ตามปกติ): **`zip`, `gd`** — `phpoffice/phpspreadsheet` ประกาศเป็น hard requirement ถ้าขาด `composer install` ล้มตั้งแต่แรก (CI ทั้ง 2 jobs ที่ `composer install` ใส่ `zip, gd` ใน `setup-php` แล้ว)
 
-⚠️ **ช่องว่างเรื่องเวอร์ชันที่ต้องรู้ (อย่าเข้าใจผิดว่าเทสต์ครอบ 8.2):**
-- **test suite รันได้บน PHP 8.4+ เท่านั้น** — `phpunit/phpunit 13.x` require `php >= 8.4.1` → บน 8.2–8.3 `composer install` (dev) ไม่ผ่านตั้งแต่แรก
-- ความเข้ากันได้กับ **8.2 พิสูจน์แค่ระดับ syntax** (`php -l`) ผ่าน CI job `lint-php82` — **ไม่ได้พิสูจน์ runtime behavior บน 8.2/8.3** (คือเวอร์ชันที่ production ใช้จริง)
-- ถ้าต้องการ runtime coverage บน 8.2/8.3 จริง ต้อง downgrade PHPUnit (เช่น ^10) — **ยังไม่ทำตอนนี้**
+⚠️ **ช่องว่างเรื่องเวอร์ชันที่ต้องรู้ (อย่าเข้าใจผิดว่าเทสต์ครอบ 8.3):**
+- **test suite รันได้บน PHP 8.4+ เท่านั้น** — `phpunit/phpunit 13.x` require `php >= 8.4.1` → บน 8.3 `composer install` (dev) ไม่ผ่านตั้งแต่แรก
+- ความเข้ากันได้กับ **8.3 พิสูจน์แค่ระดับ syntax** (`php -l`) ผ่าน CI job `lint-php83` + job `prod-install` ที่ลง dependency ชุด production บน 8.3 จริง — **ไม่ได้พิสูจน์ runtime behavior ของโค้ดเราเองบน 8.3** (คือเวอร์ชันที่ production ใช้จริง)
+- ✅ **ปิดช่องว่างนี้แล้วด้วย smoke test** — `tests/smoke/pages.php` เขียนแบบไม่พึ่ง PHPUnit เลย จึงรันบน 8.3 ได้ · CI job `smoke-php83` ยกเซิร์ฟเวอร์จริง สมัครสมาชิก บันทึกข้อมูล แล้วเปิดทุกหน้า/ทุก endpoint/ไฟล์ดาวน์โหลด (21 รายการ) ดูว่ามีคำเตือนของ PHP หลุดออกมาไหม
+  · ⚠️ **ต้องรันเซิร์ฟเวอร์ด้วย `APP_ENV=development`** ไม่งั้น `display_errors` ปิดอยู่ ตัวตรวจจะเขียวโดยไม่ได้ตรวจอะไรเลย (บทเรียนเดียวกับ `PageRenderTest`)
+  · ⚠️ **ต้อง `strip_tags()` ก่อนหาคำว่า Warning** — PHP ห่อไว้เป็น `<b>Warning</b>:`
+  · ⚠️ **ตัวตรวจต้องไม่ปล่อยคำเตือนของตัวเอง** — เวอร์ชันแรกเรียก `curl_close()` ซึ่งเลิกใช้ใน 8.5 คำเตือนของตัวเองไปปนกับสิ่งที่กำลังตามหา
+  · มิวเทชันแล้ว: ใส่ตัวแปรที่ไม่มีจริงลง `dashboard.php` → จับได้ 5 หน้า
+- ถ้าต้องการ **รันชุดเทสต์เต็ม** บน 8.3 ด้วย ต้อง downgrade PHPUnit (เช่น ^10) — **ยังไม่ทำ** เพราะ smoke test ครอบเส้นทางที่ผู้ใช้เดินจริงแล้ว
 
 ---
 
@@ -87,7 +97,7 @@ PHP ที่รองรับ: **≥ 8.2** — **enforce ใน composer.json 
   · **ข้อความตอนสลับร้านต้องบอกชื่อร้านปลายทางเสมอ** — ระบบถือว่า "ร้าน A" = "ร้าน a" = "Café" = "Cafe" ผู้ใช้จึงถูกพาไปอีกร้านได้โดยไม่รู้ตัว
 - ⚠️ **Schema Guard ต้องตรวจ "ชนิด" ไม่ใช่แค่ "ชื่อ"** — เดิมดูแค่มีตาราง/คอลัมน์/index ชื่อนี้ไหม · ย่อ `note` เหลือ VARCHAR(50) · เปลี่ยน `revenue` เป็น DECIMAL(8,2) · ลบ foreign key · เปลี่ยนเป็น MyISAM — **ผ่านหมดทุกอย่าง** ทั้งที่แต่ละอย่างทำข้อมูลหายคนละแบบ (FK หาย = ลบร้านแล้วข้อมูลค้าง · MyISAM = `rollBack()` ไม่ทำอะไรเลย) · ตอนนี้ตรวจ `COLUMN_TYPE` + `ENGINE` + `DELETE_RULE` ด้วย (`schema_required_column_types()`, `schema_transactional_tables()`, `schema_required_cascades()`)
 - ⚠️ **ความยาวในโค้ดกับความยาวคอลัมน์ต้องเป็นค่าคงที่ที่ผูกกันไว้** — `RecordService::NOTE_MAX_LENGTH` · `ShopService::MAX_SHOP_NAME_LENGTH` · `ProfileService::MAX_DISPLAY_NAME_LENGTH` · `MAX_AMOUNT`/`AMOUNT_DECIMALS` ↔ `DECIMAL(12,2)` · `SchemaContractTest` ล็อกทุกคู่ · เดิมเป็นเลขลอย ๆ ตัวกันฝั่ง PHP จึงทำงานถูกเพราะ "บังเอิญ" ตรงกับคอลัมน์
-- ⚠️ **ห้ามใช้ `PDO::MYSQL_ATTR_INIT_COMMAND`** — ถูกประกาศเลิกใช้ใน PHP 8.5 แล้ว **คำเตือนหลุดลงกลางหน้าเว็บ** ที่ผู้ใช้เห็น (เจอมาแล้ว เทสต์ `PageRenderTest` จับได้) · ตัวแทนใหม่ `Pdo\Mysql::ATTR_INIT_COMMAND` มีเฉพาะ 8.4+ ซึ่งสูงกว่าที่โปรเจกต์รองรับ (8.2) → **สั่ง `SET SESSION sql_mode` เป็น query ธรรมดาหลังต่อ** ทำงานเหมือนกันทุกเวอร์ชัน
+- ⚠️ **ห้ามใช้ `PDO::MYSQL_ATTR_INIT_COMMAND`** — ถูกประกาศเลิกใช้ใน PHP 8.5 แล้ว **คำเตือนหลุดลงกลางหน้าเว็บ** ที่ผู้ใช้เห็น (เจอมาแล้ว เทสต์ `PageRenderTest` จับได้) · ตัวแทนใหม่ `Pdo\Mysql::ATTR_INIT_COMMAND` มีเฉพาะ 8.4+ ซึ่งสูงกว่าที่โปรเจกต์รองรับ (8.3) → **สั่ง `SET SESSION sql_mode` เป็น query ธรรมดาหลังต่อ** ทำงานเหมือนกันทุกเวอร์ชัน
 - ⚠️ **`includes/database.php` ตั้ง `sql_mode` เองหลังต่อฐานข้อมูล** — ห้ามพึ่งค่าปริยายของโฮสต์ · ถ้าไม่ strict MySQL จะ "ตัดให้พอดี" แทนที่จะปฏิเสธ (โน้ต 256 → 255 · ยอด 10,000,000,000 → 9,999,999,999.99) เงียบสนิทและรายงานว่าสำเร็จ ⚠️ **ทศนิยมเกิน 2 ตำแหน่งถูกปัดเงียบในทุก sql_mode** — `hasTooManyDecimals()` เป็นด่านเดียวถาวร
 - **`database/schema.sql` เป็น DROP + CREATE** — ห้ามรันทับ database จริง; ถ้าจะแก้โครงบน DB ที่มีข้อมูล ใช้ `ALTER` แยกต่างหาก ⚠️ ไฟล์**ขึ้นต้นด้วย `CREATE DATABASE ad_profit; USE ad_profit;` (hardcode ชื่อ DB จริง)** → `mysql < schema.sql` บนเซิร์ฟเวอร์ = **DROP ตารางใน `ad_profit` จริงทันที**; integration test loader (`tests/Integration/IntegrationTestCase.php`) จึง**ตัด 2 บรรทัดนี้ทิ้ง** ให้ DDL ลงเฉพาะ DB ที่ต่ออยู่
 - ⚠️ **`session_start()` ต้องตั้ง `gc_maxlifetime` ให้ยาวกว่า idle timeout ของแอป** — ค่าปริยายของ PHP คือ 1440 วิ (24 นาที) ตัวเก็บกวาดของ PHP จึงลบไฟล์ session ทิ้งก่อนที่ guard ของแอปจะได้ทำงาน ผู้ใช้หลุดจากระบบตั้งแต่พักไป ~24 นาที ทั้งที่ตั้งไว้ 4 ชม. (พิสูจน์แล้ว) · ตอนนี้ `bootstrap.php` ตั้งเป็น `max(idle, absolute) + 3600`
@@ -453,7 +463,7 @@ guard) จึง `require` เข้ามาเรียกใน process ข�
 ### Framework
 - **PHPUnit** เป็น dev dependency, รันด้วย `composer test`
 - ⚠️ **ชุดเทสต์ใช้เวลา ~4 นาที ซึ่งเกินเพดานปริยาย 300 วินาทีของ composer** — `composer.json` จึงตั้ง `config.process-timeout` ไว้ · ถ้าไม่ตั้ง `composer test` จะถูกฆ่ากลางคันพร้อมข้อความ "exceeded the timeout" ซึ่งอ่านแล้วนึกว่าเทสต์ค้าง ทั้งที่มันแค่ยังไม่เสร็จ
-- ⚠️ **ต้องใช้ PHP 8.4+ ในการรันเทสต์** (PHPUnit 13 require `php >= 8.4.1`) — เครื่องที่เป็น 8.2–8.3 จะ `composer install` dev dependency ไม่ผ่าน; ความเข้ากันได้กับ 8.2 คุมด้วย `php -l` ใน CI job `lint-php82` เท่านั้น (syntax ไม่ใช่ runtime)
+- ⚠️ **ต้องใช้ PHP 8.4+ ในการรันเทสต์** (PHPUnit 13 require `php >= 8.4.1`) — เครื่องที่เป็น 8.3 จะ `composer install` dev dependency ไม่ผ่าน; ความเข้ากันได้กับ 8.3 คุมด้วย `php -l` ใน CI job `lint-php83` เท่านั้น (syntax ไม่ใช่ runtime)
 - `phpunit.xml` เปิด `failOnWarning="true"` + `failOnNotice="true"` → warning/notice = เทสต์แดง (CI บังคับ)
 
 ### โครงสร้าง
