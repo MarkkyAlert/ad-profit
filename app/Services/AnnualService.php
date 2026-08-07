@@ -378,7 +378,7 @@ class AnnualService
         // เดือนที่ยังไม่กรอกเลยมีกำไร 0 ซึ่งจะลากค่าเฉลี่ยลงผิด ๆ · เดือนที่กรอกไม่ถึงครึ่ง
         // (มักเป็นเดือนปัจจุบันต้นเดือน) ก็เช่นกัน — กรอก 2 วันจาก 31 แล้วเอามาเป็นตัวคูณ
         // ทำให้ projection_low ต่ำผิดรูปและสรุปว่า "ช่วงคร่อม 0" บ่อยเกินจริง
-        $filledProfits = [];
+        $basisPerDay = [];
         foreach ($months as $row) {
             $month = (int)($row['month'] ?? 0);
             if ($month > $lastMonth || $month < 1) {
@@ -415,23 +415,41 @@ class AnnualService
             //
             // ⚠️ เฉพาะเดือนปัจจุบัน — เดือนที่จบไปแล้วผ่านครบทุกวันอยู่แล้ว
             $daysElapsed = $daysInMonth - $currentMonthRemainingDays;
-            if ($month === $lastMonth && $daysElapsed > 0 && $daysElapsed < $daysInMonth) {
-                $monthProfit = $monthProfit / $daysElapsed * $daysInMonth;
-            }
+            $daysUsed = ($month === $lastMonth && $daysElapsed > 0 && $daysElapsed < $daysInMonth)
+                ? $daysElapsed
+                : $daysInMonth;
 
-            $filledProfits[] = $monthProfit;
+            // ⭐⭐ ฐานเก็บเป็น "กำไรต่อวัน" ไม่ใช่ "กำไรทั้งเดือน"
+            //
+            // ⚠️ เดือนยาวไม่เท่ากัน (ก.พ. 28 · เม.ย. 30 · มี.ค. 31) การเทียบยอด **ทั้งเดือน**
+            // จึงอ่าน ก.พ. ว่าเป็น "เดือนที่แย่กว่า" ทั้งที่ผลงานต่อวันเท่ากันเป๊ะ · พอฐาน
+            // 3 เดือนล่าสุดเลื่อนไปแล้ว ก.พ. หลุดออก ค่าเฉลี่ยก็กระโดดขึ้นเอง
+            //
+            // วัดจริง (ร้านทำกำไรวันละ ฿1,000 เท่ากันเป๊ะทุกวัน กรอกครบทุกวัน):
+            //   15 พ.ค. ฐาน = ก.พ. ฿28,000 · มี.ค. ฿31,000 · เม.ย. ฿30,000 → ประมาณการ ฿357,978
+            //   16 พ.ค. ฐาน = มี.ค. ฿31,000 · เม.ย. ฿30,000 · พ.ค. ฿31,000 → ประมาณการ ฿365,505
+            // **กระโดด ฿7,527 ข้ามคืน** โดยที่ธุรกิจไม่มีอะไรเปลี่ยนเลย (16 มี.ค. ก็ ฿4,790)
+            //
+            // คิดต่อวันแล้วเดินทั้งปี 365 วัน ประมาณการนิ่งสนิทที่ ฿365,000 ทุกวันตามที่ควร
+            //
+            // ⚠️ ตัวหารคือ "วันที่ผ่านไปแล้ว" ของเดือนปัจจุบัน และ "วันทั้งเดือน" ของเดือนที่จบแล้ว
+            // — เดือนที่จบแล้วแต่กรอกไม่ครบต้องใช้ค่าตามที่กรอกมา ไม่ใช่คูณขึ้น (ดูคำเตือนด้านบน)
+            $basisPerDay[] = $monthProfit / $daysUsed;
         }
 
         // เดือนเดียวเดาไม่ได้ว่าเป็นแนวโน้มหรือฟลุ๊ค
-        $basis = array_slice($filledProfits, -self::PROJECTION_BASIS_MONTHS);
+        $basis = array_slice($basisPerDay, -self::PROJECTION_BASIS_MONTHS);
         if (count($basis) < 2) {
             return ['available' => false, 'reason' => 'insufficient_data'];
         }
 
-        $average = array_sum($basis) / count($basis);
+        $averagePerDay = array_sum($basis) / count($basis);
 
-        // ตัวคูณจริง = เดือนเต็มที่เหลือ + เศษของเดือนนี้
-        $effectiveMonths = $monthsRemaining + $currentMonthRemainingRatio;
+        // ตัวคูณจริง = วันที่เหลือของเดือนนี้ + วันของเดือนเต็มที่เหลือทั้งหมด
+        $remainingDays = $currentMonthRemainingDays;
+        for ($month = $lastMonth + 1; $month <= 12; $month++) {
+            $remainingDays += (int)(new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month)))->format('t');
+        }
 
         return [
             'available' => true,
@@ -440,11 +458,12 @@ class AnnualService
             'current_month_remaining_ratio' => round($currentMonthRemainingRatio, 4),
             // จำนวนวันไว้ให้หน้าเว็บ/xlsx เขียนป้ายได้ตรงกัน ("+ อีก N วันของเดือนนี้")
             'current_month_remaining_days' => $currentMonthRemainingDays,
+            'remaining_days' => $remainingDays,
             'basis_month_count' => count($basis),
-            'avg_recent' => round($average, 2),
-            'projection_low' => round($cumulativeProfit + ($effectiveMonths * min($basis)), 2),
-            'projection_mid' => round($cumulativeProfit + ($effectiveMonths * $average), 2),
-            'projection_high' => round($cumulativeProfit + ($effectiveMonths * max($basis)), 2),
+            'avg_profit_per_day' => round($averagePerDay, 2),
+            'projection_low' => round($cumulativeProfit + ($remainingDays * min($basis)), 2),
+            'projection_mid' => round($cumulativeProfit + ($remainingDays * $averagePerDay), 2),
+            'projection_high' => round($cumulativeProfit + ($remainingDays * max($basis)), 2),
         ];
     }
 

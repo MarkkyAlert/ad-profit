@@ -56,9 +56,12 @@ final class AnnualServiceProjectionCurrentMonthTest extends TestCase
         $projection = $this->makeService()
             ->calculateYearEndProjection($months, 6000.0, 8, true, 2026, '2026-08-04');
 
-        // เดือนเต็มที่เหลือ = ก.ย.–ธ.ค. = 4 เดือน + เศษของ ส.ค. อีก 27/31 เดือน
-        $expected = 6000.0 + (4 + 27 / 31) * 2000.0;
+        // ⭐ ฐานคิดต่อวัน: มิ.ย. 2,000/30 · ก.ค. 2,000/31 → เฉลี่ยวันละ ~66.13
+        // วันที่เหลือ = 27 วันของ ส.ค. + ก.ย. 30 + ต.ค. 31 + พ.ย. 30 + ธ.ค. 31 = 149
+        $averagePerDay = ((2000.0 / 30) + (2000.0 / 31)) / 2;
+        $expected = 6000.0 + (27 + 30 + 31 + 30 + 31) * $averagePerDay;
 
+        $this->assertSame(149, $projection['remaining_days']);
         $this->assertSame(round($expected, 2), $projection['projection_mid']);
         $this->assertSame(4, $projection['months_remaining'], 'ตัวเลข "เหลืออีกกี่เดือน" ยังนับเป็นเดือนเต็ม');
         $this->assertEqualsWithDelta(27 / 31, $projection['current_month_remaining_ratio'], 0.0001);
@@ -67,12 +70,15 @@ final class AnnualServiceProjectionCurrentMonthTest extends TestCase
     /** สิ้นเดือนแล้วไม่มีเศษให้บวก */
     public function testNoRemainderOnTheLastDayOfTheMonth(): void
     {
-        $months = $this->monthRows([[6, 2000.0, 30], [7, 2000.0, 31], [8, 2000.0, 31]]);
+        // ⚠️ เท่ากัน "ต่อวัน" — วันละ 100 ทั้งสามเดือน (มิ.ย. 30 วัน · ก.ค./ส.ค. 31 วัน)
+        $months = $this->monthRows([[6, 3000.0, 30], [7, 3100.0, 31], [8, 3100.0, 31]]);
 
         $projection = $this->makeService()
             ->calculateYearEndProjection($months, 6000.0, 8, true, 2026, '2026-08-31');
 
-        $this->assertSame(6000.0 + 4 * 2000.0, $projection['projection_mid']);
+        // เหลือ ก.ย. 30 + ต.ค. 31 + พ.ย. 30 + ธ.ค. 31 = 122 วัน
+        $this->assertSame(122, $projection['remaining_days']);
+        $this->assertSame(6000.0 + 122 * 100.0, $projection['projection_mid']);
         $this->assertSame(0.0, $projection['current_month_remaining_ratio']);
     }
 
@@ -91,7 +97,11 @@ final class AnnualServiceProjectionCurrentMonthTest extends TestCase
         $this->assertTrue($projection['available'], 'ต้นเดือน ธ.ค. ยังควรประมาณการได้');
         $this->assertSame(0, $projection['months_remaining']);
         $this->assertEqualsWithDelta(21 / 31, $projection['current_month_remaining_ratio'], 0.0001);
-        $this->assertSame(round(20000.0 + (21 / 31) * 2000.0, 2), $projection['projection_mid']);
+
+        // ฐานต่อวัน: ต.ค. 2,000/31 · พ.ย. 2,000/30 · เหลือ 21 วันของ ธ.ค.
+        $averagePerDay = ((2000.0 / 31) + (2000.0 / 30)) / 2;
+        $this->assertSame(21, $projection['remaining_days']);
+        $this->assertSame(round(20000.0 + 21 * $averagePerDay, 2), $projection['projection_mid']);
     }
 
     /** วันสุดท้ายของปีถึงจะเรียกว่าจบปีจริง */
