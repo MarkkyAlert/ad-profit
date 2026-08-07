@@ -96,6 +96,7 @@ class OverviewAnnualService
         // ปีก่อน — ขอเฉพาะเดือน 1..lastMonth เพื่อให้เทียบ "ช่วงเดียวกัน"
         // (ปีนี้ถึงแค่ ส.ค. ก็ต้องเทียบ ม.ค.–ส.ค. ของปีก่อน ไม่ใช่ทั้ง 12 เดือน)
         $previousYearProfit = null;
+        $previousTotals = [];
         if ($lastMonth > 0) {
             $previousYear = $year - 1;
 
@@ -246,16 +247,28 @@ class OverviewAnnualService
             ];
         }
 
+        // ⚠️⚠️ ร้านที่ยังไม่มีข้อมูลต้องไปท้ายตารางเสมอ — กติกาเดียวกับมุมเดือน
+        // (`OverviewService::buildShopComparison`) แต่เดิมบังคับใช้แค่ที่นั่น
+        //
+        // กำไร `0.00` ของร้านที่ไม่ได้กรอก "มากกว่า" ร้านที่ขาดทุนจริง มันจึงขึ้นอันดับ 1
+        // วัดจริง (ร้าน A/B กรอกครบทั้งปีแต่ขาดทุน · ร้าน C ไม่เคยกรอกเลย):
+        //   อันดับ 1  ร้าน C (ไม่เคยกรอก)  ฿0        กรอก — วัน
+        //   อันดับ 2  ร้าน A               ฿-21,900  กรอก 219 วัน
+        //   อันดับ 3  ร้าน B               ฿-65,700  กรอก 219 วัน
+        // ขณะที่แท็บ "รายเดือน" ของหน้าเดียวกัน ข้อมูลชุดเดียวกัน ตอบตรงกันข้าม
+        // และไฟล์ Excel ชีต "เทียบร้าน" ใช้ลำดับนี้จึงผิดตามไปด้วย
+        //
+        // ร้านที่ไม่มีข้อมูลแปลว่า "ยังไม่รู้" ไม่ใช่ "ดีที่สุด"
         usort(
             $shopsRows,
-            // จัดอันดับด้วยกำไร ให้สอดคล้องกับมุมเดือน/แดชบอร์ด (เสมอกันค่อยใช้ shop_id)
+            // เสมอกันตัดด้วยจำนวนวันที่กรอก แล้วชื่อร้าน (query ไม่การันตีลำดับ)
             static function (array $left, array $right): int {
-                $profitCompare = $right['profit'] <=> $left['profit'];
-                if ($profitCompare !== 0) {
-                    return $profitCompare;
-                }
+                $leftHasData = ((int)($left['days_count'] ?? 0)) > 0;
+                $rightHasData = ((int)($right['days_count'] ?? 0)) > 0;
 
-                return ($left['shop_id'] ?? 0) <=> ($right['shop_id'] ?? 0);
+                return [$rightHasData, $right['profit'], (int)($right['days_count'] ?? 0)]
+                    <=> [$leftHasData, $left['profit'], (int)($left['days_count'] ?? 0)]
+                    ?: strcmp((string)($left['shop_name'] ?? ''), (string)($right['shop_name'] ?? ''));
             }
         );
 
@@ -278,6 +291,8 @@ class OverviewAnnualService
                     // YoY รวมทุกร้าน เทียบ "ช่วงเดียวกัน" ของปีก่อน (1..lastMonth)
                     'prev_year' => $year - 1,
                     'prev_year_profit' => $previousYearProfit,
+                    // ⚠️ "ปีก่อนไม่มีข้อมูล" ≠ "ปีก่อนเท่าทุนพอดี" — เหตุผลเต็มอยู่ใน AnnualService
+                    'prev_year_has_data' => $previousTotals !== [],
                     'yoy_profit_change' => $previousYearProfit !== null ? $profit - $previousYearProfit : null,
                     'yoy_profit_change_percent' => $previousYearProfit !== null
                         ? $this->calculateChangePercent($profit, $previousYearProfit)

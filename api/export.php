@@ -31,6 +31,27 @@ $shopRepository = new ShopRepository($pdo);
 $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
 $exportService = new ExportService($recordService, $shopRepository);
 
+// ⚠️⚠️ ไฟล์ที่ดาวน์โหลดต้องเป็นเดือนเดียวกับที่หน้าจอกำลังแสดงอยู่
+//
+// `history.php` ตั้งใจเปิด "เดือนอนาคตที่มีข้อมูลจริง" ได้ (แถวเก่าที่ลงล่วงหน้าไว้ก่อน
+// กติกา actuals — ไม่งั้นแก้/ลบแถวพวกนั้นไม่ได้เลย) แต่ `resolve_calendar_month()`
+// ด้านบนหดเดือนอนาคตกลับเป็นเดือนปัจจุบัน **เงียบ ๆ**
+//
+// วัดจริง: ดูหน้าประวัติเดือน ก.ย. (2 รายการ ฿110,000) กดปุ่ม Export CSV แล้วได้ไฟล์
+// ของเดือน ส.ค. (3 แถว ฿3,000) ชื่อไฟล์ก็เป็น ส.ค. โดยไม่มีข้อความบอกอะไรเลย
+//
+// ใช้กติกาเดียวกับหน้าประวัติ: เดือนอนาคตที่ "มีข้อมูลจริง" เท่านั้นจึงยอมให้ผ่าน
+$requestedMonth = trim((string)($_GET['month'] ?? ''));
+if (
+    preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth) === 1
+    && $requestedMonth > $selectedMonth
+) {
+    $futureMonth = $recordService->getMonthlyRecords($userId, $shopId, $requestedMonth);
+    if (($futureMonth['success'] ?? false) === true && !empty($futureMonth['data']['records'])) {
+        $selectedMonth = $requestedMonth;
+    }
+}
+
 $result = $exportService->buildMonthlyCsvPayload($userId, $shopId, $selectedMonth);
 
 if (($result['success'] ?? false) !== true) {

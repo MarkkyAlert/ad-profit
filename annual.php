@@ -214,6 +214,12 @@ $yoyPercent = isset($summary['yoy_profit_change_percent']) && $summary['yoy_prof
     ? (float)$summary['yoy_profit_change_percent']
     : null;
 
+// ⚠️⚠️ null แปลว่า "เทียบเป็น % ไม่ได้" ไม่ใช่ "ปีก่อนไม่มีข้อมูล"
+// ปีก่อนที่บันทึกครบทั้งปีแต่กำไรรวมเป็น ฿0 พอดี ก็ได้ null เหมือนกัน
+// เดิมเขียนว่า "ไม่มีข้อมูลปีก่อน" ตายตัว ซึ่งขัดกับบรรทัดถัดลงมาบนจอเดียวกัน
+// ที่พิมพ์ "ปีก่อนช่วงเดียวกัน ฿0" (อ่านว่าเป็นตัวเลขจริง)
+$prevYearHasData = ($summary['prev_year_has_data'] ?? false) === true;
+
 // แสดง % การเปลี่ยนแปลง — helper กลาง (null ต้องไม่กลายเป็น 0%)
 $formatYoyPercent = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
 $yoyToneClass = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
@@ -342,7 +348,9 @@ require __DIR__ . '/includes/header.php';
             <?php endif; ?>
         </span>
         <?php if ($yoyPercent === null): ?>
-            <span class="text-base font-bold text-slate-400">ไม่มีข้อมูลปีก่อน</span>
+            <span class="text-base font-bold text-slate-400">
+                <?= $prevYearHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+            </span>
         <?php else: ?>
             <span class="text-base font-bold <?= e($yoyToneClass($yoyPercent)) ?>">
                 กำไร <?= e($formatYoyPercent($yoyPercent)) ?>

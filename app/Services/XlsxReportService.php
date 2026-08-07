@@ -393,7 +393,15 @@ class XlsxReportService
         $percent = $summary['yoy_profit_change_percent'] ?? null;
         $sheet->mergeCells('A8:H8');
         if ($percent === null) {
-            $sheet->setCellValueExplicit('A8', 'ไม่มีข้อมูลปีก่อน', DataType::TYPE_STRING);
+            // ⚠️ null = เทียบเป็น % ไม่ได้ ไม่ใช่ "ไม่มีข้อมูล" — ปีก่อนที่เท่าทุนพอดี
+            // ก็ได้ null เหมือนกัน ต้องบอกให้ตรงกับหน้าเว็บ (ดูคอมเมนต์ใน AnnualService)
+            $sheet->setCellValueExplicit(
+                'A8',
+                ($summary['prev_year_has_data'] ?? false) === true
+                    ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้'
+                    : 'ไม่มีข้อมูลปีก่อน',
+                DataType::TYPE_STRING
+            );
         } else {
             $percentValue = (float)$percent;
             $change = (float)($summary['yoy_profit_change'] ?? 0);
@@ -973,7 +981,14 @@ class XlsxReportService
         );
 
         if ($percent === null) {
-            $sheet->setCellValueExplicit('B' . $rowNumber, 'ไม่มีข้อมูลปีก่อน', DataType::TYPE_STRING);
+            // ⚠️ null = เทียบเป็น % ไม่ได้ ไม่ใช่ "ไม่มีข้อมูล" (ดูคอมเมนต์ใน AnnualService)
+            $sheet->setCellValueExplicit(
+                'B' . $rowNumber,
+                ($summary['prev_year_has_data'] ?? false) === true
+                    ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้'
+                    : 'ไม่มีข้อมูลปีก่อน',
+                DataType::TYPE_STRING
+            );
             return;
         }
 

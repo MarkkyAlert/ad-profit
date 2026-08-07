@@ -191,4 +191,50 @@ final class OverviewAnnualServiceYoyTest extends TestCase
         $this->assertSame(3, $data['summary']['worst_month']['month']);
         $this->assertNotNull($data['shops'][0]['profit_share']);
     }
+
+    /**
+     * ⭐⭐ "ปีก่อนไม่มีข้อมูล" ต้องแยกออกจาก "ปีก่อนเท่าทุนพอดี"
+     *
+     * ⚠️ ทั้งสองกรณีทำให้ `yoy_profit_change_percent` เป็น null (หารด้วยศูนย์ไม่ได้)
+     * แต่หน้าเว็บและไฟล์ Excel แปล null เป็นข้อความ "ไม่มีข้อมูลปีก่อน" ตายตัว
+     * → ปีก่อนที่บันทึกครบทั้งปีแต่กำไรรวมเป็น ฿0 พอดี ก็ขึ้นว่าไม่มีข้อมูล
+     * ทั้งที่บรรทัดถัดลงมาบนจอเดียวกันพิมพ์ "ปีก่อนช่วงเดียวกัน ฿0" — ขัดกันเอง
+     */
+    public function testABreakEvenPreviousYearIsNotReportedAsMissingData(): void
+    {
+        // ปีก่อนกรอกครบ ม.ค.–ส.ค. แต่รายได้เท่าค่าแอดพอดี → กำไรรวม ฿0
+        $rows = [];
+        for ($month = 1; $month <= 8; $month++) {
+            $rows[] = [
+                'shop_id' => 1,
+                'month_key' => sprintf('2025-%02d', $month),
+                'total_revenue' => 50000.0,
+                'total_ad_cost' => 50000.0,
+                'days_count' => 30,
+            ];
+        }
+
+        $summary = $this->makeService($rows)->buildYearlyOverview(1, 2026, self::TODAY)['data']['summary'] ?? [];
+
+        // ⚠️ ห้ามเขียน `?? 0` ตรงนี้ — `??` จะแทน null ด้วย 0 แล้ว assertNull ก็ขัดกับตัวเอง
+        $this->assertArrayHasKey('yoy_profit_change_percent', $summary);
+        $this->assertNull($summary['yoy_profit_change_percent'], 'ฐานเป็นศูนย์แต่ยังคิด % ออกมาได้');
+        $this->assertTrue(
+            $summary['prev_year_has_data'] ?? false,
+            'ปีก่อนกรอกครบ 8 เดือนแต่ระบบบอกว่าไม่มีข้อมูล'
+        );
+    }
+
+    /** อีกด้าน: ปีก่อนไม่มีข้อมูลจริง ๆ ต้องบอกว่าไม่มี */
+    public function testAnEmptyPreviousYearIsReportedAsMissingData(): void
+    {
+        $summary = $this->makeService([
+            ['shop_id' => 1, 'month_key' => '2026-01', 'total_revenue' => 9000.0, 'total_ad_cost' => 3000.0, 'days_count' => 31],
+        ])->buildYearlyOverview(1, 2026, self::TODAY)['data']['summary'] ?? [];
+
+        $this->assertFalse(
+            $summary['prev_year_has_data'] ?? true,
+            'ปีก่อนไม่มีข้อมูลเลยแต่ระบบบอกว่ามี'
+        );
+    }
 }

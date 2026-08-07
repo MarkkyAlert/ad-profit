@@ -290,6 +290,14 @@ class AnnualService
                     // YoY เทียบ "ช่วงเดียวกัน" — ปีนี้ถึงเดือน lastMonth เทียบปีก่อนเดือน 1..lastMonth
                     'prev_year' => $year - 1,
                     'prev_year_profit' => $previousYearProfit,
+                    // ⚠️⚠️ "ปีก่อนไม่มีข้อมูล" กับ "ปีก่อนเท่าทุนพอดี" ต้องแยกออกจากกัน
+                    //
+                    // `yoy_profit_change_percent` เป็น null ทั้งสองกรณี (หารด้วยศูนย์ไม่ได้)
+                    // แต่หน้าเว็บแปล null เป็นข้อความ "ไม่มีข้อมูลปีก่อน" ตายตัว
+                    // → ปีก่อนบันทึกครบ 365 วันแต่กำไรรวมเป็น ฿0 พอดี ก็ขึ้นว่าไม่มีข้อมูล
+                    // ทั้งที่บรรทัดถัดลงมาบนจอเดียวกันพิมพ์ "ปีก่อนช่วงเดียวกัน ฿0"
+                    // ซึ่งอ่านว่าเป็นตัวเลขจริง — สองบรรทัดขัดกันเอง
+                    'prev_year_has_data' => $previousTotalsByMonthKey !== [],
                     'yoy_profit_change' => $profit - $previousYearProfit,
                     'yoy_profit_change_percent' => $this->calculateChangePercent($profit, $previousYearProfit),
                     'projection' => $this->calculateYearEndProjection(

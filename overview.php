@@ -99,6 +99,7 @@ $yearlyBestMonth = null;
 $yearlyWorstMonth = null;
 $yearlyPrevYear = $selectedYear - 1;
 $yearlyPrevProfit = null;
+$yearlyPrevHasData = false;
 $yearlyYoyPercent = null;
 $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
 $yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
@@ -228,6 +229,7 @@ if ($view === 'day') {
     $yearlyPrevProfit = isset($yearlySummary['prev_year_profit']) && $yearlySummary['prev_year_profit'] !== null
         ? (float)$yearlySummary['prev_year_profit']
         : null;
+    $yearlyPrevHasData = ($yearlySummary['prev_year_has_data'] ?? false) === true;
     $yearlyYoyChange = isset($yearlySummary['yoy_profit_change']) && $yearlySummary['yoy_profit_change'] !== null
         ? (float)$yearlySummary['yoy_profit_change']
         : null;
@@ -759,7 +761,10 @@ require __DIR__ . '/includes/header.php';
                             <?php endif; ?>
                         </span>
                         <?php if ($yearlyYoyPercent === null): ?>
-                            <span class="text-base font-bold text-slate-400">ไม่มีข้อมูลปีก่อน</span>
+                            <?php /* null = เทียบเป็น % ไม่ได้ ไม่ใช่ "ไม่มีข้อมูล" — ดูคอมเมนต์ใน annual.php */ ?>
+                            <span class="text-base font-bold text-slate-400">
+                                <?= $yearlyPrevHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                            </span>
                         <?php else: ?>
                             <span class="text-base font-bold <?= e($yearlyYoyTone($yearlyYoyPercent)) ?>">
                                 กำไรรวม <?= e($yearlyYoyText($yearlyYoyPercent)) ?>
