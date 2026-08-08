@@ -227,7 +227,10 @@ class RecordService
         // map ตำแหน่งคอลัมน์ → ฟิลด์ (คอลัมน์ที่ไม่รู้จัก เช่น กำไร/ROAS จะถูกเพิกเฉย)
         $columnMap = [];
         foreach ($headerCells as $index => $headerCell) {
-            $key = mb_strtolower(trim((string)$headerCell));
+            // ⚠️ ต้องเป็น `trim_unicode_whitespace()` — หัวตารางที่ก๊อปวางมามักติด NBSP
+            // ถ้าใช้ `trim()` ธรรมดา คอลัมน์จะไม่ถูกจับคู่ แล้ว **ทั้งไฟล์ถูกปฏิเสธ**
+            // ด้วยข้อความว่า "ไม่พบคอลัมน์" ซึ่งขัดกับสิ่งที่ผู้ใช้เห็นในไฟล์ตัวเอง
+            $key = mb_strtolower(trim_unicode_whitespace((string)$headerCell));
             if (isset(self::IMPORT_HEADER_ALIASES[$key])) {
                 $columnMap[self::IMPORT_HEADER_ALIASES[$key]] = (int)$index;
             }
@@ -270,11 +273,14 @@ class RecordService
                     return '';
                 }
 
-                return trim((string)($cells[$index] ?? ''));
+                return trim_unicode_whitespace((string)($cells[$index] ?? ''));
             };
 
             // แถวว่างสนิท → ข้าม
-            $nonEmpty = array_filter($cells, static fn($cell): bool => trim((string)$cell) !== '');
+            $nonEmpty = array_filter(
+                $cells,
+                static fn($cell): bool => trim_unicode_whitespace((string)$cell) !== ''
+            );
             if ($nonEmpty === []) {
                 continue;
             }
@@ -427,7 +433,11 @@ class RecordService
 
     private function isAmbiguousSlashDate(string $raw): bool
     {
-        if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', trim($raw), $matched) !== 1) {
+        // ⚠️⚠️ ต้องตัดช่องว่างยูนิโค้ดก่อน ไม่งั้น "01/08/2026<NBSP>" หลบด่านนี้ได้
+        // (regex ไม่แมตช์ → ตอบว่า "ไม่กำกวม") แล้วตัวอ่านวันที่ซึ่งตัดช่องว่างให้
+        // ก็เดาเป็น 1 ส.ค. ต่อ — ทั้งที่ 01/08 อ่านได้ทั้ง 1 ส.ค. และ 8 ม.ค.
+        // ตัวตรวจกับตัวอ่านต้องมองสตริงเดียวกัน ไม่งั้นด่านหนึ่งกันได้แต่อีกด่านปล่อยผ่าน
+        if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', trim_unicode_whitespace($raw), $matched) !== 1) {
             return false;
         }
 
@@ -453,7 +463,9 @@ class RecordService
 
     private function parseImportDate(string $raw): ?string
     {
-        $value = trim($raw);
+        // ⚠️ ตัวอ่านจำนวนเงิน (`normalize_money_string`) ตัดช่องว่างยูนิโค้ดให้อยู่แล้ว
+        // ตัวอ่านวันที่จึงต้องทำเหมือนกัน ไม่งั้นไฟล์เดียวกันอ่านยอดได้แต่อ่านวันไม่ได้
+        $value = trim_unicode_whitespace($raw);
         if ($value === '') {
             return null;
         }

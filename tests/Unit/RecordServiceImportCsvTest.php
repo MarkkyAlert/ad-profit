@@ -108,6 +108,52 @@ final class RecordServiceImportCsvTest extends TestCase
         $this->assertNull($result['rows'][1]['note']);   // โน้ตว่าง → null
     }
 
+    /**
+     * ⭐⭐ ไฟล์ที่หัวตารางติดช่องว่างที่มองไม่เห็น ต้องยังอ่านออก
+     *
+     * ⚠️ เดิม normalize หัวตารางด้วย `trim()` ธรรมดา ซึ่งไม่ตัด NBSP / ช่องว่างญี่ปุ่น /
+     * zero-width · หัวตาราง "วันที่ " (ติด NBSP จากการก๊อปวางใน Excel/Google Sheets)
+     * จึงไม่ถูกจับคู่ แล้ว **ทั้งไฟล์ถูกปฏิเสธ** ด้วยข้อความว่า
+     * 'ไฟล์ต้องมีคอลัมน์ "วันที่" (ไม่พบในหัวตาราง)'
+     * ซึ่ง **ขัดกับสิ่งที่ผู้ใช้เห็นในไฟล์ตัวเอง** (คอลัมน์นั้นอยู่ตรงนั้นชัด ๆ)
+     *
+     * ตัวอ่านจำนวนเงินรองรับ NBSP อยู่แล้ว (`normalize_money_string`) หัวตารางกับวันที่
+     * จึงเป็นสองที่ที่ตกสำรวจ — รูปแบบเดิมที่โปรเจกต์นี้เจอซ้ำ ๆ
+     */
+    public function testAHeaderWithAnInvisibleSpaceIsStillRecognised(): void
+    {
+        $csv = $this->toCsv([
+            ["วันที่\u{00A0}", 'รายได้', "ค่าแอด\u{3000}", 'โน้ต'],
+            ['2026-08-02', '1000', '200', 'ปกติ'],
+        ]);
+
+        $result = $this->makeService()->parseImportCsv($csv);
+
+        $this->assertTrue(
+            $result['success'],
+            'หัวตารางติดช่องว่างที่มองไม่เห็น แล้วทั้งไฟล์ถูกปฏิเสธ: ' . (string)$result['error']
+        );
+        $this->assertSame('2026-08-02', $result['rows'][0]['record_date']);
+        $this->assertSame('1000', $result['rows'][0]['revenue']);
+        $this->assertSame('200', $result['rows'][0]['ad_cost']);
+    }
+
+    /** ⭐ ช่องวันที่ที่ติดช่องว่างมองไม่เห็นก็ต้องอ่านออกเหมือนช่องจำนวนเงิน */
+    public function testADateCellWithAnInvisibleSpaceIsStillRead(): void
+    {
+        $csv = $this->toCsv([
+            ['วันที่', 'รายได้', 'ค่าแอด', 'โน้ต'],
+            ["2026-08-02\u{00A0}", '1000', '200', 'ปกติ'],
+            ["\u{200B}2026-08-03", '1500', '300', 'ปกติ'],
+        ]);
+
+        $result = $this->makeService()->parseImportCsv($csv);
+
+        $this->assertTrue($result['success'], (string)$result['error']);
+        $this->assertSame('2026-08-02', $result['rows'][0]['record_date']);
+        $this->assertSame('2026-08-03', $result['rows'][1]['record_date']);
+    }
+
     public function testParsesEnglishHeaderCsv(): void
     {
         $csv = $this->toCsv([

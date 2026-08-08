@@ -160,6 +160,10 @@ final class BrowserScriptParityTest extends ControllerTestCase
             '2569-08-01',   // พ.ศ.
             '31/12/2569',
             '2026-13-01', '2026-08-32', '', 'ยอดขาย', '1234',
+            // ⚠️ ติดช่องว่างที่มองไม่เห็นจากการก๊อปวาง — สองฝั่งต้องตอบเหมือนกัน
+            // (`.trim()` ของ JS กับ `trim()` ของ PHP ตัดคนละชุด จึงเคยเงียบ ๆ ไม่ตรงกัน)
+            "2026-08-01\u{00A0}", "\u{00A0}2026-08-01", "2026-08-01\u{3000}",
+            "2026-08-01\u{200B}", "\u{FEFF}2026-08-01", "01/08/2026\u{00A0}",
         ];
     }
 
@@ -217,7 +221,11 @@ final class BrowserScriptParityTest extends ControllerTestCase
             $jsValue = $fromJs[$index] === '<<null>>' ? null : $fromJs[$index];
             $phpValue = $this->phpParseDate($typed);
 
-            if (preg_match($sharedShape, trim($typed)) !== 1) {
+            // ⚠️ ต้องตัดช่องว่างยูนิโค้ดก่อนดูรูปแบบ — "2026-08-01<NBSP>" **คือ**
+            // วันที่ในรูปแบบร่วม เพียงแต่มีตัวอักษรที่มองไม่เห็นห่อไว้ · ถ้าใช้ `trim()`
+            // ธรรมดา ตัวอย่างพวกนี้จะหลุดไปกิ่ง "ทั้งคู่ต้องปฏิเสธ" ทั้งที่สิ่งที่ต้องพิสูจน์
+            // คือ "ทั้งคู่ต้องอ่านออกและได้ค่าเท่ากัน"
+            if (preg_match($sharedShape, trim_unicode_whitespace($typed)) !== 1) {
                 // นอกรูปแบบร่วม: ทั้งคู่ต้องปฏิเสธ (ยกเว้นรูปแบบไทยที่ PHP รับฝ่ายเดียว)
                 $this->assertNull($jsValue, "JS ยอมรับค่าที่ไม่ใช่วันที่: \"{$typed}\" → {$fromJs[$index]}");
                 continue;

@@ -479,7 +479,11 @@ require __DIR__ . '/includes/header.php';
 
         // รองรับ YYYY-MM-DD และ D/M/YYYY (+ แปลง พ.ศ. 2400–2700) — นอกเหนือจากนี้คืน null
         const parseDateCell = (raw) => {
-            const value = String(raw).trim();
+            // ⚠️ `.trim()` ของ JS ตัด NBSP และช่องว่างญี่ปุ่นให้อยู่แล้ว แต่ **ไม่ตัด**
+            // ตัวอักษรความกว้างศูนย์ (U+200B–U+200D, U+FEFF) ซึ่งติดมาจากการก๊อปวางบ่อย
+            // ฝั่ง PHP (`trim_unicode_whitespace`) ตัดให้ → ถ้าไม่ตัดตรงนี้ด้วย ไฟล์เดียวกัน
+            // จะ "วางแล้วอ่านไม่ออก แต่นำเข้าเป็นไฟล์แล้วอ่านออก" ซึ่งอธิบายให้ผู้ใช้ไม่ได้
+            const value = String(raw).replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
             if (value === '') {
                 return null;
             }
