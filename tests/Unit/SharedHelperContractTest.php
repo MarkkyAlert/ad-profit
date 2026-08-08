@@ -560,4 +560,78 @@ final class SharedHelperContractTest extends TestCase
             . ' — ให้เรียก resolve_month_allowing_legacy_future() แทน'
         );
     }
+
+    /**
+     * ⭐⭐ การแปลง "ข้อความ error → รหัสสถานะ HTTP" ต้องมีที่เดียว
+     *
+     * ⚠️ เดิมมี 2 วิธีปนกัน: `infer_http_status_from_error()` (8 จุด ใน 3 ไฟล์)
+     * กับ inline `str_contains($err, 'ไม่มีสิทธิ์') ? 403 : 422` (7 จุด ใน 5 ไฟล์)
+     * — `api/export.php` กับ `api/export-xlsx.php` ทำงานคู่กันแต่ใช้คนละวิธี
+     *
+     * ⚠️ **ตอนที่เจอ ทั้งสองวิธีให้ผลเท่ากันในทางปฏิบัติ** เพราะ service ที่ endpoint
+     * กลุ่ม inline เรียกใช้ คืนเฉพาะข้อความที่มีคำว่า "ไม่มีสิทธิ์" เท่านั้น
+     * (ตรวจแล้ว: มีแต่ `ProfileService` ที่คืน "Unauthorized" และ `api/profile.php`
+     * ไม่ได้ใช้ inline) — ปัญหาคือ**กับดักในอนาคต**: วันที่ service ตัวใดคืนข้อความ
+     * ที่ helper รู้จัก (Unauthorized → 401 · วิธีเรียกหน้านี้ไม่ถูกต้อง → 405 ·
+     * หมดเวลาทำรายการ → 403) endpoint กลุ่ม inline จะตอบ 422 เงียบ ๆ ผิดความหมาย
+     */
+    public function testNobodyMapsErrorsToStatusCodesByHand(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge((array)glob($root . '/api/*.php'), (array)glob($root . '/*.php'));
+
+        $offenders = [];
+        foreach ($files as $file) {
+            $code = (string)file_get_contents((string)$file);
+            if (preg_match('/str_contains\([^)]*ไม่มีสิทธิ์[^)]*\)\s*\?\s*403/u', $code) === 1) {
+                $offenders[] = basename((string)$file);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'แปลง error เป็นรหัสสถานะเองใน: ' . implode(', ', $offenders)
+            . ' — ให้เรียก infer_http_status_from_error() แทน (มีอยู่แล้วและรู้จัก 401/403/405)'
+        );
+    }
+
+    /**
+     * ⭐⭐ Service ห้ามเขียน SQL เอง — ข้อมูลต้องผ่าน Repository
+     *
+     * ⚠️ กฎนี้เขียนไว้ใน CLAUDE.md ("Repository = SQL ล้วน") แต่ไม่เคยมีอะไรบังคับ
+     * ผลคือ `AuthService` เขียน SQL ของตาราง `auth_rate_limits` เอง 8 จุด
+     * ขณะที่ `RateLimitRepository` ที่ทำเรื่องเดียวกันมีอยู่แล้ว (แต่ถูกใช้แค่โดย
+     * `ProfileService`) → มี 2 ที่ที่รู้โครงสร้างตารางเดียวกัน แก้ที่หนึ่งลืมอีกที่ได้
+     *
+     * ⚠️⚠️ `AuthService` ถูกยกเว้นไว้ **ชั่วคราว** — การย้าย SQL ออกไม่ใช่งานกลไก
+     * เพราะตัวมันมี fallback ไปนับใน session เมื่อตารางไม่พร้อม ซึ่งเป็น "นโยบาย"
+     * ไม่ใช่ "การเข้าถึงข้อมูล" · ต้องตัดสินใจก่อนว่าจะวางชั้นนั้นไว้ตรงไหน
+     * **ห้ามเพิ่มชื่อไฟล์ใหม่เข้ารายการยกเว้นนี้** — รายการนี้มีไว้ให้สั้นลง ไม่ใช่ยาวขึ้น
+     */
+    public function testServicesDoNotWriteSqlThemselves(): void
+    {
+        $knownException = 'AuthService.php';
+
+        $offenders = [];
+        foreach ((array)glob(dirname(__DIR__, 2) . '/app/Services/*.php') as $file) {
+            $name = basename((string)$file);
+            if ($name === $knownException) {
+                continue;
+            }
+
+            $code = (string)file_get_contents((string)$file);
+            $sqlCall = '/->(prepare|query|exec)\s*\(\s*[\x27"]?\s*(SELECT|INSERT|UPDATE|DELETE|\$sql)/i';
+            if (preg_match($sqlCall, $code) === 1) {
+                $offenders[] = $name;
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'Service เขียน SQL เองใน: ' . implode(', ', $offenders)
+            . ' — ให้ย้ายไป Repository ตามกฎในคู่มือ'
+        );
+    }
 }

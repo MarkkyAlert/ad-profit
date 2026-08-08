@@ -99,7 +99,7 @@ if ($action === 'rename') {
 
     if (($renameResult['success'] ?? false) !== true || !is_array($renameResult['shop'] ?? null)) {
         $errorMessage = (string)($renameResult['error'] ?? 'ไม่สามารถอัปเดตชื่อร้านค้าได้');
-        $statusCode = str_contains($errorMessage, 'ไม่มีสิทธิ์') ? 403 : 422;
+        $statusCode = infer_http_status_from_error($errorMessage, 422);
 
         $respond([
             'success' => false,
@@ -130,7 +130,7 @@ if ($action === 'switch') {
 
     if (($switchResult['success'] ?? false) !== true || !is_array($switchResult['shop'] ?? null)) {
         $errorMessage = (string)($switchResult['error'] ?? 'ไม่สามารถสลับร้านค้าได้');
-        $statusCode = str_contains($errorMessage, 'ไม่มีสิทธิ์') ? 403 : 422;
+        $statusCode = infer_http_status_from_error($errorMessage, 422);
 
         $respond([
             'success' => false,
@@ -167,7 +167,7 @@ if ($action === 'delete') {
 
     if (($deleteResult['success'] ?? false) !== true) {
         $errorMessage = (string)($deleteResult['error'] ?? 'ไม่สามารถลบร้านค้าได้');
-        $statusCode = str_contains($errorMessage, 'ไม่มีสิทธิ์') ? 403 : 422;
+        $statusCode = infer_http_status_from_error($errorMessage, 422);
 
         $respond([
             'success' => false,

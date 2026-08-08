@@ -30,7 +30,7 @@ $result = $recordService->buildEditableMonthGrid($userId, $shopId, $selectedMont
 
 if (($result['success'] ?? false) !== true) {
     $errorMessage = (string)($result['error'] ?? 'ไม่สามารถโหลดข้อมูลของเดือนนี้ได้');
-    $statusCode = str_contains($errorMessage, 'ไม่มีสิทธิ์') ? 403 : 422;
+    $statusCode = infer_http_status_from_error($errorMessage, 422);
 
     jsonResponse([
         'success' => false,

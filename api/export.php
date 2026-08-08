@@ -22,10 +22,6 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 $shopId = resolve_current_shop_id($pdo, $userId);
 $selectedMonth = resolve_calendar_month($_GET['month'] ?? null);
 
-if (preg_match('/^\d{4}-\d{2}$/', $selectedMonth) !== 1) {
-    $selectedMonth = date('Y-m');
-}
-
 $recordRepository = new RecordRepository($pdo);
 $shopRepository = new ShopRepository($pdo);
 $recordService = new RecordService($recordRepository, $shopRepository, $pdo);
@@ -58,7 +54,7 @@ if (($result['success'] ?? false) !== true) {
     $errorMessage = (string)($result['error'] ?? 'ไม่สามารถ export ข้อมูลได้');
 
     if ($wantsJson) {
-        $statusCode = str_contains($errorMessage, 'ไม่มีสิทธิ์') ? 403 : 422;
+        $statusCode = infer_http_status_from_error($errorMessage, 422);
         jsonResponse([
             'success' => false,
             'error' => $errorMessage,

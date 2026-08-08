@@ -31,7 +31,7 @@ $result = $annualService->buildYearlySummary($userId, $shopId, $selectedYear);
 
 if (($result['success'] ?? false) !== true) {
     $errorMessage = (string)($result['error'] ?? 'ไม่สามารถโหลดข้อมูลสรุปประจำปีได้');
-    $statusCode = str_contains($errorMessage, 'ไม่มีสิทธิ์') ? 403 : 422;
+    $statusCode = infer_http_status_from_error($errorMessage, 422);
 
     jsonResponse([
         'success' => false,
