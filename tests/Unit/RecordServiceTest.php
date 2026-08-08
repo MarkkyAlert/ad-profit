@@ -15,6 +15,36 @@ final class RecordServiceTest extends TestCase
      * สร้าง service โดย mock repository ทั้งคู่ และส่ง db = null (ข้าม transaction/lock)
      * userCanAccessShop คุมได้ผ่านพารามิเตอร์ $canAccess
      */
+    /**
+     * โน้ตที่ถูกส่งลง repository จริง — ไม่ใช่ค่าที่เทสต์คำนวณเอง
+     *
+     * `upsertRecord()` ไม่ได้คืนค่าที่ normalize แล้วออกมา จึงต้องดักที่ปลายทาง
+     */
+    private function normalizedNoteFor(?string $note): ?string
+    {
+        $captured = 'ยังไม่ถูกเรียก';
+
+        $recordRepository = $this->createStub(RecordRepository::class);
+        $recordRepository->method('upsert')->willReturnCallback(
+            function (int $shopId, string $date, float $revenue, float $adCost, ?string $storedNote) use (&$captured): bool {
+                $captured = $storedNote;
+
+                return true;
+            }
+        );
+
+        $shopRepository = $this->createStub(ShopRepository::class);
+        $shopRepository->method('userCanAccessShop')->willReturn(true);
+
+        $service = new RecordService($recordRepository, $shopRepository, null);
+        $result = $service->upsertRecord(1, 1, '2024-01-15', 100.0, 10.0, $note);
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertNotSame('ยังไม่ถูกเรียก', $captured, 'ไม่ได้เรียก repository เลย — เทสต์ไม่ได้พิสูจน์อะไร');
+
+        return $captured;
+    }
+
     private function makeService(bool $canAccess = true): RecordService
     {
         $recordRepository = $this->createStub(RecordRepository::class);
@@ -55,6 +85,35 @@ final class RecordServiceTest extends TestCase
 
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('255', $result['error']);
+    }
+
+    /**
+     * ⭐⭐ โน้ตที่เป็นอักขระมองไม่เห็นล้วน = ไม่มีโน้ต (ฟอร์มวันเดียว)
+     *
+     * ⚠️ `trim()` ของ PHP ไม่ตัด NBSP / ช่องว่างญี่ปุ่น / zero-width · ถ้าเก็บไว้:
+     *   · บนจอเห็นเป็นช่องว่าง ไม่มีใครรู้ว่ามีอะไรอยู่
+     *   · ตัวกัน "ช่องว่างทับของเดิม" จะนับว่ามีโน้ตจริง แล้ว **บล็อกแถวนั้นตลอดกาล**
+     *     พร้อมข้อความ `โน้ต (มีข้อความ "" อยู่แล้ว)` ที่อ่านไม่รู้เรื่อง
+     *
+     * ⚠️ ทางตารางกรอกหลายวันแปลงให้ตั้งแต่ต้นทาง เทสต์ตรงนั้นจึงไม่ครอบจุดนี้
+     * — ต้องยิงที่ `upsertRecord()` ตรง ๆ ถึงจะพิสูจน์ได้ (วัดแล้ว: กลายพันธุ์ไม่แดง)
+     */
+    public function testANoteMadeOnlyOfInvisibleSpacesCountsAsNoNote(): void
+    {
+        $service = $this->makeService();
+
+        foreach (["\u{00A0}", "\u{3000}", "\u{200B}", "\u{FEFF}\u{00A0}"] as $invisible) {
+            $this->assertNull(
+                $this->normalizedNoteFor($invisible),
+                'เก็บอักขระที่มองไม่เห็นไว้เป็นโน้ต — จะบล็อกการแก้ไขแถวนั้นตลอดกาล'
+            );
+        }
+    }
+
+    /** ⭐ ส่วนโน้ตจริงที่มีช่องว่างหุ้ม ต้องถูกตัดหัวท้ายแต่เนื้อในต้องอยู่ครบ */
+    public function testARealNoteKeepsItsContentAfterTrimming(): void
+    {
+        $this->assertSame('ยอดวันอังคาร', $this->normalizedNoteFor("\u{00A0}ยอดวันอังคาร\u{3000}"));
     }
 
     /**

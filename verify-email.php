@@ -23,7 +23,8 @@ $profileService = new ProfileService(
     new EmailService()
 );
 
-$token = is_string($_GET['token'] ?? null) ? trim((string)$_GET['token']) : '';
+// ⚠️ ตัดช่องว่างยูนิโค้ด — เหตุผลเดียวกับ `reset-password.php`
+$token = is_string($_GET['token'] ?? null) ? trim_unicode_whitespace((string)$_GET['token']) : '';
 
 // ⚠️⚠️ ต้องรู้ก่อนว่าลิงก์นี้เป็นของบัญชีไหน **ก่อนแตะอะไรทั้งสิ้น**
 //

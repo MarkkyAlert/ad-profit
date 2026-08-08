@@ -538,7 +538,8 @@ class RecordService
             $recordDate = trim((string)($row['record_date'] ?? ''));
             $revenueRaw = trim((string)($row['revenue'] ?? ''));
             $adCostRaw = trim((string)($row['ad_cost'] ?? ''));
-            $noteRaw = trim((string)($row['note'] ?? ''));
+            // ⚠️ ตัดช่องว่างยูนิโค้ด — โน้ตที่เป็นอักขระมองไม่เห็นล้วนไม่ใช่โน้ตจริง
+            $noteRaw = trim_unicode_whitespace((string)($row['note'] ?? ''));
 
             if ($recordDate === '' && $revenueRaw === '' && $adCostRaw === '' && $noteRaw === '') {
                 continue;
@@ -949,7 +950,11 @@ class RecordService
             // ไม่ได้ทำให้ข้อมูลหาย การปฏิเสธจึงเป็นการขวางงานที่ไม่มีผลอะไร
             $existingRevenue = (float)($row['revenue'] ?? 0);
             $existingAdCost = (float)($row['ad_cost'] ?? 0);
-            $existingNote = trim((string)($row['note'] ?? ''));
+            // ⚠️⚠️ ต้องตัดช่องว่างยูนิโค้ด ไม่งั้นโน้ตเก่าที่เป็นอักขระมองไม่เห็นล้วน
+            // จะถูกนับว่า "มีข้อความจริงจะหาย" แล้วปฏิเสธทั้งชุด พร้อมข้อความ
+            // `โน้ต (มีข้อความ "" อยู่แล้ว)` — เครื่องหมายคำพูดสองตัวติดกัน
+            // ผลคือแถวนั้นแก้ไม่ได้ทั้งแถวตลอดกาล (บทเรียนเดียวกับชื่อร้าน/ชื่อที่แสดง)
+            $existingNote = trim_unicode_whitespace((string)($row['note'] ?? ''));
 
             if ($blank['revenue'] && $existingRevenue > 0) {
                 $fields[] = 'รายได้ (มียอด ' . number_format($existingRevenue, 2) . ' อยู่แล้ว)';
@@ -2030,7 +2035,9 @@ class RecordService
             ];
         }
 
-        $normalizedNote = $note === null ? null : trim($note);
+        // ⚠️ อักขระมองไม่เห็นล้วน = ไม่มีโน้ต · ถ้าเก็บไว้ บนจอจะเห็นเป็นช่องว่าง
+        // โดยไม่มีใครรู้ว่ามีอะไรอยู่ และตัวกัน "ช่องว่างทับของเดิม" จะบล็อกแถวนั้นตลอดไป
+        $normalizedNote = $note === null ? null : trim_unicode_whitespace($note);
         if ($normalizedNote !== null && $normalizedNote !== '') {
             $length = function_exists('mb_strlen') ? mb_strlen($normalizedNote) : strlen($normalizedNote);
             if ($length > self::NOTE_MAX_LENGTH) {

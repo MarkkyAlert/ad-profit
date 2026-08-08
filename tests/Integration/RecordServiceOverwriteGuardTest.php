@@ -48,6 +48,53 @@ final class RecordServiceOverwriteGuardTest extends IntegrationTestCase
         $this->assertNull($row['note']);
     }
 
+    /**
+     * ⭐⭐ โน้ตที่เป็น "อักขระมองไม่เห็น" ล้วน ไม่ใช่โน้ตจริง — ต้องล้างออกได้
+     *
+     * ⚠️ `trim()` ของ PHP ไม่ตัด NBSP / ช่องว่างญี่ปุ่น / zero-width · ตัวกัน
+     * "ช่องว่างทับของเดิม" จึงมองว่ายังมีโน้ตจริงอยู่ แล้ว **ปฏิเสธทั้งชุด**
+     * พร้อมข้อความที่อ่านแล้วงงที่สุดในระบบ: โน้ต (มีข้อความ "" อยู่แล้ว)
+     * — เครื่องหมายคำพูดสองตัวติดกัน เพราะข้างในมองไม่เห็น
+     *
+     * ผลคือแถวนั้นแก้ไม่ได้ทั้งแถวตลอดกาล (บทเรียนเดียวกับชื่อร้าน/ชื่อที่แสดง)
+     */
+    public function testANoteMadeOnlyOfInvisibleSpacesDoesNotBlockTheWholeBatch(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $this->createRecord($shopId, '2026-08-01', 5000.0, 1000.0, "\u{00A0}");
+
+        $result = $this->makeService()->upsertManyRecords($userId, $shopId, [
+            ['row_number' => 1, 'record_date' => '2026-08-01', 'revenue' => '7000', 'ad_cost' => '2000',
+             // ธงนี้คือสิ่งที่ controller ตั้งให้เมื่อ "โหลดข้อมูลเดือนไม่สำเร็จ"
+             // (ผู้ใช้ยังไม่เคยเห็นโน้ตเดิม การกดบันทึกจึงอาจลบมันทิ้งโดยไม่ตั้งใจ)
+             'note' => '', 'note_was_missing' => true],
+        ]);
+
+        $this->assertTrue(
+            $result['success'],
+            'แถวถูกปฏิเสธเพราะโน้ตที่มองไม่เห็นถูกนับว่าเป็นข้อความจริง: ' . (string)($result['error'] ?? '')
+        );
+    }
+
+    /** ⭐ และโน้ตที่พิมพ์มาเป็นอักขระมองไม่เห็นล้วน ต้องเก็บเป็น "ไม่มีโน้ต" */
+    public function testANoteTypedAsInvisibleSpacesIsStoredAsNoNote(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+
+        $result = $this->makeService()->upsertManyRecords($userId, $shopId, [
+            ['row_number' => 1, 'record_date' => '2026-08-01', 'revenue' => '7000', 'ad_cost' => '2000',
+             'note' => "\u{3000}\u{200B}"],
+        ]);
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertNull(
+            $this->pdo->query("SELECT note FROM daily_records WHERE shop_id = {$shopId}")->fetchColumn() ?: null,
+            'เก็บอักขระที่มองไม่เห็นไว้เป็นโน้ต — บนจอจะเห็นเป็นช่องว่างโดยไม่มีใครรู้ว่ามีอะไรอยู่'
+        );
+    }
+
     /** ⭐ ไฟล์ CSV ที่ "ไม่มีคอลัมน์โน้ตเลย" ต้องไม่ล้างโน้ตของวันที่มีอยู่ */
     public function testACsvWithoutANoteColumnDoesNotWipeExistingNotes(): void
     {

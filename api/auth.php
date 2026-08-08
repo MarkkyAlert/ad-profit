@@ -151,7 +151,7 @@ if ($action === 'reset_password') {
     // ⚠️ อ่านจาก $_POST เท่านั้น — ห้าม fallback ไป session
     // เดิม fallback ทำให้ลิงก์ที่ใครก็ได้ยิงเข้ามาทาง GET กำหนดได้ว่าการตั้งรหัสครั้งถัดไป
     // จะไปลงบัญชีไหน (ดูคอมเมนต์ยาวใน reset-password.php)
-    $resetToken = trim((string)($_POST['token'] ?? ''));
+    $resetToken = trim_unicode_whitespace((string)($_POST['token'] ?? ''));
 
     // ต้องรู้ token ก่อนตรวจ CSRF เพื่อให้ redirect ของ form error พากลับไปหน้าเดิมได้
     $failureRedirect = $resetToken !== ''

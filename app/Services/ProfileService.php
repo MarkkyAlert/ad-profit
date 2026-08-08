@@ -75,7 +75,7 @@ class ProfileService
      */
     public function confirmEmailChange(string $token): array
     {
-        $token = trim($token);
+        $token = trim_unicode_whitespace($token);
         if ($token === '') {
             return ['success' => false, 'error' => 'ลิงก์ยืนยันอีเมลไม่ถูกต้อง', 'reason' => 'bad_link'];
         }

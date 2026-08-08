@@ -117,7 +117,8 @@ if ($action === 'bulk_upsert') {
                 ? $adCostParsed['value']
                 : (string)($adCosts[$rowIndex] ?? ''),
             'note' => isset($notes[$rowIndex]) ? (string)$notes[$rowIndex] : null,
-            'note_was_missing' => trim((string)($notes[$rowIndex] ?? '')) === ''
+            // ⚠️ ตัดช่องว่างยูนิโค้ด — ช่องที่มีแต่อักขระมองไม่เห็นคือช่องว่าง
+            'note_was_missing' => trim_unicode_whitespace((string)($notes[$rowIndex] ?? '')) === ''
                 && (string)($noteChecked[$rowIndex] ?? '') !== '1',
         ];
     }
