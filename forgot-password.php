@@ -57,11 +57,29 @@ $pageTitle = 'ลืมรหัสผ่าน - ' . APP_NAME;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(16px);
         }
+
+        /* ชื่อแอปแบบเดียวกับหน้าเข้าสู่ระบบ — สองหน้านี้มี <style> ของตัวเอง
+           ไม่ได้ใช้ header.php จึงต้องนิยามคลาสนี้ซ้ำที่นี่ */
+        .text-gradient {
+            background: linear-gradient(135deg, #f97316 0%, #d946ef 55%, #6366f1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text
+        }
+
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4 text-slate-200">
     <div class="w-full max-w-md">
         <div class="glass-card rounded-2xl p-8">
+            <?php /* ⚠️ ต้องมีชื่อแอปเหมือนหน้าเข้าสู่ระบบ — คนที่มาถึงหน้านี้มักกดมาจาก
+                     ลิงก์ในกล่องจดหมาย ซึ่งเป็นจังหวะที่ระวังเรื่องลิงก์ปลอมที่สุดพอดี
+                     การ์ดเปล่า ๆ ที่ไม่บอกว่าเป็นเว็บอะไร ทำให้ยืนยันไม่ได้ว่ามาถูกที่ */ ?>
+            <div class="mb-6 text-center">
+                <div class="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-2xl shadow-sm">📊</div>
+                <p class="text-xl font-bold"><span class="text-gradient">วิเคราะห์ยอดขาย</span></p>
+            </div>
+
             <div class="mb-6 text-center">
                 <h1 class="mb-2 text-2xl font-bold text-white">ลืมรหัสผ่าน</h1>
                 <p class="text-sm text-slate-400">กรอกอีเมลที่ใช้สมัครเพื่อรับลิงก์รีเซ็ตรหัสผ่าน</p>

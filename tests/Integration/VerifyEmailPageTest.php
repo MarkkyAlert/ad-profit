@@ -296,4 +296,48 @@ final class VerifyEmailPageTest extends ControllerTestCase
             'ยืนยันสำเร็จทั้งที่ไม่มี CSRF token ที่ถูกต้อง'
         );
     }
+
+    /**
+     * ⭐⭐ คนที่ยังไม่ได้ล็อกอินต้องไม่เห็นเมนูของคนที่ล็อกอินแล้ว
+     *
+     * หน้านี้เป็น **หน้าเดียว** ที่ใช้ `includes/header.php` โดยไม่มี `requireAuth()`
+     * (ต้องเปิดจากลิงก์ในกล่องจดหมายตอนยังไม่ได้ล็อกอินได้) · วัดจริงก่อนแก้ ผู้ใช้เห็น:
+     *   · ป้ายผู้ใช้ที่ว่างเปล่า — เป็น "👤 ▼" เฉย ๆ ไม่มีอีเมล
+     *   · ตัวเลือกร้าน + ปุ่ม "จัดการร้าน" ที่โชว์ชื่อปริยาย "ร้านค้าของฉัน" ซึ่งไม่มีอยู่จริง
+     *   · เมนูล่าง 4 ปุ่ม ที่กดแล้วเด้งกลับหน้าเข้าสู่ระบบทุกปุ่ม
+     *
+     * ⚠️ ต้องตรวจ **ทั้งสองทาง** — ตัดเมนูทิ้งอย่างเดียวไม่พอ ต้องยังมีทางไปต่อ
+     * (ปุ่มเข้าสู่ระบบ) และฟอร์มยืนยันต้องไม่หายไปด้วย
+     */
+    public function testAVisitorWhoIsNotSignedInSeesNoSignedInMenus(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OwnerPass123');
+        $token = $this->makeToken($userId, 'moved@example.com');
+
+        $body = $this->get('/verify-email.php?token=' . $token, $this->startBlankSession())['body'];
+
+        foreach ([
+            'แดชบอร์ด' => 'เมนูล่างของคนที่ล็อกอินแล้วยังโผล่มาให้คนที่ยังไม่ได้ล็อกอิน',
+            'จัดการร้าน' => 'ปุ่มจัดการร้านยังโผล่มาให้คนที่ยังไม่ได้ล็อกอิน',
+            'profile-dropdown' => 'ป้ายผู้ใช้ (ซึ่งว่างเปล่า) ยังถูกเรนเดอร์',
+        ] as $needle => $why) {
+            $this->assertStringNotContainsString($needle, $body, $why);
+        }
+
+        $this->assertStringContainsString('เข้าสู่ระบบ', $body, 'ตัดเมนูทิ้งแล้วไม่เหลือทางไปไหนเลย');
+        $this->assertStringContainsString('name="token"', $body, 'ฟอร์มยืนยันหายไปด้วย');
+    }
+
+    /** เมนูปกติต้องยังอยู่ครบสำหรับคนที่ล็อกอินแล้ว — กันแก้แล้วเผลอตัดของทุกคน */
+    public function testASignedInOwnerStillSeesTheNormalMenus(): void
+    {
+        $userId = $this->createUser('owner@example.com', 'OwnerPass123');
+        $shopId = $this->createShop($userId);
+        $token = $this->makeToken($userId, 'moved@example.com');
+
+        $body = $this->get('/verify-email.php?token=' . $token, $this->startSession($userId, $shopId))['body'];
+
+        $this->assertStringContainsString('แดชบอร์ด', $body, 'คนที่ล็อกอินแล้วกลับไม่มีเมนูล่าง');
+        $this->assertStringContainsString('profile-dropdown', $body, 'คนที่ล็อกอินแล้วกลับไม่มีป้ายผู้ใช้');
+    }
 }

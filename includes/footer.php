@@ -5,9 +5,13 @@ declare(strict_types=1);
 $shopCount = isset($shopCount) ? (int)$shopCount : 1;
 $currentPage = $currentPage ?? '';
 $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
+// ⚠️ ยังไม่ได้ล็อกอิน = ไม่ต้องมีเมนูล่าง ทุกปุ่มพากลับหน้าเข้าสู่ระบบอยู่ดี
+// (ตั้งค่าไว้ที่ `includes/header.php` ซึ่ง include ก่อนเสมอ — ตัวแปรอยู่ scope เดียวกัน)
+$isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0);
 ?>
 </main>
 
+<?php if ($isSignedIn): ?>
 <nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#0d1526]/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
     <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-0.5 py-1.5 text-center text-[10px] text-slate-400 sm:gap-1 sm:py-2 sm:text-xs">
         <?php
@@ -31,6 +35,7 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
         <?php endforeach; ?>
     </div>
 </nav>
+<?php endif; ?>
 
 <div id="global-loading" class="modal-bg fixed inset-0 z-[60] hidden items-center justify-center">
     <div class="section-card flex items-center gap-3 px-5 py-4 text-sm text-slate-300 shadow-2xl shadow-black/50">

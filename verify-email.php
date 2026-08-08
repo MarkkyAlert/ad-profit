@@ -144,7 +144,9 @@ require __DIR__ . '/includes/header.php';
             <form method="post" action="<?= e(app_url('/verify-email.php')) ?>" class="mt-5">
                 <?= csrf_field() ?>
                 <input type="hidden" name="token" value="<?= e($token) ?>">
-                <button type="submit" class="btn-primary inline-flex px-4 py-2 text-sm">
+                <?php /* ส้ม = ปุ่มหลักของทั้งระบบ · เดิมปุ่มนี้กับ "ไปหน้าเข้าสู่ระบบ"
+                         ด้านล่างเป็นสีเดียวกันขนาดเท่ากัน แยกไม่ออกว่าอันไหนคือสิ่งที่ต้องกด */ ?>
+                <button type="submit" class="btn-orange inline-flex px-4 py-2 text-sm">
                     ยืนยันเปลี่ยนอีเมล
                 </button>
             </form>
@@ -163,8 +165,10 @@ require __DIR__ . '/includes/header.php';
             <p class="mt-1 text-xs text-slate-400"><?= e($hintMessage) ?></p>
         <?php endif; ?>
 
+        <?php /* ทางออกสำรอง — ต้องดูเบากว่าปุ่มหลักเสมอ · ตอนที่มีฟอร์มยืนยันอยู่ด้วย
+                 สองปุ่มนี้เคยหน้าตาเหมือนกันเป๊ะ ผู้ใช้จึงเดาไม่ออกว่าต้องกดอันไหน */ ?>
         <a href="<?= e(app_url('/login.php')) ?>"
-           class="btn-primary mt-5 inline-flex px-4 py-2 text-sm">ไปหน้าเข้าสู่ระบบ</a>
+           class="btn-ghost mt-5 inline-flex px-4 py-2 text-sm">ไปหน้าเข้าสู่ระบบ</a>
     </section>
 </main>
 

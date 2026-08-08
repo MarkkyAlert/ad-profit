@@ -280,8 +280,11 @@ $flashError = get_flash('error');
                         <div>
                             <label for="register-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>
                             <input id="register-password" name="password" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
+                                aria-describedby="register-password-rule"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
-                                placeholder="อย่างน้อย <?= PASSWORD_MIN_LENGTH ?> ตัวอักษร">
+                                placeholder="••••••••">
+                            <?php /* เกณฑ์ต้องอยู่ถาวร — placeholder หายทันทีที่เริ่มพิมพ์ */ ?>
+                            <p id="register-password-rule" class="mt-1.5 text-xs text-slate-400">ต้องยาวอย่างน้อย <?= PASSWORD_MIN_LENGTH ?> ตัวอักษร</p>
                         </div>
                         <div>
                             <label for="register-password-confirm" class="mb-1.5 block text-sm font-medium text-slate-300">ยืนยันรหัสผ่าน</label>

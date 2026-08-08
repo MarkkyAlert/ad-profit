@@ -173,9 +173,12 @@ require __DIR__ . '/includes/header.php';
                     type="password"
                     minlength="<?= PASSWORD_MIN_LENGTH ?>"
                     required
+                    aria-describedby="password-new-rule"
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
-                    placeholder="อย่างน้อย <?= PASSWORD_MIN_LENGTH ?> ตัวอักษร"
+                    placeholder="••••••••"
                     autocomplete="new-password">
+                <?php /* เกณฑ์ต้องอยู่ถาวร — placeholder หายทันทีที่เริ่มพิมพ์ */ ?>
+                <p id="password-new-rule" class="mt-1.5 text-xs text-slate-400">ต้องยาวอย่างน้อย <?= PASSWORD_MIN_LENGTH ?> ตัวอักษร</p>
             </div>
 
             <div>

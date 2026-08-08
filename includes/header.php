@@ -13,6 +13,9 @@ $userLabel = $userDisplayName !== '' ? $userDisplayName : $userEmail;
 $currentShopId = (int)($_SESSION['current_shop_id'] ?? 0);
 $currentShopName = (string)($_SESSION['current_shop_name'] ?? 'ร้านค้าของฉัน');
 $headerShops = [];
+// ⚠️ `verify-email.php` ใช้หัวเว็บนี้โดยไม่มี `requireAuth()` (ต้องเปิดจากลิงก์ในอีเมล
+// ตอนยังไม่ได้ล็อกอินได้) — หัวเว็บกับเมนูล่างจึงต้องรู้จักสถานะ "ยังไม่ได้ล็อกอิน"
+$isSignedIn = isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
 
 if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0) {
     $headerUserId = (int)$_SESSION['user_id'];
@@ -665,6 +668,12 @@ $flashError = get_flash('error');
                 <span class="text-gradient text-sm sm:text-lg font-bold tracking-tight">วิเคราะห์ยอดขาย</span>
             </a>
 
+            <?php /* ⚠️⚠️ ยังไม่ได้ล็อกอิน = ไม่ต้องมีเมนูของคนที่ล็อกอินแล้ว
+                     `verify-email.php` เป็นหน้าเดียวที่ใช้หัวเว็บนี้โดยไม่มี `requireAuth()`
+                     (ต้องเปิดได้จากลิงก์ในอีเมลตอนยังไม่ได้ล็อกอิน) · วัดจริงก่อนแก้:
+                     ป้ายผู้ใช้ว่างเปล่าเป็น "👤 ▼" เฉย ๆ · ตัวเลือกร้านโชว์ชื่อปริยาย
+                     "ร้านค้าของฉัน" ที่ไม่มีอยู่จริง · เมนูล่างพากลับหน้าเข้าสู่ระบบทุกปุ่ม */ ?>
+            <?php if ($isSignedIn): ?>
             <!-- User Profile Dropdown -->
             <div class="flex justify-end relative order-2 md:order-3 shrink-0" id="profile-menu-container">
                 <button type="button" onclick="document.getElementById('profile-dropdown').classList.toggle('hidden')" class="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 sm:py-1.5 text-xs text-slate-300 shadow-sm hover:bg-white/10 transition-colors">
@@ -733,6 +742,12 @@ $flashError = get_flash('error');
                     }
                 });
             </script>
+            <?php else: ?>
+                <?php // ยังไม่ได้ล็อกอิน — มีทางไปได้ทางเดียวคือหน้าเข้าสู่ระบบ ?>
+                <div class="flex justify-end order-2 shrink-0">
+                    <a href="<?= e(app_url('/login.php')) ?>" class="btn-ghost px-3 py-1.5 text-xs" data-loading-link="true">เข้าสู่ระบบ</a>
+                </div>
+            <?php endif; ?>
 
         </div>
     </header>
