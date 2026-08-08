@@ -159,6 +159,48 @@ final class ExportEndpointTest extends ControllerTestCase
         $this->assertStringNotContainsString('999999', $response['body']);
     }
 
+    /**
+     * ⭐⭐ ชื่อร้านต้องแทรก header ของคำตอบไม่ได้
+     *
+     * ⚠️ ชื่อร้านเป็นข้อความที่ผู้ใช้พิมพ์เอง และถูกเอาไปต่อเข้ากับ header
+     * `Content-Disposition` ตรง ๆ · ถ้าใส่ `\r\n` ลงไปได้ ผู้ใช้จะแทรก header
+     * อะไรก็ได้เข้าไปในคำตอบ (เช่น `Set-Cookie`) = HTTP response splitting
+     *
+     * ⚠️⚠️ **มีตัวกัน 2 ชั้น — วัดแล้วว่าเหลือชั้นเดียวก็ยังกันอยู่**
+     *   ชั้น 1 `ExportService::sanitizeFilenameBase()` — ยุบช่องว่างทุกชนิดเหลือเว้นวรรคเดียว
+     *   ชั้น 2 `api/export.php` — จำกัดส่วน ASCII เหลือ `[A-Za-z0-9._-]` + `rawurlencode` ส่วน UTF-8
+     *
+     * power-proof แล้ว: ถอดชั้นใดชั้นหนึ่ง → เทสต์ยัง **เขียว** (อีกชั้นรับไว้)
+     * ถอดทั้งสองชั้นพร้อมกัน → **แดง** · ใครจะแก้ตรงนี้ต้องรู้ว่าเหลือชั้นเดียวได้
+     * แต่ถอดทั้งคู่ไม่ได้ — และทั้งสองชั้นเพิ่งมีเทสต์คุมเป็นครั้งแรกที่นี่
+     */
+    public function testAShopNameCannotInjectAResponseHeader(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId, "ร้าน\r\nSet-Cookie: stolen=1");
+        $this->createRecord($shopId, '2026-08-01', 1000.0, 100.0, null);
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->getJson('/api/export.php?month=2026-08', $session);
+
+        $this->assertSame(200, $response['status']);
+        $this->assertArrayNotHasKey(
+            'set-cookie',
+            $response['headers'],
+            'ชื่อร้านแทรก header Set-Cookie เข้ามาในคำตอบได้'
+        );
+
+        $disposition = (string)($response['headers']['content-disposition'] ?? '');
+        $this->assertNotSame('', $disposition, 'ไม่ได้ส่ง Content-Disposition');
+        $this->assertStringNotContainsString("\r", $disposition, 'ชื่อไฟล์ยังมีตัวขึ้นบรรทัดใหม่ติดอยู่');
+        $this->assertStringNotContainsString("\n", $disposition, 'ชื่อไฟล์ยังมีตัวขึ้นบรรทัดใหม่ติดอยู่');
+        $this->assertStringNotContainsString(
+            'stolen=1',
+            $response['body'],
+            'ชื่อร้านที่พยายามแทรก header หลุดไปอยู่ในเนื้อไฟล์แบบดิบ ๆ'
+        );
+    }
+
     /** ⭐ ไฟล์ Excel ดาวน์โหลดได้จริงและเป็น xlsx จริง (ไม่ใช่หน้า error) */
     public function testTheXlsxReportDownloads(): void
     {

@@ -287,6 +287,69 @@ final class PageRenderTest extends ControllerTestCase
      * ⚠️ `index.php` ไม่เคยมีเทสต์คุมเลย (coverage gap จาก logic review 2026-08-07)
      * มันเป็นประตูแรกที่ทุกคนเจอ และตัดสินทางแยกจาก `$_SESSION['user_id']` ตรง ๆ
      */
+    /**
+     * ⭐⭐ security header ต้องถูกส่งจริงทุกหน้า
+     *
+     * ⚠️ ตั้งไว้ใน `includes/bootstrap.php` แต่ **ไม่เคยมีเทสต์คุมเลย** — ลบทิ้ง
+     * ทั้งบล็อกแล้วชุดเทสต์ยังเขียวหมด · header พวกนี้กัน clickjacking (ฝังหน้าเรา
+     * ใน iframe แล้วหลอกให้กด), MIME sniffing และการรั่ว URL ผ่าน Referer
+     *
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function securityHeaderProvider(): array
+    {
+        return [
+            'กันฝัง iframe (clickjacking)' => ['x-frame-options', 'DENY'],
+            'กันฝัง iframe ฝั่งมาตรฐานใหม่' => ['content-security-policy', "frame-ancestors 'none'"],
+            'กันเบราว์เซอร์เดาชนิดไฟล์เอง' => ['x-content-type-options', 'nosniff'],
+            'กัน URL รั่วไปเว็บอื่นผ่าน Referer' => ['referrer-policy', 'same-origin'],
+            'ปิดสิทธิ์อุปกรณ์ที่ไม่ได้ใช้' => ['permissions-policy', 'geolocation=()'],
+        ];
+    }
+
+    #[DataProvider('securityHeaderProvider')]
+    public function testEverySecurityHeaderIsSent(string $header, string $expected): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->get('/dashboard.php', $session);
+
+        $this->assertArrayHasKey($header, $response['headers'], "ไม่ได้ส่ง header {$header} เลย");
+        $this->assertStringContainsString(
+            $expected,
+            (string)$response['headers'][$header],
+            "header {$header} มีค่าไม่ตรงที่ตั้งใจ"
+        );
+    }
+
+    /**
+     * ⭐⭐ ค่าที่ผู้ใช้พิมพ์เองต้องถูก escape ก่อนแสดง
+     *
+     * ⚠️ `e()` ถูกใช้อยู่ทั่วหน้าเว็บ แต่ไม่มีเทสต์ไหนพิสูจน์ว่ามันทำงาน — ถอด `e()`
+     * ออกจากจุดที่แสดงชื่อร้าน/โน้ต แล้วชุดเทสต์ยังเขียว · ชื่อร้านกับโน้ตเป็นสองช่อง
+     * ที่ผู้ใช้พิมพ์เองและถูกแสดงซ้ำหลายหน้า
+     */
+    public function testUserTypedTextIsEscapedBeforeItReachesThePage(): void
+    {
+        $payload = '<script>alert(1)</script>';
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId, 'ร้าน' . $payload);
+        $this->createRecord($shopId, date('Y-m-d'), 1000.0, 100.0, 'โน้ต' . $payload);
+        $session = $this->startSession($userId, $shopId);
+
+        foreach (['/dashboard.php', '/add-record.php', '/history.php', '/shops.php'] as $path) {
+            $body = (string)$this->get($path, $session)['body'];
+
+            $this->assertStringNotContainsString(
+                $payload,
+                $body,
+                "หน้า {$path} พ่นสิ่งที่ผู้ใช้พิมพ์ออกมาดิบ ๆ — สคริปต์ที่ฝังในชื่อร้าน/โน้ตจะทำงาน"
+            );
+        }
+    }
+
     public function testTheHomePageSendsAVisitorToLogin(): void
     {
         $response = $this->get('/index.php');

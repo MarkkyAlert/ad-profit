@@ -23,8 +23,22 @@ $profileService = new ProfileService(
     new EmailService()
 );
 
+// ⚠️⚠️ **การเปิดลิงก์ (GET) ต้องไม่เปลี่ยนอะไรเลย** — เปลี่ยนจริงที่ POST เท่านั้น
+//
+// เดิมการเปิดลิงก์ = เปลี่ยนอีเมล + เตะทุก session + ล้าง token รีเซ็ต ทั้งหมดจาก
+// คำขอ GET เดียว · ระบบสแกนลิงก์ในอีเมล (Outlook Safe Links, Proofpoint,
+// พร็อกซีของ Gmail) ดึง URL อัตโนมัติ **ก่อน** ผู้ใช้กด → ผู้ใช้ถูกเตะออกจากระบบ
+// ทุกเครื่องโดยไม่ได้แตะอะไรเลย และอีเมลเปลี่ยนไปแล้ว
+//
+// หลักเดียวกับ `reset-password.php`: GET แสดงฟอร์ม · POST เป็นตัวเปลี่ยน
+// ⚠️ จัดการ POST ในไฟล์นี้เอง (ไม่ส่งไป `api/`) โดยตั้งใจ — การเลือกคำแนะนำจาก
+// `reason` อยู่ที่นี่ที่เดียว ถ้าแยกไปอีกไฟล์ต้องส่ง reason ข้ามผ่าน flash
+// ซึ่งทำให้กติกา "ห้ามพิมพ์คำแนะนำตายตัว" กระจายเป็นสองที่
+$isConfirmSubmit = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST';
+
 // ⚠️ ตัดช่องว่างยูนิโค้ด — เหตุผลเดียวกับ `reset-password.php`
-$token = is_string($_GET['token'] ?? null) ? trim_unicode_whitespace((string)$_GET['token']) : '';
+$tokenRaw = $isConfirmSubmit ? ($_POST['token'] ?? null) : ($_GET['token'] ?? null);
+$token = is_string($tokenRaw) ? trim_unicode_whitespace($tokenRaw) : '';
 
 // ⚠️⚠️ ต้องรู้ก่อนว่าลิงก์นี้เป็นของบัญชีไหน **ก่อนแตะอะไรทั้งสิ้น**
 //
@@ -52,17 +66,34 @@ $newEmail = '';
 $errorMessage = '';
 $failureReason = '';
 
+// ลิงก์ยังดีอยู่และเป็นของคนที่กด — GET แค่แสดงหน้ายืนยัน ยังไม่เปลี่ยนอะไร
+$pendingEmail = $pendingRequest === null ? '' : (string)($pendingRequest['new_email'] ?? '');
+$awaitingConfirm = false;
+
 if ($linkBelongsToAnotherAccount) {
     $errorMessage = 'ลิงก์นี้เป็นของบัญชีอื่น ไม่ใช่บัญชีที่คุณกำลังใช้งานอยู่ '
         . 'ระบบจึงไม่ได้เปลี่ยนแปลงอะไรเลย — ถ้าคุณเป็นเจ้าของลิงก์นี้จริง '
         . 'กรุณาออกจากระบบก่อนแล้วกดลิงก์อีกครั้ง';
     $failureReason = 'another_account';
+} elseif ($isConfirmSubmit) {
+    if (!verify_csrf((string)($_POST['csrf_token'] ?? ''))) {
+        $errorMessage = 'หมดเวลาทำรายการเพื่อความปลอดภัย กรุณาโหลดหน้าใหม่แล้วกดยืนยันอีกครั้ง';
+        $failureReason = 'bad_link';
+    } else {
+        $result = $profileService->confirmEmailChange($token);
+        $confirmed = ($result['success'] ?? false) === true;
+        $newEmail = $confirmed ? (string)(($result['data'] ?? [])['email'] ?? '') : '';
+        $errorMessage = $confirmed ? '' : (string)($result['error'] ?? 'ยืนยันอีเมลไม่สำเร็จ');
+        $failureReason = $confirmed ? '' : (string)($result['reason'] ?? 'bad_link');
+    }
+} elseif ($pendingRequest !== null) {
+    $awaitingConfirm = true;
 } else {
+    // ลิงก์ผิด/หมดอายุ/ถูกใช้ไปแล้ว — ให้ Service เป็นคนบอกสาเหตุเหมือนเดิม
+    // (ไม่เปลี่ยน state เพราะไม่มีคำขอที่ตรงกับ token นี้อยู่แล้ว)
     $result = $profileService->confirmEmailChange($token);
-    $confirmed = ($result['success'] ?? false) === true;
-    $newEmail = $confirmed ? (string)(($result['data'] ?? [])['email'] ?? '') : '';
-    $errorMessage = $confirmed ? '' : (string)($result['error'] ?? 'ยืนยันอีเมลไม่สำเร็จ');
-    $failureReason = $confirmed ? '' : (string)($result['reason'] ?? 'bad_link');
+    $errorMessage = (string)($result['error'] ?? 'ยืนยันอีเมลไม่สำเร็จ');
+    $failureReason = (string)($result['reason'] ?? 'bad_link');
 }
 
 // ⚠️⚠️ คำแนะนำต้องมาจากสาเหตุจริง ห้ามเป็นข้อความตายตัว
@@ -99,7 +130,25 @@ require __DIR__ . '/includes/header.php';
 
 <main class="mx-auto w-full max-w-lg px-4 py-10">
     <section class="section-card px-5 py-6">
-        <?php if ($confirmed): ?>
+        <?php if ($awaitingConfirm): ?>
+            <h1 class="text-lg font-bold text-slate-100">ยืนยันการเปลี่ยนอีเมล</h1>
+            <p class="mt-2 text-sm text-slate-300">
+                อีเมลของบัญชีจะเปลี่ยนเป็น
+                <strong class="text-slate-100"><?= e($pendingEmail) ?></strong>
+            </p>
+            <p class="mt-1 text-xs text-slate-500">
+                เพื่อความปลอดภัย ระบบจะออกจากระบบให้ทุกเครื่องหลังยืนยัน
+                แล้วให้เข้าสู่ระบบใหม่ด้วยอีเมลนี้
+            </p>
+
+            <form method="post" action="<?= e(app_url('/verify-email.php')) ?>" class="mt-5">
+                <?= csrf_field() ?>
+                <input type="hidden" name="token" value="<?= e($token) ?>">
+                <button type="submit" class="btn-primary inline-flex px-4 py-2 text-sm">
+                    ยืนยันเปลี่ยนอีเมล
+                </button>
+            </form>
+        <?php elseif ($confirmed): ?>
             <h1 class="text-lg font-bold text-green-400">เปลี่ยนอีเมลเรียบร้อยแล้ว</h1>
             <p class="mt-2 text-sm text-slate-300">
                 ต่อไปนี้ให้เข้าสู่ระบบด้วย
