@@ -458,6 +458,18 @@ require __DIR__ . '/includes/header.php';
         const COLUMN_NAMES = ['record_date[]', 'revenue[]', 'ad_cost[]', 'note[]'];
         const pasteNotice = document.getElementById('bulk-paste-notice');
 
+        // ⚠️⚠️ คำเตือนตอนวางต้อง "ติดหนึบ" ไม่ให้ข้อความอื่นมาลบทิ้ง
+        //
+        // การวางจบด้วยการยิง event `change` ให้ทุกแถว → ตัวเติมค่าเดิมทำงานต่อ แล้วเรียก
+        // `showBulkNotice()` ซึ่งเดิม **เขียนทับ** คำเตือนของการวางทั้งก้อน
+        // วัดจริง: วางยอดรูปแบบไทย (12,500) ทับวันที่มีข้อมูลเดิม → คำเตือน
+        // "มี 6 ช่องจำนวนเงินที่อ่านไม่ได้" หายไป เหลือแต่ "มีข้อมูลอยู่แล้ว …"
+        // ซึ่งอ่านแล้วสบายใจ ทั้งที่ยอดที่ผู้ใช้วางถูกทิ้งไปหมดแล้ว
+        //
+        // ⚠️ ประกาศไว้ตรงนี้ (ก่อนตัววาง) โดยตั้งใจ — ตัววางอ่านค่านี้ ถ้าประกาศทีหลัง
+        // จะพึ่งจังหวะการทำงานแทนที่จะพึ่งขอบเขต ซึ่งเป็นรูปแบบที่เคยพังมาแล้วในไฟล์นี้
+        let stickyPasteMessage = '';
+
         const getRows = () => Array.from(tbody.querySelectorAll('tr'));
         const pad2 = (value) => String(value).padStart(2, '0');
 
@@ -668,18 +680,26 @@ require __DIR__ . '/includes/header.php';
                 }
 
                 // เติมเฉพาะช่องที่ยังว่าง — ห้ามทับสิ่งที่ผู้ใช้เพิ่งพิมพ์เอง
+                //
+                // ⚠️⚠️ "ว่าง" ไม่พอ ต้องเป็น "ว่างเพราะผู้ใช้ไม่ได้กรอก" ด้วย
+                // ช่องที่ธง `unreadable` ติดอยู่คือช่องที่ผู้ใช้ **วางค่ามาแล้ว** แต่เบราว์เซอร์
+                // ทิ้งทันทีเพราะอ่านไม่ออก (เช่น 12,500 ในช่อง type="number")
+                // ถ้าเติมค่าเดิมทับลงไป แถวจะดูเหมือนกรอกครบ ผู้ใช้กดบันทึก แล้ว
+                // **ยอดที่ตั้งใจวางไม่เคยถูกบันทึกเลย โดยไม่มีอะไรบอก** (วัดจริงถึงฐานข้อมูลแล้ว)
+                const canFill = (field) => field && field.value === '' && field.dataset.unreadable !== '1';
+
                 let filledAnything = false;
-                if (revenueInput && revenueInput.value === '' && day.revenue !== null) {
+                if (canFill(revenueInput) && day.revenue !== null) {
                     revenueInput.value = String(day.revenue);
                     revenueInput.dataset.prefilled = '1';
                     filledAnything = true;
                 }
-                if (adCostInput && adCostInput.value === '' && day.ad_cost !== null) {
+                if (canFill(adCostInput) && day.ad_cost !== null) {
                     adCostInput.value = String(day.ad_cost);
                     adCostInput.dataset.prefilled = '1';
                     filledAnything = true;
                 }
-                if (noteInput && noteInput.value === '' && (day.note || '') !== '') {
+                if (canFill(noteInput) && (day.note || '') !== '') {
                     noteInput.value = day.note;
                     noteInput.dataset.prefilled = '1';
                     filledAnything = true;
@@ -706,6 +726,11 @@ require __DIR__ . '/includes/header.php';
             const field = event.target;
             if (field && field.dataset && field.dataset.prefilled === '1') {
                 delete field.dataset.prefilled;
+            }
+
+            // ผู้ใช้แก้ช่องที่อ่านไม่ออกเองแล้ว — เลิกกันไม่ให้เติมค่าเดิม
+            if (field && field.dataset && field.dataset.unreadable === '1') {
+                delete field.dataset.unreadable;
             }
         });
 
@@ -802,6 +827,7 @@ require __DIR__ . '/includes/header.php';
                     if (columnIndex === 0 && parseDateCell(cell) === null && String(cell).trim() !== '') {
                         unreadableDates++;
                         input.value = '';
+                        input.dataset.unreadable = '1';
                         return;
                     }
 
@@ -817,6 +843,17 @@ require __DIR__ . '/includes/header.php';
                     // ถ้าผู้ใช้ไม่ทันสังเกตแล้วกดบันทึก วันใหม่จะถูกบันทึกเป็นรายได้ ฿0
                     if (input.value === '' && String(cell).trim() !== '') {
                         unreadableAmounts++;
+
+                        // ⚠️⚠️ ช่องนี้ "ว่างเพราะเบราว์เซอร์ทิ้งค่าที่ผู้ใช้วาง" ไม่ใช่
+                        // "ว่างเพราะผู้ใช้ไม่ได้กรอก" — ตัวเติมค่าเดิมต้องแยกสองอย่างนี้ให้ออก
+                        //
+                        // วัดจริงจนถึงฐานข้อมูล: วาง 12,500 / 4,200 ทับวันที่ 1–3 ส.ค.
+                        // → ช่องยอดว่าง → ตัวเติมเห็นว่าว่างเลยเติม **ค่าเดิม** กลับเข้าไป
+                        // (5,000 / 2,000) → บนจอดูเหมือนกรอกครบ ผู้ใช้กดบันทึก
+                        // → ยอดที่วางมาไม่เคยถูกบันทึกเลย และไม่มีอะไรบอกว่าหายไป
+                        input.dataset.unreadable = '1';
+                    } else {
+                        delete input.dataset.unreadable;
                     }
                 });
 
@@ -843,6 +880,7 @@ require __DIR__ . '/includes/header.php';
 
             if (pasteNotice) {
                 const messages = [];
+                const stickyParts = [];
 
                 if (truncatedRows > 0) {
                     messages.push('วางได้ ' + placedRows + ' แถว · ส่วนที่เกิน '
@@ -855,19 +893,28 @@ require __DIR__ . '/includes/header.php';
                 }
 
                 if (unreadableAmounts > 0) {
-                    messages.push('มี ' + unreadableAmounts + ' ช่องจำนวนเงินที่อ่านไม่ได้ '
+                    stickyParts.push('มี ' + unreadableAmounts + ' ช่องจำนวนเงินที่อ่านไม่ได้ '
                         + '(เช่น 12,500 อ่านได้ทั้ง 12500 และ 12.5) — เว้นว่างไว้ '
                         + 'กรุณาใช้ตัวเลขล้วน เช่น 12500 หรือใส่สตางค์ให้ครบ เช่น 12,500.00');
                 }
 
                 if (unreadableDates > 0) {
-                    messages.push('มี ' + unreadableDates + ' ช่องวันที่ที่อ่านไม่ได้หรือกำกวม '
+                    stickyParts.push('มี ' + unreadableDates + ' ช่องวันที่ที่อ่านไม่ได้หรือกำกวม '
                         + '(เช่น 05/03/2026 อ่านได้ทั้งวัน/เดือน และเดือน/วัน) — เว้นว่างไว้ '
                         + 'กรุณาเลือกวันที่เอง หรือใช้รูปแบบ ปี-เดือน-วัน');
                 }
 
-                pasteNotice.textContent = messages.join(' · ');
-                pasteNotice.classList.toggle('hidden', messages.length === 0);
+                // เก็บไว้เป็นข้อความ "ติดหนึบ" เพื่อไม่ให้ตัวเติมค่าเดิม (ซึ่งทำงานต่อจาก
+                // event `change` ที่เพิ่งยิงไป) มาเขียนทับคำเตือนของการวางทั้งก้อน
+                // ⚠️ ข้อความ 2 ชนิดนี้อายุไม่เท่ากัน:
+                //  · "วางเกิน 31 แถว" / "กว้างเกินตาราง" = เล่าเหตุการณ์ครั้งนั้น จบในตัว
+                //  · "อ่านยอด/วันที่ไม่ได้" = อธิบาย **ช่องว่างที่ยังคาอยู่บนจอ** จึงต้องอยู่ต่อ
+                //    จนกว่าผู้ใช้จะแก้ครบ ไม่งั้นตัวเติมค่าเดิม (ซึ่งทำงานทันทีหลังวาง)
+                //    จะเขียนทับมันหายไป แล้วช่องว่างก็ไม่มีคำอธิบายอะไรเลย
+                stickyPasteMessage = stickyParts.join(' · ');
+                const shown = [stickyPasteMessage, messages.join(' · ')].filter((part) => part !== '');
+                pasteNotice.textContent = shown.join(' · ');
+                pasteNotice.classList.toggle('hidden', shown.length === 0);
             }
         });
 
@@ -879,12 +926,18 @@ require __DIR__ . '/includes/header.php';
                 return;
             }
 
-            if (message === '') {
+            // แก้ครบแล้วต้องเงียบเอง — ไม่งั้นคำเตือนเก่าจะโผล่ซ้ำทุกครั้งที่มีข้อความใหม่
+            if (tbody.querySelector('[data-unreadable="1"]') === null) {
+                stickyPasteMessage = '';
+            }
+
+            const parts = [stickyPasteMessage, message].filter((part) => part !== '');
+            if (parts.length === 0) {
                 pasteNotice.classList.add('hidden');
                 return;
             }
 
-            pasteNotice.textContent = message;
+            pasteNotice.textContent = parts.join(' · ');
             pasteNotice.classList.remove('hidden');
         };
 
