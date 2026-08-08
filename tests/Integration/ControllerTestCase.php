@@ -73,9 +73,12 @@ abstract class ControllerTestCase extends IntegrationTestCase
         // ด่านของแอปจะไม่มีวันทำงาน และเทสต์ที่ตั้งชื่อว่าตรวจด่านนั้นก็ตรวจอะไรไม่ได้
         // เซิร์ฟเวอร์จริง (Hostinger) ตั้ง upload_max_filesize ไว้สูงกว่า 2MB อยู่แล้ว
         // ด่านของแอปจึงเป็นตัวจริงที่ทำงานบน production
+        // ⚠️ ปัก `memory_limit` ไว้ที่ค่าปริยายของ PHP — ไม่งั้นเครื่องที่ตั้งเป็น "ไม่จำกัด"
+        // จะทำให้เทสต์ที่ตรวจว่า "ไฟล์แถวเยอะต้องถูกปฏิเสธก่อนหน่วยความจำหมด" เขียว
+        // โดยไม่ได้ตรวจอะไรเลย (ดู testAFileUnderTheSizeCapWithTooManyRowsIsRejectedInsteadOfCrashing)
         $command = sprintf(
             'php -d session.save_path=%s -d error_reporting=E_ALL'
-                . ' -d upload_max_filesize=16M -d post_max_size=20M'
+                . ' -d upload_max_filesize=16M -d post_max_size=20M -d memory_limit=128M'
                 . ' -S 127.0.0.1:%d -t %s',
             escapeshellarg($sessionDir),
             $port,

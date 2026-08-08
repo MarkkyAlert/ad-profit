@@ -203,7 +203,10 @@ if ($action === 'import_csv') {
         ], 422, '/add-record.php');
     }
 
-    $parsed = $recordService->parseImportCsv($csvContent);
+    // ⚠️ ส่งเพดานเข้าไปตั้งแต่ตอน "อ่าน" ไม่ใช่รอไปตรวจตอน "บันทึก" อย่างเดียว —
+    // ไฟล์ที่แต่ละแถวสั้นมากมีแถวได้เป็นแสนโดยขนาดยังไม่ถึงเพดาน 2MB ข้างบน
+    // ถ้าอ่านจนจบไฟล์ก่อนค่อยนับ หน่วยความจำจะหมดก่อนที่เพดานจะได้ทำงาน (วัดจริงแล้ว)
+    $parsed = $recordService->parseImportCsv($csvContent, RecordService::IMPORT_MAX_ROWS);
     if (($parsed['success'] ?? false) !== true) {
         $respond([
             'success' => false,

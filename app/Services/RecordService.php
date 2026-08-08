@@ -186,15 +186,32 @@ class RecordService
     }
 
     /**
+     * ข้อความ "แถวเกินเพดาน" — จุดเดียวของกติกา
+     *
+     * ⚠️ ถูกใช้ 2 ที่: ตอนอ่านไฟล์ (`parseImportCsv`) และตอนบันทึก (`upsertManyRecords`)
+     * ทั้งสองทางต้องพูดเหมือนกันเป๊ะ ๆ ไม่งั้นไฟล์เดียวกันจะได้คำอธิบายคนละแบบ
+     * ขึ้นกับว่าไปตกด่านไหนก่อน ซึ่งผู้ใช้ไม่มีทางเดาได้ว่าต่างกันตรงไหน
+     */
+    private static function rowLimitMessage(int $limit): string
+    {
+        return 'กรอกได้สูงสุด ' . $limit . ' แถวต่อครั้ง';
+    }
+
+    /**
      * แปลงเนื้อหาไฟล์ CSV เป็น rows สำหรับส่งต่อให้ upsertManyRecords()
      *
      * เป็น pure function (ไม่แตะ DB) — validation ธุรกิจยังเป็นหน้าที่ของ upsertManyRecords
      * รองรับไฟล์ที่ export จากระบบนี้โดยตรง (BOM · วันที่ไทย · คอลัมน์คำนวณ · แถว "รวม")
      *
+     * @param int|null $maxRows เพดานจำนวนแถว — null = IMPORT_MAX_ROWS
+     *                          ⚠️ ต้องเป็นค่าเดียวกับที่ส่งให้ `upsertManyRecords()` เสมอ
+     *                          ไม่งั้นไฟล์จะถูกปฏิเสธคนละจุดด้วยเหตุผลที่ผู้ใช้อ่านไม่เข้าใจ
      * @return array{success: bool, rows: array<int,array<string,mixed>>, error: string|null}
      */
-    public function parseImportCsv(string $content): array
+    public function parseImportCsv(string $content, ?int $maxRows = null): array
     {
+        $rowLimit = ($maxRows !== null && $maxRows > 0) ? $maxRows : self::IMPORT_MAX_ROWS;
+
         $fail = static fn(string $message): array => [
             'success' => false,
             'rows' => [],
@@ -366,6 +383,24 @@ class RecordService
                 // ไฟล์ไม่มีคอลัมน์โน้ตเลย = ไม่ได้ตั้งใจล้างโน้ตของวันนั้น
                 'note_was_missing' => !isset($columnMap['note']),
             ];
+
+            // ⚠️⚠️ ต้องหยุด **ตรงนี้** ไม่ใช่ปล่อยให้อ่านจนจบไฟล์แล้วค่อยนับทีหลัง
+            //
+            // เพดานของการนำเข้ามี 2 ชั้น: ขนาดไฟล์ 2MB (ที่ `api/records.php`) และ
+            // จำนวนแถว (ที่ `upsertManyRecords()`) · ไฟล์ที่แต่ละแถวสั้นมากมีแถวได้
+            // เป็นแสนโดยขนาดยังไม่ถึง 2MB — เดิมจึงสะสมทุกแถวไว้ในหน่วยความจำก่อน
+            // แล้วเพดานจำนวนแถวเพิ่งถูกตรวจทีหลัง **ซึ่งสายไปแล้ว**
+            //
+            // ⚠️ วัดจริง: ไฟล์ 120,000 แถว (1.95MB) → `Allowed memory size of
+            // 134217728 bytes exhausted` ผู้ใช้ได้หน้าจอพังแทนข้อความไทยที่บอกว่า
+            // ต้องแบ่งไฟล์ · ที่ 100,000 แถว (1.62MB) ยังปฏิเสธได้ถูกต้อง
+            //
+            // หยุดที่แถวแรกที่เกินเพดาน หน่วยความจำจึงไม่โตตามขนาดไฟล์อีกต่อไป
+            if (count($rows) > $rowLimit) {
+                fclose($handle);
+
+                return $fail(self::rowLimitMessage($rowLimit));
+            }
         }
 
         fclose($handle);
@@ -573,7 +608,7 @@ class RecordService
         if (count($filledRows) > $rowLimit) {
             return [
                 'success' => false,
-                'error' => 'กรอกได้สูงสุด ' . $rowLimit . ' แถวต่อครั้ง',
+                'error' => self::rowLimitMessage($rowLimit),
             ];
         }
 

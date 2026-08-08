@@ -541,4 +541,38 @@ final class RecordServiceImportCsvTest extends TestCase
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('ค่าแอด', (string)$result['error']);
     }
+
+    /**
+     * ⭐ เส้นแบ่งของเพดานจำนวนแถว — ไฟล์ที่พอดีเพดานต้องผ่าน เกินไป 1 แถวต้องถูกปฏิเสธ
+     *
+     * ตัวอ่านไฟล์เพิ่งมาหยุดเองตอนแถวเกินเพดาน (เดิมปล่อยให้อ่านจนจบแล้วค่อยนับตอนบันทึก
+     * ซึ่งหน่วยความจำหมดก่อน) · เทสต์นี้กันไม่ให้การหยุดนั้น **หยุดเร็วไปหนึ่งแถว**
+     * ซึ่งจะทำให้ไฟล์ที่เคยนำเข้าได้พอดีเพดานกลับถูกปฏิเสธเงียบ ๆ
+     *
+     * ⚠️ ใช้เพดานเล็ก ๆ ที่ส่งเข้าไปเอง ไม่ใช่ค่าจริง 1000 — จุดที่ต้องพิสูจน์คือ
+     * "หยุดที่แถวไหน" ไม่ใช่ตัวเลข และไฟล์ 1000 แถวทำให้เทสต์ช้าโดยไม่ได้อะไรเพิ่ม
+     */
+    public function testTheRowLimitCutsAtExactlyTheLimit(): void
+    {
+        $service = $this->makeService();
+        $header = "วันที่,รายได้,ค่าแอด\n";
+
+        $atLimit = $service->parseImportCsv(
+            $header . "2026-08-01,100,10\n2026-08-02,100,10\n",
+            2
+        );
+        $this->assertTrue($atLimit['success'], 'ไฟล์ที่พอดีเพดานถูกปฏิเสธ');
+        $this->assertCount(2, $atLimit['rows']);
+
+        $overLimit = $service->parseImportCsv(
+            $header . "2026-08-01,100,10\n2026-08-02,100,10\n2026-08-03,100,10\n",
+            2
+        );
+        $this->assertFalse($overLimit['success'], 'ไฟล์ที่เกินเพดานกลับผ่านได้');
+        $this->assertStringContainsString(
+            'กรอกได้สูงสุด 2 แถวต่อครั้ง',
+            (string)$overLimit['error'],
+            'ข้อความต้องเป็นตัวเดียวกับตอนบันทึก ไม่งั้นไฟล์เดียวกันได้คำอธิบายคนละแบบ'
+        );
+    }
 }

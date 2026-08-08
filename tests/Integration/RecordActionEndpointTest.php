@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use RecordService;
+
 require_once __DIR__ . '/ControllerTestCase.php';
 
 /**
@@ -444,6 +446,69 @@ final class RecordActionEndpointTest extends ControllerTestCase
             'ไม่ได้มาจากด่านของแอป — อาจไปติดเพดานของ PHP หรือด่านจำนวนแถวก่อน'
         );
         $this->assertSame(0, $this->countRows('daily_records'), 'ไฟล์ใหญ่เกินกำหนดถูกนำเข้าได้');
+    }
+
+    /**
+     * ⭐⭐ ไฟล์ที่ "เล็กพอผ่านด่านขนาด แต่แถวเยอะมหาศาล" ต้องถูกปฏิเสธ ไม่ใช่ทำให้หน้าเว็บพัง
+     *
+     * ⚠️ เทสต์ตัวบน (`testAnOversizedFileIsRejected`) คุมด้าน "ใหญ่เกิน 2MB แถวน้อย"
+     * ตัวนี้คือ **ด้านตรงข้ามที่ตกสำรวจ**: เพดานของแอปมี 2 ชั้น (ขนาดไฟล์ 2MB ที่
+     * `api/records.php` และจำนวนแถว `IMPORT_MAX_ROWS` ที่ service) — ไฟล์ที่แต่ละแถว
+     * สั้นมากจึงมีแถวได้เป็นแสนโดยขนาดยังไม่ถึง 2MB คือช่องที่หลุดทั้งสองชั้น
+     *
+     * ⚠️⚠️ วัดจริงก่อนแก้ (ไฟล์ 120,000 แถว = 1.95MB): `Allowed memory size of
+     * 134217728 bytes exhausted` แล้วผู้ใช้ได้ **HTTP 500** แทนข้อความไทยที่บอกว่า
+     * ต้องแก้อะไร · สาเหตุคือ `parseImportCsv()` สะสมแถวจนครบทั้งไฟล์ *ก่อน* แล้ว
+     * เพดานจำนวนแถวเพิ่งถูกตรวจทีหลังใน `upsertManyRecords()` — หน่วยความจำหมดก่อน
+     * ที่เพดานจะได้ทำงาน · ที่ 100,000 แถว (1.62MB) ยังปฏิเสธถูกต้อง จุดพังอยู่ระหว่างนั้น
+     *
+     * ⚠️ ต้องใช้ไฟล์ใหญ่จริงเท่านั้น — ไฟล์เล็ก (เช่น 5,000 แถว) ผ่านทั้งก่อนและหลังแก้
+     * จึงพิสูจน์อะไรไม่ได้เลย · และเซิร์ฟเวอร์ของเทสต์ปัก `memory_limit` ไว้แน่นอน
+     * (ดู `ControllerTestCase`) ไม่งั้นเครื่องที่ตั้งไม่จำกัดจะเขียวโดยไม่ได้ตรวจอะไร
+     */
+    public function testAFileUnderTheSizeCapWithTooManyRowsIsRejectedInsteadOfCrashing(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $manyRowCsv = "date,revenue,ad_cost,note\n" . str_repeat("2026-05-01,1,1,x\n", 120000);
+        $this->assertLessThan(
+            2 * 1024 * 1024,
+            strlen($manyRowCsv),
+            'ไฟล์ทดสอบใหญ่เกิน 2MB — จะไปติดด่านขนาดไฟล์ก่อน ไม่ได้ทดสอบด่านจำนวนแถว'
+        );
+
+        $response = $this->postFile(
+            '/api/records.php',
+            [
+                'action' => 'import_csv',
+                'csrf_token' => $this->csrfTokenFor($session),
+                'shop_context_id' => (string)$shopId,
+            ],
+            'csv',
+            'แถวเยอะมาก.csv',
+            $manyRowCsv,
+            $session
+        );
+        unset($manyRowCsv);
+
+        $this->assertStringNotContainsStringIgnoringCase(
+            'Allowed memory size',
+            $response['body'],
+            'หน่วยความจำหมดระหว่างอ่านไฟล์ — เพดานจำนวนแถวถูกตรวจช้าเกินไป'
+        );
+        $this->assertSame(
+            302,
+            $response['status'],
+            'ไฟล์ที่แถวเยอะเกินทำให้คำขอล้มกลางคัน แทนที่จะถูกปฏิเสธพร้อมข้อความไทย'
+        );
+        $this->assertStringContainsString(
+            'กรอกได้สูงสุด ' . RecordService::IMPORT_MAX_ROWS . ' แถวต่อครั้ง',
+            $this->flashMessages($session),
+            'ปฏิเสธด้วยเหตุผลอื่น — ข้อความต้องเป็นตัวเดียวกับตอนบันทึก ผู้ใช้จะได้รู้ว่าต้องแบ่งไฟล์'
+        );
+        $this->assertSame(0, $this->countRows('daily_records'), 'ไฟล์ที่ถูกปฏิเสธกลับเขียนข้อมูลลงไปได้');
     }
 
     /**
