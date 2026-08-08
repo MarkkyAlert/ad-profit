@@ -300,7 +300,7 @@ require __DIR__ . '/includes/header.php';
     <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>
             <h1 class="text-lg sm:text-xl font-semibold text-slate-100">สรุปประจำปี</h1>
-            <p class="mt-1 text-xs sm:text-sm text-slate-500">ภาพรวมรายปีของร้านที่เลือก พร้อมตารางรายเดือน เทียบปีก่อน และกราฟเปรียบเทียบ</p>
+            <p class="mt-1 text-xs sm:text-sm text-slate-400">ภาพรวมรายปีของร้านที่เลือก พร้อมตารางรายเดือน เทียบปีก่อน และกราฟเปรียบเทียบ</p>
         </div>
 
         <form method="get" action="<?= e(app_url('/annual.php')) ?>" class="flex flex-wrap items-center gap-2">
@@ -398,7 +398,7 @@ require __DIR__ . '/includes/header.php';
             <span class="text-sm <?= e($yoyToneClass($yoyPercent)) ?>">
                 (<?= e(($yoyChange >= 0 ? '+' : '-') . formatMoney(abs($yoyChange))) ?>)
             </span>
-            <span class="text-xs text-slate-500">
+            <span class="text-xs text-slate-400">
                 ปีก่อน <?= e(formatMoney($prevYearProfit)) ?>
             </span>
         <?php endif; ?>
@@ -465,7 +465,7 @@ require __DIR__ . '/includes/header.php';
                         <p class="mt-2 text-xs text-slate-400">รายได้</p>
                         <p class="text-sm font-medium <?= $revenueReached ? 'text-green-400' : 'text-amber-400' ?>">
                             <?= e($revenueReached ? '✓ ' : '') ?><?= e(formatMoney($goalActualRevenue)) ?>
-                            <span class="text-slate-500">/ <?= e(formatMoney($goalTargetRevenue)) ?></span>
+                            <span class="text-slate-400">/ <?= e(formatMoney($goalTargetRevenue)) ?></span>
                             <?php if ($revenueProgress !== null): ?>
                                 (<?= e(number_format($revenueProgress, 1)) ?>%)
                             <?php endif; ?>
@@ -486,7 +486,7 @@ require __DIR__ . '/includes/header.php';
                         <p class="mt-2 text-xs text-slate-400">กำไร</p>
                         <p class="text-sm font-medium <?= e($profitToneClass) ?>">
                             <?= e($profitReached ? '✓ ' : '') ?><?= e(formatMoney($goalActualProfit)) ?>
-                            <span class="text-slate-500">/ <?= e(formatMoney($goalTargetProfit)) ?></span>
+                            <span class="text-slate-400">/ <?= e(formatMoney($goalTargetProfit)) ?></span>
                             <?php if ($profitProgress !== null): ?>
                                 (<?= e(number_format($profitProgress, 1)) ?>%)
                             <?php endif; ?>
@@ -501,7 +501,7 @@ require __DIR__ . '/includes/header.php';
 <section class="section-card mt-6 p-4 sm:p-5">
     <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางเทียบรายเดือน (<?= e((string)count($months)) ?> เดือน)</h2>
     <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <table class="table-cards min-w-full text-sm">
             <thead>
                 <tr class="border-b border-white/10 text-left text-slate-400">
                     <th class="px-3 py-2">เดือน</th>
@@ -530,19 +530,29 @@ require __DIR__ . '/includes/header.php';
                     $rowYoyPercent = isset($row['yoy_change_percent']) && $row['yoy_change_percent'] !== null
                         ? (float)$row['yoy_change_percent']
                         : null;
+
+                    /* ⚠️⚠️ เดือนที่ "ยังไม่ได้กรอกเลยสักวัน" ≠ เดือนที่ "ทำได้ ฿0"
+                       เดิมช่องเงินพิมพ์ ฿0 และช่องเทียบปีก่อนพิมพ์ ↓ 100.0% ขณะที่ช่อง
+                       ROAS/อัตรากำไร/วันที่กรอก ในแถวเดียวกันพิมพ์ "—" ว่าไม่มีข้อมูล
+                       → แถวเดียวกันพูดสองอย่าง และร้านที่เพิ่งเริ่มใช้กลางปีจะเห็นครึ่งปีแรก
+                       เป็น "ตก 100%" ทั้งที่แค่ยังไม่ได้เริ่มบันทึก
+                       (หลักเดียวกับทั้งระบบ: หน้าเว็บห้ามเดาแทนข้อมูล) */
+                    $rowHasData = $rowDaysCount > 0;
+                    $blank = '—';
                     ?>
-                    <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
+                    <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap<?= $rowHasData ? '' : ' text-slate-400' ?>">
                         <td class="px-3 py-2 text-slate-300 font-medium"><?= e($monthLabel($row)) ?></td>
-                        <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
-                        <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
-                        <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                        <td class="px-3 py-2 font-medium <?= $rowHasData ? 'text-orange-400' : 'text-slate-400' ?>"><?= e($rowHasData ? formatMoney($rowRevenue) : $blank) ?></td>
+                        <td class="px-3 py-2 font-medium <?= $rowHasData ? 'text-cyan-400' : 'text-slate-400' ?>"><?= e($rowHasData ? formatMoney($rowAdCost) : $blank) ?></td>
+                        <td class="px-3 py-2 font-bold <?= !$rowHasData ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?>"><?= e($rowHasData ? formatMoney($rowProfit) : $blank) ?></td>
                         <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                         <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
-                        <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : '—') ?></td>
-                        <td class="px-3 py-2 font-medium <?= $rowProfitPerDay === null ? 'text-slate-500' : ($rowProfitPerDay >= 0 ? 'text-green-400' : 'text-red-400') ?>">
-                            <?= e($rowProfitPerDay === null ? '—' : formatMoney($rowProfitPerDay)) ?>
+                        <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowHasData ? $rowDaysCount . ' วัน' : $blank) ?></td>
+                        <td class="px-3 py-2 font-medium <?= $rowProfitPerDay === null ? 'text-slate-400' : ($rowProfitPerDay >= 0 ? 'text-green-400' : 'text-red-400') ?>">
+                            <?= e($rowProfitPerDay === null ? $blank : formatMoney($rowProfitPerDay)) ?>
                         </td>
-                        <td class="px-3 py-2 font-medium <?= e($yoyToneClass($rowYoyPercent)) ?>"><?= e($formatYoyPercent($rowYoyPercent)) ?></td>
+                        <?php // ไม่มีข้อมูลของเดือนนี้ = เทียบกับปีก่อนไม่ได้ ไม่ใช่ "ตก 100%" ?>
+                        <td class="px-3 py-2 font-medium <?= e($rowHasData ? $yoyToneClass($rowYoyPercent) : 'text-slate-400') ?>"><?= e($rowHasData ? $formatYoyPercent($rowYoyPercent) : $blank) ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -555,7 +565,7 @@ require __DIR__ . '/includes/header.php';
                     <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
                     <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
                     <td class="px-3 py-3 text-slate-300"><?= e($totalDaysCount > 0 ? $totalDaysCount . ' วัน' : '—') ?></td>
-                    <td class="px-3 py-3 <?= $totalProfitPerDay === null ? 'text-slate-500' : ($totalProfitPerDay >= 0 ? 'text-green-400' : 'text-red-400') ?>">
+                    <td class="px-3 py-3 <?= $totalProfitPerDay === null ? 'text-slate-400' : ($totalProfitPerDay >= 0 ? 'text-green-400' : 'text-red-400') ?>">
                         <?= e($totalProfitPerDay === null ? '—' : formatMoney($totalProfitPerDay)) ?>
                     </td>
                     <td class="px-3 py-3 <?= e($yoyToneClass($yoyPercent)) ?>"><?= e($formatYoyPercent($yoyPercent)) ?></td>
@@ -596,7 +606,7 @@ require __DIR__ . '/includes/header.php';
             <span class="text-xs text-slate-400">เดือนเดียวกันเขียวหลายปีติด = ฤดูกาลขายจริง ไม่ใช่ฟลุ๊ค</span>
         </div>
         <div class="overflow-x-auto">
-            <table class="min-w-full text-xs">
+            <table class="table-cards min-w-full text-xs">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-slate-400">
                         <th class="px-2 py-2">ปี</th>
@@ -639,7 +649,7 @@ require __DIR__ . '/includes/header.php';
             <span class="flex items-center gap-1">
                 <span class="inline-block h-3 w-5 rounded border border-white/10"></span> ไม่มีข้อมูล
             </span>
-            <span class="text-slate-500">· ยิ่งเข้มยิ่งกำไร/ขาดทุนมาก (เทียบกับเดือนที่สุดในกริด)</span>
+            <span class="text-slate-400">· ยิ่งเข้มยิ่งกำไร/ขาดทุนมาก (เทียบกับเดือนที่สุดในกริด)</span>
         </div>
     </section>
 <?php endif; ?>
@@ -660,23 +670,23 @@ require __DIR__ . '/includes/header.php';
     <section class="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.015] p-4 sm:p-5">
         <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
             <h2 class="text-sm font-semibold text-slate-400">🔮 ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)</h2>
-            <span class="text-xs text-slate-500">เหลืออีก <?= e($projectionRemainingText) ?></span>
+            <span class="text-xs text-slate-400">เหลืออีก <?= e($projectionRemainingText) ?></span>
         </div>
 
         <p class="text-xl sm:text-2xl font-bold <?= e($projectionTone) ?>">
             <?= e(formatMoney($projectionLow)) ?> – <?= e(formatMoney($projectionHigh)) ?>
         </p>
-        <p class="mt-1 text-sm text-slate-500">
+        <p class="mt-1 text-sm text-slate-400">
             กลาง <span class="font-medium text-slate-400"><?= e(formatMoney($projectionMid)) ?></span>
         </p>
 
-        <p class="mt-3 border-t border-white/[0.06] pt-2 text-xs leading-relaxed text-slate-500">
+        <p class="mt-3 border-t border-white/[0.06] pt-2 text-xs leading-relaxed text-slate-400">
             <?= e(projection_footnote_text($projection)) ?>
         </p>
     </section>
 <?php elseif ($projectionReason === 'insufficient_data' && $hasAnnualData): ?>
     <section class="mt-6 rounded-2xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-3 sm:px-5">
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-slate-400">
             🔮 ข้อมูลยังไม่พอประมาณการสิ้นปี — ต้องมีอย่างน้อย 2 เดือนที่กรอกไปแล้วเกินครึ่งเดือน
         </p>
     </section>

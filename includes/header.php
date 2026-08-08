@@ -5,6 +5,11 @@ declare(strict_types=1);
 $pageTitle = $pageTitle ?? APP_NAME;
 $currentPage = $currentPage ?? '';
 $userEmail = (string)($_SESSION['email'] ?? '');
+// ⚠️ หน้าโปรไฟล์เขียนไว้ว่า "ชื่อนี้จะใช้แสดงตัวตนของคุณในระบบ" — เดิมตั้งแล้ว
+// ไม่มีอะไรเปลี่ยน เพราะไม่มีหน้าไหนเอาไปแสดงเลย มุมขวาบนขึ้นอีเมลตลอด
+// ยังไม่ได้ตั้งชื่อ = ใช้อีเมลเหมือนเดิม (ยังต้องบอกได้ว่ากำลังใช้บัญชีไหนอยู่)
+$userDisplayName = trim_unicode_whitespace((string)($_SESSION['display_name'] ?? ''));
+$userLabel = $userDisplayName !== '' ? $userDisplayName : $userEmail;
 $currentShopId = (int)($_SESSION['current_shop_id'] ?? 0);
 $currentShopName = (string)($_SESSION['current_shop_name'] ?? 'ร้านค้าของฉัน');
 $headerShops = [];
@@ -541,6 +546,111 @@ $flashError = get_flash('error');
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.22)
         }
+
+        /* ⭐⭐ ตารางบนมือถือ — แปลงเป็นการ์ด 1 แถว/1 ใบ
+           วัดจริงก่อนแก้ (จอ 375): ตารางประวัติกว้าง 727px ในกรอบ 317px · หน้ารวมร้าน
+           กว้างกว่านั้น · ผลคือ **คอลัมน์กำไรอยู่นอกจอ** ทั้งที่เป็นตัวเลขเดียวที่แอปนี้
+           มีไว้เพื่อบอก และเจ้าของร้านใช้มือถือเป็นหลัก
+
+           ⚠️ ทำด้วย CSS ล้วน ไม่แตะโครง HTML — เพราะ JS ของหน้าบันทึก (วางจาก Excel ·
+           เติมค่าเดิม · ตัวกันวันอนาคต) ผูกกับโครง `tbody tr` + ลำดับ input อยู่
+           การเปลี่ยนมาร์กอัปจะพังเงียบและไม่มี test runner ฝั่ง JS มาจับ
+           หน้าที่ของ `data-label` คือเอาชื่อคอลัมน์จาก thead มาแปะหน้าค่าแต่ละช่อง */
+        @media (max-width: 767px) {
+            .table-cards thead {
+                display: none
+            }
+
+            .table-cards tbody tr,
+            .table-cards tfoot tr {
+                display: block;
+                margin-bottom: .625rem;
+                border: 1px solid rgba(255, 255, 255, .08);
+                border-radius: 14px;
+                background: rgba(255, 255, 255, .02);
+                padding: .25rem .125rem;
+                white-space: normal
+            }
+
+            .table-cards tbody td,
+            .table-cards tfoot td {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1rem;
+                width: auto;
+                text-align: right;
+                padding: .4rem .75rem;
+                border: 0
+            }
+
+            /* ชื่อคอลัมน์ที่แปะหน้าค่า — ไม่มี label ก็ให้ค่ากินเต็มบรรทัด */
+            .table-cards tbody td[data-label]::before,
+            .table-cards tfoot td[data-label]::before {
+                content: attr(data-label);
+                color: #94a3b8;
+                font-weight: 500;
+                text-align: left;
+                flex: 0 0 auto;
+                margin-right: auto
+            }
+
+            /* ช่องแรกของการ์ด = หัวการ์ด (วันที่/ชื่อร้าน) */
+            .table-cards tbody td:first-child,
+            .table-cards tfoot td:first-child {
+                justify-content: flex-start;
+                text-align: left;
+                font-weight: 700;
+                font-size: .9375rem;
+                border-bottom: 1px solid rgba(255, 255, 255, .07);
+                margin-bottom: .25rem;
+                padding-top: .625rem
+            }
+
+            /* ⭐ กำไรคือเหตุผลที่แอปนี้มีอยู่ — บนการ์ดต้องเด่นกว่าเพื่อน */
+            .table-cards td[data-emphasis="profit"] {
+                font-size: 1.0625rem;
+                font-weight: 700
+            }
+
+            /* แถวที่ว่างเปล่า (เช่น "ยังไม่มีข้อมูล") ไม่ต้องทำเป็นการ์ด */
+            .table-cards tbody td[colspan] {
+                display: block;
+                text-align: center
+            }
+
+            .table-cards tbody td[colspan]::before {
+                content: none
+            }
+
+            /* ตารางที่ยังต้องเลื่อนแนวนอน (ตารางกรอกหลายวัน) — ตรึงคอลัมน์วันที่ไว้ */
+            .sticky-first-col tbody td:first-child,
+            .sticky-first-col thead th:first-child {
+                position: sticky;
+                left: 0;
+                z-index: 2;
+                background: #0b1120
+            }
+        }
+
+        /* ⭐ พื้นที่กดบนมือถือ — วัดจริงก่อนแก้: ปุ่ม "ลบ" 46×24px · ปุ่มลบแถว 11×18px
+           ขณะที่เกณฑ์ที่ใช้กันคือ 44×44 · ขยาย "พื้นที่กด" ด้วย ::after ที่มองไม่เห็น
+           แทนการขยายตัวปุ่ม หน้าตาจึงไม่เปลี่ยนแต่กดโดนขึ้นมาก */
+        @media (max-width: 767px) {
+            .tap-target {
+                position: relative
+            }
+
+            .tap-target::after {
+                content: "";
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: max(100%, 44px);
+                height: max(100%, 44px);
+                transform: translate(-50%, -50%)
+            }
+        }
     </style>
 </head>
 
@@ -559,8 +669,9 @@ $flashError = get_flash('error');
             <div class="flex justify-end relative order-2 md:order-3 shrink-0" id="profile-menu-container">
                 <button type="button" onclick="document.getElementById('profile-dropdown').classList.toggle('hidden')" class="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 sm:py-1.5 text-xs text-slate-300 shadow-sm hover:bg-white/10 transition-colors">
                     <span>👤</span>
-                    <span class="max-w-[120px] sm:max-w-[180px] truncate" title="<?= e($userEmail) ?>"><?= e($userEmail) ?></span>
-                    <span class="text-[10px] text-slate-500 ml-0.5">▼</span>
+                    <?php /* title = อีเมลเสมอ ผู้ใช้จะได้ยืนยันบัญชีได้แม้ตั้งชื่อเล่นไว้ */ ?>
+                    <span class="max-w-[120px] sm:max-w-[180px] truncate" title="<?= e($userEmail) ?>"><?= e($userLabel) ?></span>
+                    <span class="text-[10px] text-slate-400 ml-0.5">▼</span>
                 </button>
 
                 <div id="profile-dropdown" class="hidden absolute right-0 top-full mt-1.5 w-56 origin-top-right rounded-xl border border-white/10 bg-[#0a1120] p-1.5 shadow-xl z-50 ring-1 ring-black/5">

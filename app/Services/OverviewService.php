@@ -381,6 +381,19 @@ class OverviewService
             $revenues = [];
             $profits = [];
             foreach ($months as $month) {
+                // ⚠️⚠️ เดือนที่ร้านนี้ยังไม่ได้กรอกเลย ต้องเป็น `null` ไม่ใช่ `0`
+                //
+                // เดิมเติม 0 ให้ กราฟจึงลากเส้นผ่านเดือนพวกนั้นเหมือนเป็นเดือนที่
+                // "ทำได้เท่าทุนพอดี" · วัดจริง: ร้านที่เริ่มกรอกเดือน มิ.ย. เห็นเส้น
+                // แบนอยู่ที่ ฿0 ตั้งแต่ มี.ค.–พ.ค. แล้ว `tension` ยังทำให้เส้นโค้ง
+                // **ตกต่ำกว่าศูนย์** ทั้งที่ไม่มีเดือนไหนขาดทุนเลย
+                // · Chart.js เว้นช่วงให้เองเมื่อค่าเป็น null (เส้นขาดตอน = ยังไม่มีข้อมูล)
+                if (!isset($rowByMonth[$month])) {
+                    $revenues[] = null;
+                    $profits[] = null;
+                    continue;
+                }
+
                 $monthRevenue = (float)($rowByMonth[$month]['total_revenue'] ?? 0);
                 $monthAdCost = (float)($rowByMonth[$month]['total_ad_cost'] ?? 0);
 

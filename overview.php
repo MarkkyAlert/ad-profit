@@ -349,11 +349,18 @@ if ($view === 'day') {
             static function ($series): array {
                 $row = is_array($series) ? $series : [];
 
+                /* ⚠️⚠️ ต้องคง `null` ไว้ ห้าม cast เป็น float
+                   `(float)null` = 0.0 → เดือนที่ยังไม่ได้กรอกกลับกลายเป็น "เท่าทุนพอดี"
+                   อีกครั้ง **ทับตัวแก้ที่ Service ทั้งหมด** (วัดจริง: แก้ที่ Service แล้ว
+                   กราฟยังลากผ่านศูนย์เหมือนเดิม เพราะบรรทัดนี้แปลงกลับ)
+                   — รูปแบบที่โปรเจกต์นี้เจอซ้ำ ๆ: กติกาถูกบังคับที่หนึ่งแต่ไปไม่ถึงอีกที่ */
+                $toChartValue = static fn($value): ?float => $value === null ? null : (float)$value;
+
                 return [
                     'shop_id' => (int)($row['shop_id'] ?? 0),
                     'shop_name' => (string)($row['shop_name'] ?? 'ร้านค้า'),
-                    'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($row['revenue'] ?? []))),
-                    'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($row['profit'] ?? []))),
+                    'revenue' => array_values(array_map($toChartValue, (array)($row['revenue'] ?? []))),
+                    'profit' => array_values(array_map($toChartValue, (array)($row['profit'] ?? []))),
                 ];
             },
             $trendSeriesRaw
@@ -371,11 +378,11 @@ require __DIR__ . '/includes/header.php';
         <div>
             <h1 class="text-xl font-semibold text-slate-100">หน้ารวมทุกร้าน</h1>
             <?php if ($view === 'day'): ?>
-                <p class="mt-2 text-sm text-slate-500">สรุปยอดรวมทุกร้านแบบรายวัน สำหรับเดือนที่เลือก</p>
+                <p class="mt-2 text-sm text-slate-400">สรุปยอดรวมทุกร้านแบบรายวัน สำหรับเดือนที่เลือก</p>
             <?php elseif ($view === 'year'): ?>
-                <p class="mt-2 text-sm text-slate-500">สรุปยอดรวมทุกร้านแบบรายปี พร้อมกราฟและจัดอันดับตามกำไร</p>
+                <p class="mt-2 text-sm text-slate-400">สรุปยอดรวมทุกร้านแบบรายปี พร้อมกราฟและจัดอันดับตามกำไร</p>
             <?php else: ?>
-                <p class="mt-2 text-sm text-slate-500">ตารางและกราฟเปรียบเทียบทุกร้านตามเดือนที่เลือก</p>
+                <p class="mt-2 text-sm text-slate-400">ตารางและกราฟเปรียบเทียบทุกร้านตามเดือนที่เลือก</p>
             <?php endif; ?>
         </div>
 
@@ -435,7 +442,7 @@ require __DIR__ . '/includes/header.php';
 
 
     <?php if (!$canView): ?>
-        <p class="mt-4 text-sm text-slate-500">
+        <p class="mt-4 text-sm text-slate-400">
             <?php if ($shopCount < 2): ?>
                 ต้องมีอย่างน้อย 2 ร้านถึงจะเห็นข้อมูลเปรียบเทียบ
             <?php else: ?>
@@ -511,10 +518,10 @@ require __DIR__ . '/includes/header.php';
                                 <?= e(formatMoney($dayAvgProfit)) ?>
                             </span>
                             <?php if ($dayAvgRevenue !== null): ?>
-                                <span class="text-xs text-slate-500">(รายได้ <?= e(formatMoney($dayAvgRevenue)) ?>)</span>
+                                <span class="text-xs text-slate-400">(รายได้ <?= e(formatMoney($dayAvgRevenue)) ?>)</span>
                             <?php endif; ?>
                             <?php if ($dayCompleteDays > 0): ?>
-                                <span class="text-xs text-slate-500">จาก <?= e((string)$dayCompleteDays) ?> วันที่กรอกครบทุกร้านที่เริ่มบันทึกแล้ว</span>
+                                <span class="text-xs text-slate-400">จาก <?= e((string)$dayCompleteDays) ?> วันที่กรอกครบทุกร้านที่เริ่มบันทึกแล้ว</span>
                             <?php endif; ?>
                         <?php endif; ?>
 
@@ -524,7 +531,7 @@ require __DIR__ . '/includes/header.php';
                             $worstDayProfit = $dayWorst !== null ? (float)($dayWorst['profit'] ?? 0) : null;
                             ?>
                             <span class="text-slate-600">·</span>
-                            วันกำไรดีสุด<span class="text-xs text-slate-500">(เฉพาะวันที่กรอกครบ)</span>
+                            วันกำไรดีสุด<span class="text-xs text-slate-400">(เฉพาะวันที่กรอกครบ)</span>
                             <span class="font-bold <?= $bestDayProfit < 0 ? 'text-red-400' : 'text-green-400' ?>">
                                 <?= e(formatThaiDate((string)($dayBest['record_date'] ?? ''))) ?>
                                 (<?= e(formatMoney($bestDayProfit)) ?>)
@@ -554,7 +561,7 @@ require __DIR__ . '/includes/header.php';
                     <p class="text-xs text-amber-400">
                         <?php if ($dayIncompleteDays > 0): ?>
                             ⚠️ <?= e((string)$dayIncompleteDays) ?> วันที่ยังกรอกไม่ครบทุกร้านที่เริ่มบันทึกแล้ว —
-                            <span class="text-slate-500">ยอดรวมของวันเหล่านั้นเทียบกับวันอื่นตรง ๆ ไม่ได้</span>
+                            <span class="text-slate-400">ยอดรวมของวันเหล่านั้นเทียบกับวันอื่นตรง ๆ ไม่ได้</span>
                         <?php endif; ?>
                         <?php if ((int)($dailySummary['missing_days'] ?? 0) > 0): ?>
                             <?php if ($dayIncompleteDays > 0): ?><br><?php endif; ?>
@@ -567,7 +574,7 @@ require __DIR__ . '/includes/header.php';
             <section class="section-card mt-6 p-4 sm:p-5">
                 <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางรายวัน (รวมทุกร้าน)</h2>
                 <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
+                    <table class="table-cards min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
                                 <th class="px-3 py-2">วันที่</th>
@@ -657,7 +664,7 @@ require __DIR__ . '/includes/header.php';
                     <span class="text-xs text-slate-400">รวมทั้งเดือน <?= e(formatThaiMonth($selectedMonth)) ?></span>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
+                    <table class="table-cards min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
                                 <th class="px-3 py-2">อันดับ</th>
@@ -679,7 +686,7 @@ require __DIR__ . '/includes/header.php';
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                                 ?>
                                 <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
-                                    <td class="px-3 py-2 text-slate-500 font-semibold"><?= e((string)($index + 1)) ?></td>
+                                    <td class="px-3 py-2 text-slate-400 font-semibold"><?= e((string)($index + 1)) ?></td>
                                     <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
                                     <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
                                     <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
@@ -848,7 +855,7 @@ require __DIR__ . '/includes/header.php';
                             <span class="text-sm <?= e($yearlyYoyTone($yearlyYoyPercent)) ?>">
                                 (<?= e((($yearlyYoyChange ?? 0) >= 0 ? '+' : '-') . formatMoney(abs($yearlyYoyChange ?? 0))) ?>)
                             </span>
-                            <span class="text-xs text-slate-500">
+                            <span class="text-xs text-slate-400">
                                 ปีก่อน <?= e(formatMoney($yearlyPrevProfit)) ?>
                             </span>
                         <?php endif; ?>
@@ -888,7 +895,7 @@ require __DIR__ . '/includes/header.php';
                 ?>
                 <section class="section-card mt-4 px-4 py-3 sm:px-5">
                     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-slate-400">
-                        <span class="text-xs font-medium uppercase tracking-wider text-slate-500">รวมทุกร้าน</span>
+                        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">รวมทุกร้าน</span>
                         เดือนกำไรดีสุด
                         <span class="font-bold <?= $bestMonthProfit !== null && $bestMonthProfit < 0 ? 'text-red-400' : 'text-green-400' ?>">
                             <?= e($bestMonthLabel) ?><?= $bestMonthProfit !== null ? ' (' . e(formatMoney($bestMonthProfit)) . ')' : '' ?>
@@ -905,7 +912,7 @@ require __DIR__ . '/includes/header.php';
             <section class="section-card mt-6 p-4 sm:p-5">
                 <h2 class="mb-3 text-base sm:text-lg font-semibold text-slate-100">ตารางรวมรายเดือน (<?= e((string)count($yearlyMonths)) ?> เดือน)</h2>
                 <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
+                    <table class="table-cards min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
                                 <th class="px-3 py-2">เดือน</th>
@@ -967,7 +974,7 @@ require __DIR__ . '/includes/header.php';
                     <span class="text-xs text-slate-400">รวมปี <?= e((string)($selectedYear + 543)) ?> (พ.ศ.)</span>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
+                    <table class="table-cards min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
                                 <th class="px-3 py-2">อันดับ</th>
@@ -993,14 +1000,14 @@ require __DIR__ . '/includes/header.php';
                                 $rowDaysCount = (int)($row['days_count'] ?? 0);
                                 ?>
                                 <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
-                                    <td class="px-3 py-2 text-slate-500 font-semibold"><?= e((string)($index + 1)) ?></td>
+                                    <td class="px-3 py-2 text-slate-400 font-semibold"><?= e((string)($index + 1)) ?></td>
                                     <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
                                     <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
                                     <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
                                     <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
                                     <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
-                                    <td class="px-3 py-2 font-medium <?= $rowProfitShare === null ? 'text-slate-500' : ($rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300') ?>">
+                                    <td class="px-3 py-2 font-medium <?= $rowProfitShare === null ? 'text-slate-400' : ($rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300') ?>">
                                         <?= e($rowProfitShare === null ? '—' : formatPercent($rowProfitShare)) ?>
                                     </td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : '—') ?></td>
@@ -1103,7 +1110,7 @@ require __DIR__ . '/includes/header.php';
             <?php endif; ?>
 
             <div class="mt-5 overflow-x-auto">
-                <table class="min-w-full text-sm">
+                <table class="table-cards min-w-full text-sm">
                     <thead>
                         <tr class="border-b border-white/10 text-left text-slate-400">
                             <th class="px-3 py-1.5">อันดับ</th>
@@ -1133,7 +1140,7 @@ require __DIR__ . '/includes/header.php';
                             $rowChange = (float)($row['profit_change'] ?? 0);
                             ?>
                             <tr class="border-b border-white/[0.06] table-row-hover">
-                                <td class="px-3 py-1.5 text-slate-500"><?= e((string)($rowIndex + 1)) ?></td>
+                                <td class="px-3 py-1.5 text-slate-400"><?= e((string)($rowIndex + 1)) ?></td>
                                 <td class="px-3 py-1.5 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
                                 <td class="px-3 py-1.5 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
                                 <td class="px-3 py-1.5 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
@@ -1154,15 +1161,15 @@ require __DIR__ . '/includes/header.php';
                                     $rowChangeBadge = format_change_badge($rowChangePercent, '–');
                                     ?>
                                     <?php if ($rowChangePercent === null): ?>
-                                        <span class="text-slate-500" title="<?= e($rowNoCompareReason) ?>"><?= e($rowChangeBadge['text']) ?></span>
+                                        <span class="text-slate-400" title="<?= e($rowNoCompareReason) ?>"><?= e($rowChangeBadge['text']) ?></span>
                                     <?php else: ?>
                                         <span class="<?= e($rowChangeBadge['class']) ?>"><?= e($rowChangeBadge['text']) ?></span>
-                                        <span class="text-xs text-slate-500">(<?= e(formatMoney($rowChange)) ?>)</span>
+                                        <span class="text-xs text-slate-400">(<?= e(formatMoney($rowChange)) ?>)</span>
                                     <?php endif; ?>
                                 </td>
                                 <td class="px-3 py-1.5 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                 <td class="px-3 py-1.5 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
-                                <td class="px-3 py-1.5 text-xs text-slate-500"><?= e((string)(int)($row['days_count'] ?? 0)) ?> วัน</td>
+                                <td class="px-3 py-1.5 text-xs text-slate-400"><?= e((string)(int)($row['days_count'] ?? 0)) ?> วัน</td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -1179,11 +1186,11 @@ require __DIR__ . '/includes/header.php';
                             <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
                             <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
                             <td class="px-3 py-2 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
-                            <td class="px-3 py-2 text-slate-500">—</td>
-                            <td class="px-3 py-2 text-slate-500">—</td>
+                            <td class="px-3 py-2 text-slate-400">—</td>
+                            <td class="px-3 py-2 text-slate-400">—</td>
                             <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
                             <td class="px-3 py-2 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
-                            <td class="px-3 py-2 text-slate-500">—</td>
+                            <td class="px-3 py-2 text-slate-400">—</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -1195,7 +1202,7 @@ require __DIR__ . '/includes/header.php';
                     <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
                 </div>
                 <?php if ($shopsMissingFromCharts > 0): ?>
-                    <p class="mb-3 text-xs text-slate-500">
+                    <p class="mb-3 text-xs text-slate-400">
                         ไม่ได้วาด <?= e((string)$shopsMissingFromCharts) ?> ร้านที่ยังไม่มีข้อมูลในช่วงนี้ (อยู่ท้ายตารางด้านบน)
                     </p>
                 <?php endif; ?>
@@ -1212,7 +1219,7 @@ require __DIR__ . '/includes/header.php';
                     <span class="text-xs text-slate-400">เส้นแต่ละร้าน = กำไรรายเดือน</span>
                 </div>
                 <?php if ($shopsMissingFromCharts > 0): ?>
-                    <p class="mb-3 text-xs text-slate-500">
+                    <p class="mb-3 text-xs text-slate-400">
                         ไม่ได้วาด <?= e((string)$shopsMissingFromCharts) ?> ร้านที่ยังไม่มีข้อมูลในช่วงนี้ (อยู่ท้ายตารางด้านบน)
                     </p>
                 <?php endif; ?>

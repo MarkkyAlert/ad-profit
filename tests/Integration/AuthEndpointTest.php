@@ -217,7 +217,16 @@ final class AuthEndpointTest extends ControllerTestCase
 
         // และต้องมีคีย์ที่ระบบพึ่งพาจริง ๆ ครบ — กันกรณีที่ทั้งสองฝั่ง "ขาดเหมือนกัน"
         $this->assertSame(
-            ['auth_started_at', 'current_shop_id', 'current_shop_name', 'email', 'last_activity_at', 'session_version', 'user_id'],
+            [
+                'auth_started_at',
+                'current_shop_id',
+                'current_shop_name',
+                'display_name',
+                'email',
+                'last_activity_at',
+                'session_version',
+                'user_id',
+            ],
             $realKeys,
             'การล็อกอินจริงเขียนคีย์ไม่ครบตามที่ระบบใช้'
         );

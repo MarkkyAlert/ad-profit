@@ -136,7 +136,7 @@ require __DIR__ . '/includes/header.php';
                 อีเมลของบัญชีจะเปลี่ยนเป็น
                 <strong class="text-slate-100"><?= e($pendingEmail) ?></strong>
             </p>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-slate-400">
                 เพื่อความปลอดภัย ระบบจะออกจากระบบให้ทุกเครื่องหลังยืนยัน
                 แล้วให้เข้าสู่ระบบใหม่ด้วยอีเมลนี้
             </p>
@@ -154,13 +154,13 @@ require __DIR__ . '/includes/header.php';
                 ต่อไปนี้ให้เข้าสู่ระบบด้วย
                 <strong class="text-slate-100"><?= e($newEmail) ?></strong>
             </p>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-slate-400">
                 เพื่อความปลอดภัย ระบบออกจากระบบให้ทุกเครื่องแล้ว
             </p>
         <?php else: ?>
             <h1 class="text-lg font-bold text-red-400">ยืนยันอีเมลไม่สำเร็จ</h1>
             <p class="mt-2 text-sm text-slate-300"><?= e($errorMessage) ?></p>
-            <p class="mt-1 text-xs text-slate-500"><?= e($hintMessage) ?></p>
+            <p class="mt-1 text-xs text-slate-400"><?= e($hintMessage) ?></p>
         <?php endif; ?>
 
         <a href="<?= e(app_url('/login.php')) ?>"

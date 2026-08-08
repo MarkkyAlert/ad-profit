@@ -84,7 +84,7 @@ require __DIR__ . '/includes/header.php';
     <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div>
             <h1 class="text-lg sm:text-xl font-semibold text-slate-100">ประวัติรายการ</h1>
-            <p class="mt-1 text-xs sm:text-sm text-slate-500">ตารางรายการของเดือนที่เลือก พร้อมแก้ไข/ลบได้ทันที</p>
+            <p class="mt-1 text-xs sm:text-sm text-slate-400">ตารางรายการของเดือนที่เลือก พร้อมแก้ไข/ลบได้ทันที</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
@@ -122,7 +122,12 @@ require __DIR__ . '/includes/header.php';
     <?php endif; ?>
 
     <div class="mt-5 overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <?php /* ⚠️ `table-cards` = บนจอเล็กแถวจะกลายเป็นการ์ด 1 วัน/1 ใบ
+                 · หน้าตาการ์ดอยู่ที่ CSS ใน `includes/header.php`
+                 · ชื่อคอลัมน์ที่แปะหน้าค่าแต่ละช่อง มาจาก <thead> ของตารางนี้เอง
+                   (สคริปต์ใน `includes/footer.php` เป็นคนแปะ) — **ห้ามพิมพ์ชื่อคอลัมน์
+                   ซ้ำไว้ที่ <td>** ไม่งั้นวันที่ใครสลับคอลัมน์ ป้ายจะชี้ผิดช่องเงียบ ๆ */ ?>
+        <table class="table-cards min-w-full text-sm">
             <thead>
                 <tr class="border-b border-white/10 text-left text-slate-400">
                     <th class="px-3 py-2">วันที่</th>
@@ -177,7 +182,7 @@ require __DIR__ . '/includes/header.php';
                                 <div class="inline-flex items-center gap-2">
                                     <button
                                         type="button"
-                                        class="btn-ghost rounded-lg px-2 py-1 text-xs"
+                                        class="btn-ghost tap-target rounded-lg px-2 py-1 text-xs"
                                         data-edit-button
                                         data-record-id="<?= e((string)$recordId) ?>"
                                         data-record-date="<?= e($recordDate) ?>"
@@ -193,7 +198,7 @@ require __DIR__ . '/includes/header.php';
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="month" value="<?= e($selectedMonth) ?>">
                                         <input type="hidden" name="record_id" value="<?= e((string)$recordId) ?>">
-                                        <button type="submit" class="btn-danger rounded-lg px-2 py-1 text-xs">
+                                        <button type="submit" class="btn-danger tap-target rounded-lg px-2 py-1 text-xs">
                                             🗑️ ลบ
                                         </button>
                                     </form>

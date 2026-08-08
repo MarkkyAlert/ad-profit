@@ -162,10 +162,15 @@ abstract class ControllerTestCase extends IntegrationTestCase
         $email = $userId > 0
             ? (string)$this->pdo->query('SELECT email FROM users WHERE id = ' . $userId)->fetchColumn()
             : '';
+        // ชื่อที่แสดง — หัวเว็บใช้แทนอีเมลเมื่อผู้ใช้ตั้งไว้ (อ่านจาก DB จริงเหมือนอีเมล)
+        $displayName = $userId > 0
+            ? (string)$this->pdo->query('SELECT display_name FROM users WHERE id = ' . $userId)->fetchColumn()
+            : '';
 
         $values = [
             'user_id' => $userId,
             'email' => $email,
+            'display_name' => $displayName,
             'session_version' => $sessionVersion,
             'auth_started_at' => $now - $startedSecondsAgo,
             'last_activity_at' => $now - $idleSecondsAgo,

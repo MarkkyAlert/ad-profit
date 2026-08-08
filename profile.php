@@ -95,7 +95,7 @@ require __DIR__ . '/includes/header.php';
                     placeholder="เช่น มาร์ค">
             </div>
 
-            <button type="submit" class="btn-primary w-full px-4 py-2.5 text-sm">💾 บันทึกข้อมูล</button>
+            <button type="submit" class="btn-orange w-full px-4 py-2.5 text-sm">💾 บันทึกข้อมูล</button>
         </form>
     </article>
 
@@ -139,7 +139,7 @@ require __DIR__ . '/includes/header.php';
                     autocomplete="current-password">
             </div>
 
-            <button type="submit" class="btn-teal w-full px-4 py-2.5 text-sm">📧 เปลี่ยนอีเมล</button>
+            <button type="submit" class="btn-orange w-full px-4 py-2.5 text-sm">📧 เปลี่ยนอีเมล</button>
         </form>
     </article>
 

@@ -177,7 +177,7 @@ class AuthService
             ];
         }
 
-        $this->establishSession($userId, $normalizedEmail, $shopId, self::DEFAULT_SHOP_NAME, $sessionVersion);
+        $this->establishSession($userId, $normalizedEmail, '', $shopId, self::DEFAULT_SHOP_NAME, $sessionVersion);
         $this->releaseAttempt(self::REGISTER_IP_ACTION, $clientIp);
         $this->clearRateLimit('register', $clientIp, $normalizedEmail);
         // ไม่ล้าง bucket ของ IP โดยตั้งใจ — เหตุผลเดียวกับฝั่งล็อกอิน:
@@ -299,7 +299,14 @@ class AuthService
         } catch (Throwable $exception) {
             error_log('[auth][login] updateLastLoginAt failed: ' . $exception->getMessage());
         }
-        $this->establishSession($userId, $userEmail, $shopId, $shopName, $sessionVersion);
+        $this->establishSession(
+            $userId,
+            $userEmail,
+            trim_unicode_whitespace((string)($user['display_name'] ?? '')),
+            $shopId,
+            $shopName,
+            $sessionVersion
+        );
         // ⚠️⚠️ ต้องคืนโควตาที่จองไว้ของ bucket ต่อ IP ด้วย
         //
         // เราจองก่อนตรวจรหัสผ่าน (เพื่อกันการยิงพร้อมกัน) แปลว่าการล็อกอิน **ที่สำเร็จ**
@@ -617,12 +624,25 @@ class AuthService
         ];
     }
 
-    private function establishSession(int $userId, string $email, int $shopId, string $shopName, int $sessionVersion): void
-    {
+    /**
+     * ⚠️ เพิ่ม/ลบคีย์ตรงนี้ ต้องตามไปแก้ `ControllerTestCase::startSession()` ด้วย
+     * ไม่งั้นเทสต์ชั้น controller ทั้งชั้นจะรันบน session ที่ไม่มีวันเกิดขึ้นจริง
+     * (`AuthEndpointTest::testTheTestSessionHasTheSameShapeAsARealLogin()` ล็อกไว้)
+     */
+    private function establishSession(
+        int $userId,
+        string $email,
+        string $displayName,
+        int $shopId,
+        string $shopName,
+        int $sessionVersion
+    ): void {
         session_regenerate_id(true);
 
         $_SESSION['user_id'] = $userId;
         $_SESSION['email'] = $email;
+        // ชื่อที่ผู้ใช้ตั้งเอง — หัวเว็บเอาไปแสดงแทนอีเมล (ว่าง = ยังไม่ได้ตั้ง)
+        $_SESSION['display_name'] = $displayName;
         $_SESSION['session_version'] = max(1, $sessionVersion);
         $_SESSION['auth_started_at'] = time();
         $_SESSION['last_activity_at'] = time();

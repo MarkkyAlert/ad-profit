@@ -74,7 +74,7 @@ require __DIR__ . '/includes/header.php';
 </style>
 <section class="section-card p-5">
     <h1 class="text-xl font-semibold text-slate-100">บันทึกข้อมูลรายวัน</h1>
-    <p class="mt-2 text-sm text-slate-500">กรอกวันซ้ำจะอัปเดตทับอัตโนมัติ</p>
+    <p class="mt-2 text-sm text-slate-400">กรอกวันซ้ำจะอัปเดตทับอัตโนมัติ</p>
 
     <form action="<?= e(app_url('/api/records.php')) ?>" method="post" class="mt-5 grid gap-4 md:grid-cols-2">
         <?= csrf_field() ?>
@@ -149,12 +149,19 @@ require __DIR__ . '/includes/header.php';
     </form>
 </section>
 
-<section class="section-card mt-6 p-5">
-    <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold text-slate-100">กรอกหลายวัน</h2>
+<?php /* ⚠️ ยุบเก็บไว้โดยตั้งใจ — หน้านี้มี 3 วิธีกรอกซ้อนกัน (วันเดียว · หลายวัน · ไฟล์ CSV)
+         เดิมกางออกพร้อมกันหมด ผู้ใช้ใหม่จึงเจอสามทางเลือกโดยไม่รู้ว่าต่างกันยังไง และบนมือถือ
+         ต้องเลื่อนผ่านตาราง 31 แถวกว่าจะถึงส่วนอื่น
+         → งานที่ทำทุกวัน (กรอกวันนี้) กางไว้ · งานที่ทำนาน ๆ ครั้ง (ย้อนหลัง/นำเข้าไฟล์) ยุบไว้
+         ⚠️ ใช้ <details> ของ HTML ล้วน ไม่ใช่ JS — เนื้อหาข้างในยังอยู่ใน DOM ตลอด
+         สคริปต์ของตาราง (วางจาก Excel · เติมค่าเดิม) จึงทำงานเหมือนเดิมทุกอย่าง */ ?>
+<details class="section-card mt-6 p-5">
+    <summary class="flex cursor-pointer flex-wrap items-center justify-between gap-2 list-none">
+        <span class="text-lg font-semibold text-slate-100">กรอกหลายวัน <span class="text-sm font-normal text-slate-400">— ย้อนหลังทีละหลายวัน</span></span>
         <span id="bulk-row-count" class="text-xs text-slate-400"></span>
-    </div>
-    <p class="mb-4 text-sm text-slate-500">
+    </summary>
+    <div class="mt-4">
+    <p class="mb-4 text-sm text-slate-400">
         กรอกได้สูงสุด <?= e((string)RecordService::BULK_MAX_ROWS) ?> แถวต่อครั้ง · แถวที่เว้นว่างไว้ทั้งแถวจะถูกข้าม ·
         ถ้ามีแถวใดกรอกผิด ระบบจะไม่บันทึกทั้งชุด
     </p>
@@ -203,7 +210,12 @@ require __DIR__ . '/includes/header.php';
         // พิมพ์เลข 4 หลักแล้วเห็นทีละตัว — และนี่คือหน้าที่ใช้กรอกข้อมูลเป็นหลัก
         ?>
         <div class="overflow-x-auto">
-            <table class="w-full min-w-[560px] text-sm">
+            <?php /* ⚠️ ตารางนี้ **ไม่แปลงเป็นการ์ด** เหมือนตารางอื่น — มันเป็นฟอร์มที่
+                     JS ผูกกับโครง `tbody tr` + ลำดับ input ไว้ (วางจาก Excel · เติมค่าเดิม ·
+                     เติมวันที่ขาด) และฝั่ง JS ไม่มีตัวรันเทสต์คอยจับเวลาพัง
+                     บนมือถือจึงยังเลื่อนแนวนอน แต่ `sticky-first-col` ตรึงคอลัมน์วันที่ไว้
+                     ผู้ใช้จะได้รู้ตลอดว่ากำลังกรอกของวันไหน */ ?>
+            <table class="sticky-first-col w-full min-w-[560px] text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-slate-400">
                         <th class="px-2 py-2 w-10">#</th>
@@ -228,29 +240,36 @@ require __DIR__ . '/includes/header.php';
                     max="<?= e(date('Y-m')) ?>"
                     value="<?= e(date('Y-m')) ?>"
                     class="rounded-xl px-3 py-2 text-sm">
+                <?php /* ⚠️ ช่อง <input type="month"> เขียนเดือนเป็นภาษาอังกฤษเสมอ ("August 2026")
+                         ตามภาษาของเบราว์เซอร์/เครื่อง — **แก้ที่ตัวช่องไม่ได้** เป็นข้อจำกัดของ
+                         ช่องมาตรฐาน · หน้าเดียวกันเขียน "8 ส.ค. 2569" ในตาราง ผู้ใช้จึงต้อง
+                         แปลงวันที่ในหัวไปมา → เขียนเดือนแบบไทยกำกับไว้ข้าง ๆ ให้อ่านตรงกัน
+                         (สคริปต์อัปเดตข้อความนี้เมื่อผู้ใช้เปลี่ยนเดือน) */ ?>
+                <span id="bulk-month-thai" class="text-sm text-slate-300"><?= e(formatThaiMonth(date('Y-m'))) ?></span>
             </div>
 
             <button type="button" id="bulk-add-row" class="btn-ghost px-4 py-2 text-sm">+ เพิ่มแถว</button>
             <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">✓ บันทึกทั้งหมด</button>
         </div>
     </form>
-</section>
+    </div>
+</details>
 
 <template id="bulk-row-template">
     <tr class="border-b border-white/[0.06]">
-        <td class="px-2 py-2 text-slate-500 bulk-row-number"></td>
+        <td class="px-2 py-2 text-slate-400 bulk-row-number"></td>
         <td class="px-2 py-2">
             <input type="hidden" name="row_number[]" value="">
-                <input name="record_date[]" type="date" max="<?= e($todayDate) ?>" class="w-full rounded-lg px-2 py-1.5 text-sm">
+                <input name="record_date[]" aria-label="วันที่" type="date" max="<?= e($todayDate) ?>" class="w-full rounded-lg px-2 py-1.5 text-sm">
         </td>
         <td class="px-2 py-2">
-            <input name="revenue[]" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
+            <input name="revenue[]" aria-label="รายได้ (บาท)" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
         </td>
         <td class="px-2 py-2">
-            <input name="ad_cost[]" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
+            <input name="ad_cost[]" aria-label="ค่าแอด (บาท)" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
         </td>
         <td class="px-2 py-2">
-            <input name="note[]" type="text" maxlength="255" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="ไม่บังคับ">
+            <input name="note[]" aria-label="โน้ต" type="text" maxlength="255" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="ไม่บังคับ">
             <?php /* ⚠️ ธง "แถวนี้ได้เทียบกับข้อมูลเดิมของวันนั้นแล้วหรือยัง" — JS ตั้งเป็น 1
                      เมื่อโหลดข้อมูลเดือนสำเร็จ · ถ้าโหลดไม่สำเร็จค่านี้ยังเป็นว่าง แล้วฝั่ง
                      เซิร์ฟเวอร์จะปฏิเสธการเขียนทับโน้ตที่มีอยู่ แทนที่จะลบทิ้งเงียบ ๆ
@@ -259,7 +278,10 @@ require __DIR__ . '/includes/header.php';
             <input type="hidden" name="note_checked[]" value="">
         </td>
         <td class="px-2 py-2 text-center">
-            <button type="button" class="bulk-remove-row text-red-400 hover:text-red-300 text-lg leading-none" title="ลบแถว">×</button>
+            <?php /* ⚠️ วัดจริงบนมือถือ: ปุ่มนี้เคยมีขนาด 11×18px — เล็กกว่าเกณฑ์นิ้วมือ (44px)
+                     สี่เท่า และเป็นปุ่มที่ลบข้อมูลทิ้ง · `tap-target` ขยายเฉพาะ "พื้นที่กด"
+                     ด้วย ::after ที่มองไม่เห็น หน้าตาจึงไม่เปลี่ยน */ ?>
+            <button type="button" class="bulk-remove-row tap-target text-red-400 hover:text-red-300 text-lg leading-none" aria-label="ลบแถวนี้" title="ลบแถว">×</button>
         </td>
     </tr>
 </template>
@@ -925,6 +947,31 @@ require __DIR__ . '/includes/header.php';
         const monthInput = document.getElementById('bulk-month');
         let loadedMonth = monthInput ? monthInput.value : '';
 
+        /* เขียนเดือนแบบไทยกำกับช่องเลือกเดือน — ช่องมาตรฐานของเบราว์เซอร์เขียนเป็น
+           "August 2026" เสมอ ขณะที่ทั้งหน้าใช้ "ส.ค. 2569" (ดูคอมเมนต์ที่ตัว <span>)
+           ⚠️ รายชื่อเดือนย่อและการบวก 543 ต้องตรงกับ `formatThaiMonth()` ฝั่ง PHP */
+        const THAI_MONTH_NAMES = [
+            'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+            'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+        ];
+
+        const showThaiMonth = (month) => {
+            const target = document.getElementById('bulk-month-thai');
+            if (!target) {
+                return;
+            }
+
+            const matched = /^(\d{4})-(\d{2})$/.exec(month || '');
+            if (!matched) {
+                target.textContent = '';
+                return;
+            }
+
+            const monthIndex = Number(matched[2]) - 1;
+            const name = THAI_MONTH_NAMES[monthIndex] || '';
+            target.textContent = name === '' ? '' : name + ' ' + (Number(matched[1]) + 543);
+        };
+
         const showBulkNotice = (message) => {
             if (!pasteNotice) {
                 return;
@@ -1023,6 +1070,7 @@ require __DIR__ . '/includes/header.php';
                     populateFromDays(days);
                     loadedMonth = resolvedMonth;
                     monthInput.value = resolvedMonth;
+                    showThaiMonth(resolvedMonth);
 
                     if (resolvedMonth !== selectedMonth) {
                         showBulkNotice('ยังกรอกล่วงหน้าไม่ได้ — แสดงข้อมูลของเดือน ' + resolvedMonth + ' ให้แทน');
@@ -1088,14 +1136,17 @@ require __DIR__ . '/includes/header.php';
     })();
 </script>
 
-<section class="section-card mt-6 p-5">
-    <h2 class="text-lg font-semibold text-slate-100">นำเข้าไฟล์ CSV</h2>
-    <p class="mt-1 text-sm text-slate-500">
+<?php /* ยุบเก็บด้วยเหตุผลเดียวกับ "กรอกหลายวัน" — นำเข้าไฟล์เป็นงานที่ทำนาน ๆ ครั้ง */ ?>
+<details class="section-card mt-6 p-5">
+    <summary class="cursor-pointer list-none text-lg font-semibold text-slate-100">
+        นำเข้าไฟล์ CSV <span class="text-sm font-normal text-slate-400">— ย้ายข้อมูลจาก Excel เข้ามาทั้งไฟล์</span>
+    </summary>
+    <p class="mt-3 text-sm text-slate-400">
         รองรับคอลัมน์ <span class="text-slate-300">วันที่ · รายได้ · ค่าแอด · โน้ต</span>
         (หัวภาษาอังกฤษ date/revenue/ad_cost/note ก็ได้) ·
         คอลัมน์ที่คำนวณเอง เช่น กำไร/ROAS และแถว "รวม" จะถูกข้ามให้อัตโนมัติ
     </p>
-    <p class="mt-1 text-xs text-slate-500">
+    <p class="mt-1 text-xs text-slate-400">
         ไฟล์ที่ดาวน์โหลดจากหน้าประวัติ นำกลับเข้ามาได้เลย · วันเดียวกันจะอัปเดตทับ ·
         <span class="text-slate-300">ช่องรายได้/ค่าแอดต้องมีตัวเลขทุกแถว — วันที่ไม่มีให้ใส่ 0</span> ·
         ถ้ามีแถวใดผิด ระบบจะไม่บันทึกทั้งไฟล์ · สูงสุด <?= e((string)RecordService::IMPORT_MAX_ROWS) ?> แถว / 2MB
@@ -1116,7 +1167,7 @@ require __DIR__ . '/includes/header.php';
 
         <button type="submit" class="btn-teal shrink-0 px-6 py-2.5 text-sm">↑ นำเข้า</button>
     </form>
-</section>
+</details>
 
 <section class="section-card mt-6 p-5">
     <div class="mb-3 flex items-center justify-between">
@@ -1125,7 +1176,7 @@ require __DIR__ . '/includes/header.php';
     </div>
 
     <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <table class="table-cards min-w-full text-sm">
             <thead>
                 <tr class="border-b border-white/10 text-left text-slate-400">
                     <th class="px-3 py-2">วันที่</th>

@@ -294,7 +294,7 @@ $flashError = get_flash('error');
                 </section>
             </div>
 
-            <p class="mt-6 text-center text-xs text-slate-500">รองรับหลายร้านค้า · Export CSV · ROAS Dashboard</p>
+            <p class="mt-6 text-center text-xs text-slate-400">รองรับหลายร้านค้า · Export CSV · ROAS Dashboard</p>
         </div>
     </div>
 
@@ -321,7 +321,7 @@ $flashError = get_flash('error');
                     const isActive = trigger.dataset.tabTrigger === tab;
                     trigger.classList.toggle('tab-active', isActive);
                     trigger.classList.toggle('text-indigo-300', isActive);
-                    trigger.classList.toggle('text-slate-500', !isActive);
+                    trigger.classList.toggle('text-slate-400', !isActive);
                 });
 
                 panels.forEach((panel) => {

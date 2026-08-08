@@ -518,10 +518,22 @@ class DashboardService
             $monthKey = $monthDate->format('Y-m');
             $row = $mappedRows[$monthKey] ?? null;
 
+            $months[] = $monthKey;
+
+            // ⚠️⚠️ เดือนที่ยังไม่ได้กรอกเลย = `null` ไม่ใช่ `0`
+            // เติม 0 ให้ กราฟจะลากผ่านเหมือนเดือนนั้น "ทำได้เท่าทุนพอดี" ทั้งที่แค่
+            // ยังไม่ได้เริ่มบันทึก · ร้านที่เริ่มใช้ระบบกลางปีจึงเห็นเส้นดิ่งลงศูนย์
+            // ยาวหลายเดือน (Chart.js เว้นช่วงให้เองเมื่อค่าเป็น null)
+            if ($row === null) {
+                $revenues[] = null;
+                $adCosts[] = null;
+                $profits[] = null;
+                continue;
+            }
+
             $monthRevenue = (float)($row['total_revenue'] ?? 0);
             $monthAdCost = (float)($row['total_ad_cost'] ?? 0);
 
-            $months[] = $monthKey;
             $revenues[] = $monthRevenue;
             $adCosts[] = $monthAdCost;
             $profits[] = $monthRevenue - $monthAdCost;

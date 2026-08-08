@@ -27,7 +27,9 @@ class UserRepository
 
     public function findByEmail(string $email): ?array
     {
-        $sql = 'SELECT id, email, password_hash, last_login_at, created_at, updated_at
+        // ⚠️ ต้องมี display_name ด้วย — `AuthService::login()` เอาไปใส่ session ให้หัวเว็บ
+        // แสดงแทนอีเมล · ขาดคอลัมน์นี้แล้วชื่อจะว่างเสมอ โดยไม่มีอะไรฟ้อง (เจอมาแล้ว)
+        $sql = 'SELECT id, email, display_name, password_hash, last_login_at, created_at, updated_at
                 FROM users
                 WHERE email = :email
                 LIMIT 1';

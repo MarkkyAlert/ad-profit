@@ -84,11 +84,43 @@ final class OverviewServiceTrendTest extends TestCase
         $this->assertCount(6, $series['profit']);
         $this->assertCount(6, $series['revenue']);   // คง revenue ไว้เผื่อ toggle
 
-        // พ.ค. = 1000-400 · มิ.ย. = 2000-500 · เดือนที่ไม่มีข้อมูล = 0
+        // พ.ค. = 1000-400 · มิ.ย. = 2000-500
         $this->assertSame(600.0, $series['profit'][4]);
         $this->assertSame(1500.0, $series['profit'][5]);
-        $this->assertSame(0.0, $series['profit'][0]);
         $this->assertSame(1000.0, $series['revenue'][4]);
+
+        // ⚠️⚠️ เดือนที่ยังไม่ได้กรอกเลยต้องเป็น `null` ไม่ใช่ `0`
+        // เดิมเติม 0 ให้ กราฟจึงลากเส้นผ่านเหมือนเดือนนั้น "ทำได้เท่าทุนพอดี"
+        // ร้านที่เริ่มใช้ระบบกลางปีจึงเห็นเส้นแบนอยู่ที่ ฿0 ยาวหลายเดือน และเส้นโค้ง
+        // (`tension`) ยังทำให้เส้นตกต่ำกว่าศูนย์ทั้งที่ไม่มีเดือนไหนขาดทุนเลย
+        $this->assertNull($series['profit'][0], 'เดือนที่ไม่มีข้อมูลถูกวาดเป็น ฿0');
+        $this->assertNull($series['revenue'][0], 'เดือนที่ไม่มีข้อมูลถูกวาดเป็น ฿0');
+    }
+
+    /**
+     * ⭐⭐ "ยังไม่ได้กรอก" กับ "กรอกแล้วได้เท่าทุนพอดี" ต้องแยกกันได้
+     *
+     * ⚠️ ถ้าไม่มีเทสต์ตัวนี้ ใครที่แก้ให้เดือนไม่มีข้อมูลเป็น null สามารถเผลอทำให้
+     * เดือนที่กำไร ฿0 จริง ๆ กลายเป็น null ไปด้วย แล้วกราฟจะขาดตอนตรงเดือนที่
+     * **มีข้อมูลอยู่จริง** — กลับหัวกับปัญหาเดิมพอดี
+     */
+    public function testAMonthThatTrulyBrokeEvenIsNotTreatedAsMissing(): void
+    {
+        $service = $this->makeService(
+            [['id' => 1, 'name' => 'ร้าน A']],
+            [['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 200, 'days_count' => 10]],
+            [
+                // เดือนนี้กรอกแล้ว รายได้เท่าค่าแอดพอดี → กำไร ฿0 ที่เป็นความจริง
+                ['shop_id' => 1, 'month_key' => '2026-05', 'total_revenue' => 700, 'total_ad_cost' => 700],
+                ['shop_id' => 1, 'month_key' => '2026-06', 'total_revenue' => 2000, 'total_ad_cost' => 500],
+            ]
+        );
+
+        $series = $service->buildOverview(1, self::MONTH)['data']['charts']['trend']['series'][0];
+
+        $this->assertSame(0.0, $series['profit'][4], 'เดือนที่เท่าทุนจริงถูกนับว่าไม่มีข้อมูล');
+        $this->assertSame(700.0, $series['revenue'][4]);
+        $this->assertNull($series['profit'][0], 'เดือนที่ไม่มีข้อมูลกลับถูกวาดเป็นตัวเลข');
     }
 
     public function testTrendProfitCanBeNegative(): void

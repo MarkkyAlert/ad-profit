@@ -306,6 +306,62 @@ $navGridClass = $shopCount >= 2 ? 'grid-cols-5' : 'grid-cols-4';
                 window.setTimeout(hideLoading, 2500);
             });
         });
+
+        /* ⭐⭐ แปะชื่อคอลัมน์ให้ทุกช่อง เพื่อให้ตารางกลายเป็นการ์ดอ่านรู้เรื่องบนมือถือ
+           (หน้าตาการ์ดอยู่ใน CSS `.table-cards` ที่ `includes/header.php`)
+
+           ⚠️ อ่านชื่อจาก <thead> ของตารางนั้นเอง **ไม่ใช่พิมพ์รายชื่อไว้ในสคริปต์** —
+           โปรเจกต์มีตาราง 11 ตัว ถ้าพิมพ์ไว้ วันที่ใครเพิ่ม/สลับคอลัมน์ ป้ายจะชี้ผิดช่อง
+           เงียบ ๆ (บทเรียนเดิมทั้งไฟล์ CLAUDE.md: เขียนกติกาซ้ำ = จุดที่พังแน่นอน)
+
+           ⚠️ ช่องที่ฝั่ง PHP ใส่ `data-label` มาแล้วจะไม่ถูกทับ — หน้าที่สำคัญที่สุด
+           (ประวัติรายการ) เขียนป้ายไว้ในเทมเพลตเอง จะได้อ่านรู้เรื่องแม้สคริปต์ไม่ทำงาน */
+        const labelTableCardCells = (table) => {
+            const headerRow = table.tHead ? table.tHead.rows[0] : null;
+            if (!headerRow) {
+                return;
+            }
+
+            // ⚠️⚠️ กาง <th> ที่กินหลายคอลัมน์ออกก่อน แล้วเดินด้วย "เลขคอลัมน์จริง"
+            // ไม่ใช่ลำดับของช่องในแถว — วัดจริงตอนใช้ลำดับช่อง: แถว "รวมทุกร้าน"
+            // ของหน้ารวมร้าน (ช่องแรกกิน 2 คอลัมน์) ป้ายเลื่อนไปทั้งแถว จนยอดขาย
+            // ถูกเรียกว่า "ร้าน" และ ROAS ถูกเรียกว่า "เทียบเดือนก่อน"
+            const headings = [];
+            Array.from(headerRow.cells).forEach((cell) => {
+                const text = cell.textContent.trim();
+                for (let span = 0; span < (cell.colSpan || 1); span += 1) {
+                    headings.push(text);
+                }
+            });
+
+            Array.from(table.tBodies).concat(table.tFoot ? [table.tFoot] : []).forEach((section) => {
+                Array.from(section.rows).forEach((row) => {
+                    let column = 0;
+
+                    Array.from(row.cells).forEach((cell) => {
+                        const span = cell.colSpan || 1;
+                        const heading = headings[column] || '';
+                        column += span;
+
+                        // ช่องที่กินหลายคอลัมน์ (เช่น "ยังไม่มีข้อมูล") ไม่ใช่ค่าของคอลัมน์ไหน
+                        if (span > 1) {
+                            return;
+                        }
+
+                        if (!cell.hasAttribute('data-label') && heading !== '') {
+                            cell.setAttribute('data-label', heading);
+                        }
+
+                        // กำไรคือเหตุผลที่แอปนี้มีอยู่ — บนการ์ดต้องเด่นกว่าช่องอื่น
+                        if (heading === 'กำไร' && !cell.hasAttribute('data-emphasis')) {
+                            cell.setAttribute('data-emphasis', 'profit');
+                        }
+                    });
+                });
+            });
+        };
+
+        document.querySelectorAll('table.table-cards').forEach(labelTableCardCells);
     })();
 </script>
 </body>

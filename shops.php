@@ -39,7 +39,7 @@ require __DIR__ . '/includes/header.php';
         <div class="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-4 py-3 text-sm max-w-[50%] sm:max-w-[16rem]">
             <p class="text-slate-400">ร้านที่กำลังใช้งาน</p>
             <p class="mt-1 font-semibold text-indigo-200 truncate" title="<?= e($currentShopName) ?>">🏪 <?= e($currentShopName) ?></p>
-            <p class="mt-1 text-xs text-slate-500">ทั้งหมด <?= e((string)$shopCount) ?> ร้าน</p>
+            <p class="mt-1 text-xs text-slate-400">ทั้งหมด <?= e((string)$shopCount) ?> ร้าน</p>
         </div>
     </div>
 </section>
@@ -67,7 +67,7 @@ require __DIR__ . '/includes/header.php';
                     placeholder="เช่น ร้านเสื้อออนไลน์">
             </div>
 
-            <button type="submit" class="btn-primary w-full px-4 py-2.5 text-sm">✨ สร้างร้าน</button>
+            <button type="submit" class="btn-orange w-full px-4 py-2.5 text-sm">✨ สร้างร้าน</button>
         </form>
 
         <?php if (!$canDeleteShop): ?>
@@ -80,7 +80,7 @@ require __DIR__ . '/includes/header.php';
     <article class="section-card p-5 lg:col-span-2">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-lg font-semibold text-slate-100">รายการร้านทั้งหมด</h2>
-            <span class="text-xs text-slate-500">แตะการ์ดเพื่อจัดการแต่ละร้าน</span>
+            <span class="text-xs text-slate-400">แตะการ์ดเพื่อจัดการแต่ละร้าน</span>
         </div>
 
         <?php if (empty($shops)): ?>
@@ -103,7 +103,7 @@ require __DIR__ . '/includes/header.php';
                         <div class="flex flex-nowrap items-start justify-between gap-3">
                             <div class="min-w-0 flex-1">
                                 <p class="truncate text-base font-semibold text-slate-100" title="<?= e($shopName) ?>"><?= e($shopName) ?></p>
-                                <p class="mt-1 text-xs text-slate-500">สร้างเมื่อ <?= e($createdDateText) ?></p>
+                                <p class="mt-1 text-xs text-slate-400">สร้างเมื่อ <?= e($createdDateText) ?></p>
                             </div>
 
                             <?php if ($isCurrent): ?>
@@ -120,8 +120,12 @@ require __DIR__ . '/includes/header.php';
                             <?php endif; ?>
                         </div>
 
-                        <div class="mt-4 flex flex-wrap items-end gap-2">
-                            <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="min-w-0 flex-1 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                        <?php /* ⚠️ "ลบร้าน" ถูกดันไปอยู่คนละบรรทัดกับ "บันทึกชื่อ" โดยตั้งใจ
+                                 เดิมสองปุ่มติดกัน ขนาดเท่ากัน ต่างกันแค่สี — ปุ่มที่ลบข้อมูล
+                                 ทั้งร้านไม่ควรอยู่ในระยะพลาดมือของปุ่มที่ใช้บ่อยกว่ามาก
+                                 (การพิมพ์ชื่อยืนยันยังกันไว้อีกชั้นเหมือนเดิม) */ ?>
+                        <div class="mt-4 flex flex-col gap-3">
+                            <form action="<?= e(app_url('/api/shops.php')) ?>" method="post" class="min-w-0 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                                 <?= csrf_field() ?>
                                 <?= shop_context_field($currentShopId) ?>
                                 <input type="hidden" name="action" value="rename">
@@ -140,7 +144,7 @@ require __DIR__ . '/includes/header.php';
                                         class="mt-1 block w-full max-w-full rounded-xl px-3 py-2 text-sm transition-all">
                                 </div>
 
-                                <button type="submit" class="btn-primary px-3 py-2 text-xs">บันทึกชื่อ</button>
+                                <button type="submit" class="btn-orange px-3 py-2 text-xs">บันทึกชื่อ</button>
                             </form>
 
                             <?php
@@ -154,7 +158,8 @@ require __DIR__ . '/includes/header.php';
                                 data-confirm="ยืนยันการลบร้านนี้ใช่หรือไม่? ข้อมูลทั้งหมดในร้านจะถูกลบถาวร (ระบบจะให้พิมพ์ชื่อร้านยืนยันอีกครั้ง)"
                                 data-confirm-typed-expected="<?= e($shopNameForConfirm) ?>"
                                 data-confirm-typed-prompt="เพื่อยืนยันการลบร้าน กรุณาพิมพ์<?= $shopNameIsTruncated ? ' ' . ShopService::CONFIRM_NAME_MAX_LENGTH . ' ตัวแรกของ' : '' ?>ชื่อร้านให้ตรงตามนี้:"
-                                data-confirm-typed-input="confirm_shop_name">
+                                data-confirm-typed-input="confirm_shop_name"
+                                class="border-t border-white/[0.06] pt-3">
                                 <?= csrf_field() ?>
                                 <?= shop_context_field($currentShopId) ?>
                                 <input type="hidden" name="action" value="delete">
@@ -163,9 +168,9 @@ require __DIR__ . '/includes/header.php';
                                 <input type="hidden" name="confirm_shop_name" value="">
 
                                 <?php if ($canDeleteShop): ?>
-                                    <button type="submit" class="btn-danger px-3 py-2 text-xs">ลบร้าน</button>
+                                    <button type="submit" class="btn-danger tap-target px-3 py-2 text-xs">ลบร้าน</button>
                                 <?php else: ?>
-                                    <button type="button" disabled class="cursor-not-allowed rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-500">ลบร้าน</button>
+                                    <button type="button" disabled class="cursor-not-allowed rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-400">ลบร้าน</button>
                                 <?php endif; ?>
                             </form>
                         </div>

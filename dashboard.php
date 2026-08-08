@@ -281,12 +281,17 @@ $dailyChartPayload = [
 
 $sixMonthRaw = (array)($dashboardData['charts']['six_months'] ?? []);
 $sixMonthKeys = array_values((array)($sixMonthRaw['months'] ?? []));
+/* ⚠️⚠️ ต้องคง `null` ไว้ ห้าม cast เป็น float — `(float)null` = 0.0 จะทำให้เดือนที่
+   ยังไม่ได้กรอกกลับกลายเป็น "เท่าทุนพอดี" อีกครั้ง ทับตัวแก้ที่ `DashboardService`
+   (Chart.js เว้นช่วงให้เองเมื่อค่าเป็น null = เส้นขาดตอน แปลว่ายังไม่มีข้อมูล) */
+$toChartValue = static fn($value): ?float => $value === null ? null : (float)$value;
+
 $sixMonthPayload = [
     'labels' => array_map(static fn(string $month): string => formatThaiMonth($month), $sixMonthKeys),
     'months' => $sixMonthKeys,
-    'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($sixMonthRaw['revenue'] ?? []))),
-    'ad_cost' => array_values(array_map(static fn($value): float => (float)$value, (array)($sixMonthRaw['ad_cost'] ?? []))),
-    'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($sixMonthRaw['profit'] ?? []))),
+    'revenue' => array_values(array_map($toChartValue, (array)($sixMonthRaw['revenue'] ?? []))),
+    'ad_cost' => array_values(array_map($toChartValue, (array)($sixMonthRaw['ad_cost'] ?? []))),
+    'profit' => array_values(array_map($toChartValue, (array)($sixMonthRaw['profit'] ?? []))),
 ];
 
 $comparisonChanges = (array)($comparison['change'] ?? []);
@@ -460,7 +465,7 @@ require __DIR__ . '/includes/header.php';
             <?php // ⚠️ โหลดไม่สำเร็จ = ไม่มีช่วงข้อมูลจริง — ค่าตั้งต้นคือ "ทั้งเดือนนี้"
                   // ซึ่งเลยวันนี้ไปด้วย ขัดกับกฎของหน้าเองที่ห้ามนับวันอนาคต ?>
             <?php if (!$dashboardFailed): ?>
-                <p class="mt-1 text-xs sm:text-sm text-slate-500">ช่วงข้อมูล: <?= e(formatThaiDate($rangeStart)) ?> - <?= e(formatThaiDate($rangeEnd)) ?></p>
+                <p class="mt-1 text-xs sm:text-sm text-slate-400">ช่วงข้อมูล: <?= e(formatThaiDate($rangeStart)) ?> - <?= e(formatThaiDate($rangeEnd)) ?></p>
             <?php endif; ?>
         </div>
 
@@ -533,9 +538,14 @@ require __DIR__ . '/includes/header.php';
             <p class="mt-1 text-xs <?= e($comparisonText['total_ad_cost']['class']) ?>"><?= e($comparisonText['total_ad_cost']['text']) ?></p>
         <?php endif; ?>
     </article>
-    <article class="stat-card s-profit">
+    <?php /* ⚠️ กำไรคือเหตุผลที่แอปนี้มีอยู่ แต่การ์ด 4 ใบเคยขนาดเท่ากันหมด และเรียง
+             ยอดขาย → ค่าแอด → **กำไร** → ROAS · บนมือถือที่การ์ดเรียงลงมาทีละใบ ผู้ใช้
+             ต้องเลื่อนผ่าน 2 ใบกว่าจะเจอตัวเลขที่เปิดแอปมาเพื่อดู
+             → บนจอเล็กดันขึ้นเป็นใบแรก และตัวเลขใหญ่กว่าใบอื่น ส่วนบนจอใหญ่ที่เห็นครบ
+               ทั้ง 4 ใบพร้อมกันอยู่แล้ว คงลำดับเดิมไว้ */ ?>
+    <article class="stat-card s-profit order-first sm:order-none">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">กำไร</p>
-        <p class="mt-2 text-xl sm:text-2xl font-bold <?= (float)$summary['profit'] >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney((float)$summary['profit'])) ?></p>
+        <p class="mt-2 text-2xl sm:text-3xl font-bold <?= (float)$summary['profit'] >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney((float)$summary['profit'])) ?></p>
         <?php if ($comparisonEnabled): ?>
             <p class="mt-1 text-xs <?= e($comparisonText['profit']['class']) ?>"><?= e($comparisonText['profit']['text']) ?></p>
         <?php endif; ?>
@@ -596,7 +606,7 @@ require __DIR__ . '/includes/header.php';
             <p class="mt-1 text-sm font-semibold text-green-400"><?= e($formatDayMetric($bestDayRow)) ?></p>
         <?php else: ?>
             <p class="mt-1 text-sm font-semibold text-slate-400">ยังเทียบไม่ได้</p>
-            <p class="text-xs text-slate-500">ต้องมีข้อมูลตั้งแต่ 2 วันขึ้นไปที่กำไรต่างกัน</p>
+            <p class="text-xs text-slate-400">ต้องมีข้อมูลตั้งแต่ 2 วันขึ้นไปที่กำไรต่างกัน</p>
         <?php endif; ?>
     </article>
 
@@ -614,7 +624,7 @@ require __DIR__ . '/includes/header.php';
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
             <h2 class="text-lg font-semibold text-slate-100">🎯 เป้าหมายรายเดือน</h2>
-            <p class="mt-1 text-sm text-slate-500">เดือนเป้าหมาย: <?= e(formatThaiMonth($goalMonth)) ?></p>
+            <p class="mt-1 text-sm text-slate-400">เดือนเป้าหมาย: <?= e(formatThaiMonth($goalMonth)) ?></p>
         </div>
 
         <button
@@ -747,7 +757,7 @@ require __DIR__ . '/includes/header.php';
 <?php if ($weekdayHasData): ?>
     <section class="section-card mt-6 p-4 sm:p-5">
         <h2 class="text-base sm:text-lg font-semibold text-slate-100">📅 เทียบวันในสัปดาห์</h2>
-        <p class="mt-1 text-xs text-slate-500">
+        <p class="mt-1 text-xs text-slate-400">
             วันล่าสุด: <?= e($weekdayName) ?> <?= e(formatThaiDate($weekdayTargetDate)) ?>
         </p>
 
@@ -758,7 +768,7 @@ require __DIR__ . '/includes/header.php';
                 กำไร <span class="font-semibold <?= e($weekdayProfitClass) ?>"><?= e(formatMoney($weekdayTargetProfit)) ?></span>
                 · ยังไม่มีวัน<?= e($weekdayName) ?>อื่นใน<?= e($weekdayMonthLabel) ?> ให้เทียบ
             </p>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-slate-400">
                 รายได้ <?= e(formatMoney($weekdayTargetRevenue)) ?>
             </p>
         <?php else: ?>
@@ -767,7 +777,7 @@ require __DIR__ . '/includes/header.php';
                     กำไร <span class="font-semibold <?= e($weekdayProfitClass) ?>"><?= e(formatMoney($weekdayTargetProfit)) ?></span>
                     · วัน<?= e($weekdayName) ?><?= e($weekdayMonthLabel) ?> เฉลี่ย
                     <span class="font-semibold <?= e(((float)$weekdayAvgProfit) >= 0 ? 'text-slate-100' : 'text-red-400') ?>"><?= e(formatMoney((float)$weekdayAvgProfit)) ?></span>
-                    <span class="text-xs text-slate-500">(จาก <?= e((string)$weekdaySampleCount) ?> วัน)</span>
+                    <span class="text-xs text-slate-400">(จาก <?= e((string)$weekdaySampleCount) ?> วัน)</span>
                 </p>
                 <?php if ($weekdayTargetRoas !== null || $weekdayAvgRoas !== null): ?>
                     <p>
@@ -779,11 +789,11 @@ require __DIR__ . '/includes/header.php';
                     <p class="text-xs <?= e($weekdayHintClass) ?>"><?= e($weekdayHint) ?></p>
                 <?php elseif ($weekdayComparable): ?>
                     <?php // มีค่าเฉลี่ยให้ดู แต่ยังน้อยเกินจะฟันธงว่าสูง/ต่ำกว่าปกติ ?>
-                    <p class="text-xs text-slate-500">
+                    <p class="text-xs text-slate-400">
                         ยังมีวัน<?= e($weekdayName) ?>ไม่ถึง <?= e((string)RecordService::WEEKDAY_MIN_SAMPLE) ?> วันใน<?= e($weekdayMonthLabel) ?> — ยังสรุปแนวโน้มไม่ได้
                     </p>
                 <?php endif; ?>
-                <p class="text-xs text-slate-500">
+                <p class="text-xs text-slate-400">
                     รายได้ <?= e(formatMoney($weekdayTargetRevenue)) ?>
                     · เฉลี่ย <?= e($weekdayAvgRevenue !== null ? formatMoney($weekdayAvgRevenue) : '–') ?>
                 </p>
@@ -821,7 +831,7 @@ require __DIR__ . '/includes/header.php';
             </div>
         </div>
 
-        <p class="mt-1 text-xs text-slate-500">
+        <p class="mt-1 text-xs text-slate-400">
             <?= e(formatThaiDate((string)$breakdownWindow['start_date'])) ?> –
             <?= e(formatThaiDate((string)$breakdownWindow['end_date'])) ?> ·
             ยิ่ง "จาก N วัน" มาก ยิ่งเชื่อได้ · ไฮไลต์เฉพาะวันที่มีข้อมูลตั้งแต่
@@ -829,7 +839,7 @@ require __DIR__ . '/includes/header.php';
         </p>
 
         <div class="mt-3 overflow-x-auto">
-            <table class="min-w-full text-sm">
+            <table class="table-cards min-w-full text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-slate-400">
                         <th class="px-3 py-2">วัน</th>
@@ -856,15 +866,15 @@ require __DIR__ . '/includes/header.php';
                         <tr class="border-b border-white/[0.06] <?= e($rowClass) ?>">
                             <td class="px-3 py-2 font-medium text-slate-300"><?= e(formatThaiWeekday($rowWeekday)) ?></td>
                             <?php if ($rowSampleCount === 0 || $rowAvgProfit === null): ?>
-                                <td class="px-3 py-2 text-slate-500">—</td>
-                                <td class="px-3 py-2 text-slate-500">—</td>
-                                <td class="px-3 py-2 text-slate-500">—</td>
+                                <td class="px-3 py-2 text-slate-400">—</td>
+                                <td class="px-3 py-2 text-slate-400">—</td>
+                                <td class="px-3 py-2 text-slate-400">—</td>
                             <?php else: ?>
                                 <td class="px-3 py-2 font-semibold <?= ((float)$rowAvgProfit) >= 0 ? 'text-green-400' : 'text-red-400' ?>">
                                     <?= e(formatMoney((float)$rowAvgProfit)) ?>
                                 </td>
                                 <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($rowAvgRoas !== null ? (float)$rowAvgRoas : null)) ?></td>
-                                <td class="px-3 py-2 text-xs text-slate-500"><?= e((string)$rowSampleCount) ?> วัน</td>
+                                <td class="px-3 py-2 text-xs text-slate-400"><?= e((string)$rowSampleCount) ?> วัน</td>
                             <?php endif; ?>
                         </tr>
                     <?php endforeach; ?>
@@ -879,14 +889,18 @@ require __DIR__ . '/includes/header.php';
         <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายวัน (รายได้ vs ค่าแอด)</h2>
         <span class="text-xs text-slate-400">เฉพาะวันที่มีข้อมูล</span>
     </div>
+    <?php /* ⚠️ ไม่มีข้อมูล = ไม่ต้องวาดกรอบกราฟเปล่าไว้ · เดิมยังวาดตารางกริดพร้อมแกน
+             ฿0–฿1 ที่ระบบสร้างขึ้นเอง กินพื้นที่เกือบครึ่งจอในหน้าจอแรกที่ผู้ใช้ใหม่เห็น
+             (หลักเดียวกับทั้งระบบ: ไม่มีข้อมูลก็ไม่ต้องแสดงตัวเลขที่ไม่มีอยู่จริง) */ ?>
     <?php if (!$hasDailyData): ?>
-        <p class="mb-3 text-sm text-slate-400">ยังไม่มีข้อมูลรายวันในช่วงเวลาที่เลือก</p>
-    <?php endif; ?>
+        <p class="text-sm text-slate-400">ยังไม่มีข้อมูลรายวันในช่วงเวลาที่เลือก</p>
+    <?php else: ?>
     <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
         <div style="min-width: <?= max(100, count((array)($dailyChartPayload['dates'] ?? [])) * 60) ?>px; height: 100%;">
             <canvas id="daily-bar-chart"></canvas>
         </div>
     </div>
+    <?php endif; ?>
 </section>
 
 <section class="section-card mt-6 p-4 sm:p-5">
@@ -895,11 +909,12 @@ require __DIR__ . '/includes/header.php';
         <span class="text-xs text-slate-400">แสดงรายเดือนเสมอ</span>
     </div>
     <?php if (!$hasSixMonthData): ?>
-        <p class="mb-3 text-sm text-slate-400">ยังไม่มีข้อมูลย้อนหลัง 6 เดือน</p>
-    <?php endif; ?>
+        <p class="text-sm text-slate-400">ยังไม่มีข้อมูลย้อนหลัง 6 เดือน</p>
+    <?php else: ?>
     <div class="h-52 sm:h-64 lg:h-80">
         <canvas id="six-month-line-chart"></canvas>
     </div>
+    <?php endif; ?>
 </section>
 <?php endif; // $dashboardFailed ?>
 
