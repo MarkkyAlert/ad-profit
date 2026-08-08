@@ -178,6 +178,53 @@ final class RecordActionEndpointTest extends ControllerTestCase
     }
 
     /** ⭐ ตารางกรอกหลายวัน: ทุกแถวต้องเข้าฐานข้อมูลครบและตรงวัน */
+    /**
+     * ⭐⭐ กดบันทึกซ้ำ / refresh หลัง POST ต้องได้แถวเดียว ไม่เบิ้ล
+     *
+     * ท่าที่ผู้ใช้ทำจริงบ่อยที่สุด: กดบันทึกแล้วหน้าไม่ตอบทันที เลยกดซ้ำ
+     * หรือกด F5 หลังบันทึกแล้วเบราว์เซอร์ถามว่าจะส่งฟอร์มซ้ำไหม
+     *
+     * ⚠️⚠️ ระบบนี้ **ไม่มีตาราง idempotency** (`database/schema.sql:11` สั่ง DROP ทิ้ง
+     * และไม่สร้างใหม่) การกันซ้ำจึงพึ่ง 2 อย่างเท่านั้น:
+     *   1. `uq_daily_records_shop_date` + `INSERT … ON DUPLICATE KEY UPDATE` → ทับ ไม่เพิ่มแถว
+     *   2. `ShopRepository::lockForWrite()` → การเขียนของร้านเดียวกันเข้าคิว
+     * ถ้า unique key หายไป ทุกครั้งที่กดซ้ำจะได้แถวใหม่ **แล้วยอดรวมทุกหน้ารายงาน
+     * บวมขึ้นเงียบ ๆ โดยไม่มีอะไรเตือน**
+     *
+     * ⚠️ เดิมมีเทสต์เรื่องนี้แค่ที่ระดับ service — ระดับ endpoint (ซึ่งเป็นทางที่
+     * ผู้ใช้เดินจริง พร้อม guard chain ครบชุด) ไม่เคยมีเทสต์ตัวไหนยิง upsert ซ้ำเลย
+     */
+    public function testSubmittingTheSameDayTwiceUpdatesInsteadOfDuplicating(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $send = fn(string $revenue, string $note): array => $this->submit($session, $shopId, [
+            'action' => 'upsert',
+            'record_date' => '2026-08-01',
+            'revenue' => $revenue,
+            'ad_cost' => '100',
+            'note' => $note,
+        ]);
+
+        $this->assertSame(302, $send('1000', 'กดครั้งแรก')['status']);
+        $this->assertSame(302, $send('2000', 'กดซ้ำครั้งที่สอง')['status']);
+        $this->assertSame(302, $send('3000', 'กดซ้ำครั้งที่สาม')['status']);
+
+        $rows = $this->pdo
+            ->query("SELECT revenue, note FROM daily_records WHERE shop_id = {$shopId} AND record_date = '2026-08-01'")
+            ->fetchAll();
+
+        $this->assertCount(
+            1,
+            $rows,
+            'กดบันทึกวันเดิมซ้ำแล้วเกิดแถวใหม่ — ยอดรวมทุกหน้ารายงานจะบวมโดยไม่มีสัญญาณเตือน'
+        );
+        $this->assertSame(3000.0, (float)$rows[0]['revenue'], 'ค่าที่เก็บไม่ใช่ของครั้งล่าสุด');
+        $this->assertSame('กดซ้ำครั้งที่สาม', (string)$rows[0]['note']);
+    }
+
     public function testBulkUpsertWritesEveryRow(): void
     {
         $userId = $this->createUser();

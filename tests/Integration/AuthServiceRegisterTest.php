@@ -18,6 +18,21 @@ use UserRepository;
  * กุญแจจึงเปลี่ยนทุกครั้งที่เปลี่ยนอีเมลที่ลอง เครื่องเดียวยิงทดสอบได้ไม่จำกัด
  * ว่าอีเมลไหนมีในระบบแล้วบ้าง — ฝั่งล็อกอินมี bucket ต่อ IP กันไว้แล้ว แต่ฝั่งสมัครไม่มี
  */
+/**
+ * ⭐ ShopRepository ที่ "สร้างร้านไม่สำเร็จ" — ใช้จำลองขั้นที่ 2 ของการสมัครล้มกลางคัน
+ *
+ * ⚠️ ต้องเป็นคลาสลูกจริง ไม่ใช่ mock — `AuthService` รับ `ShopRepository` แบบมีชนิด
+ * และเทสต์นี้ต้องการให้ **ทุกอย่างอื่นเดินจริงบนฐานข้อมูลจริง** จะได้พิสูจน์ว่า
+ * แถวที่เขียนไปแล้วถูกย้อนกลับจริง ไม่ใช่แค่ "ไม่เคยถูกเขียน"
+ */
+final class FailingShopRepository extends ShopRepository
+{
+    public function create(int $userId, string $name): int
+    {
+        throw new \RuntimeException('จำลองสร้างร้านเริ่มต้นล้มกลางคัน');
+    }
+}
+
 final class AuthServiceRegisterTest extends IntegrationTestCase
 {
     private const IP = '203.0.113.55';
@@ -147,5 +162,46 @@ final class AuthServiceRegisterTest extends IntegrationTestCase
 
         $this->assertSame(1, $before);
         $this->assertSame($before, $after, 'สมัครสำเร็จแล้วประวัติของ IP ถูกล้างทิ้ง');
+    }
+
+    /**
+     * ⭐⭐ สมัครสมาชิกเขียน 2 ตาราง — ล้มกลางคันต้องไม่เหลือ "ผู้ใช้ที่ไม่มีร้าน"
+     *
+     * ⚠️⚠️ ทำไมถึงสำคัญกว่าที่เห็น: ถ้า rollback ไม่ทำงาน จะเหลือแถวใน `users`
+     * ที่ไม่มีร้านเลย → ผู้ใช้ล็อกอินเข้ามาได้แต่ทุกหน้าพัง **และสมัครใหม่ด้วย
+     * อีเมลเดิมไม่ได้อีก** เพราะ `uq_users_email` กันไว้ = บัญชีตายถาวร
+     * แก้ได้ทางเดียวคือเข้าไปลบแถวในฐานข้อมูลเอง
+     *
+     * ⚠️ `register()` มี transaction ครอบอยู่แล้วและทำงานถูก (วัดแล้ว) — เทสต์นี้
+     * มีไว้ล็อกไม่ให้หายเงียบ · ก่อนหน้านี้ 5 เทสต์ในไฟล์นี้ไม่มีตัวไหนแตะ rollback เลย
+     */
+    public function testAFailedShopCreationLeavesNoOrphanUser(): void
+    {
+        $service = new AuthService(
+            $this->pdo,
+            new UserRepository($this->pdo),
+            new FailingShopRepository($this->pdo),
+            new PasswordResetRepository($this->pdo)
+        );
+
+        $result = $service->register('orphan@example.com', 'GoodPass123!', 'GoodPass123!', self::IP);
+
+        $this->assertFalse($result['success'], 'บอกว่าสมัครสำเร็จทั้งที่สร้างร้านไม่ได้');
+        $this->assertSame(
+            0,
+            $this->countRows('users'),
+            'เหลือผู้ใช้ที่ไม่มีร้าน — ล็อกอินได้แต่ใช้งานไม่ได้ และสมัครใหม่ด้วยอีเมลเดิมไม่ได้อีก'
+        );
+        $this->assertSame(0, $this->countRows('shops'), 'มีร้านค้างอยู่ทั้งที่การสมัครล้มเหลว');
+    }
+
+    /** ⭐ และเมื่อทุกอย่างปกติ ต้องได้ทั้งผู้ใช้และร้านเริ่มต้นครบ (กันเทสต์บนเข้มเกินจริง) */
+    public function testASuccessfulRegisterStillWritesBothRows(): void
+    {
+        $result = $this->makeService()->register('fine@example.com', 'GoodPass123!', 'GoodPass123!', self::IP);
+
+        $this->assertTrue($result['success'], (string)($result['error'] ?? ''));
+        $this->assertSame(1, $this->countRows('users'));
+        $this->assertSame(1, $this->countRows('shops'));
     }
 }
