@@ -90,6 +90,11 @@ require __DIR__ . '/includes/header.php';
         <div class="flex flex-wrap items-center gap-2">
             <form method="get" action="<?= e(app_url('/history.php')) ?>" class="flex flex-wrap items-center gap-2">
                 <label for="month" class="text-sm text-slate-400">เลือกเดือน</label>
+                <?php /* ⚠️ หน้านี้ **ตั้งใจไม่ใส่ `max`** ต่างจากแดชบอร์ด/หน้าบันทึก
+                         เพราะต้องเปิดเดือนอนาคตที่มี "แถวเก่า" อยู่ให้ได้ ไม่งั้นข้อมูลที่ลงไว้
+                         ก่อนกติกา "ห้ามบันทึกวันอนาคต" จะแก้/ลบผ่านหน้าเว็บไม่ได้อีกเลย
+                         เดือนอนาคตที่ *ไม่มี* ข้อมูลยังถูกหดกลับ + แจ้งผู้ใช้ตามปกติ
+                         (`resolve_month_allowing_legacy_future()` ด้านบน) */ ?>
                 <input
                     id="month"
                     name="month"
@@ -134,7 +139,13 @@ require __DIR__ . '/includes/header.php';
                 <?php if (empty($records)): ?>
                     <tr>
                         <td colspan="8" class="px-3 py-4 text-center text-slate-400">
-                            <?= $historyError !== null ? 'โหลดข้อมูลไม่สำเร็จ' : 'ยังไม่มีข้อมูลในเดือนนี้' ?>
+                            <?php /* ⚠️ ห้ามเขียน "เดือนนี้" ตายตัว — ผู้ใช้เปิดดูเดือนไหนก็ได้
+                                     เปิด ?month=2025-03 แล้วขึ้นว่า "ยังไม่มีข้อมูลในเดือนนี้"
+                                     ทั้งที่ตัวเลือกเดือนบนจอเดียวกันโชว์ มี.ค. 2568 อยู่
+                                     (รูปแบบเดิมที่เคยแก้ไปแล้ว 5 จุด — หน้านี้ตกสำรวจ) */ ?>
+                            <?= $historyError !== null
+                                ? 'โหลดข้อมูลไม่สำเร็จ'
+                                : 'ยังไม่มีข้อมูลในเดือน ' . e(formatThaiMonth($selectedMonth)) ?>
                         </td>
                     </tr>
                 <?php else: ?>

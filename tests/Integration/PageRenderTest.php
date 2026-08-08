@@ -153,6 +153,37 @@ final class PageRenderTest extends ControllerTestCase
     }
 
     /**
+     * ⭐⭐ ข้อความ "ยังไม่มีข้อมูล" ห้ามเรียกเดือนที่ผู้ใช้เลือกว่า "เดือนนี้"
+     *
+     * ⚠️ ผู้ใช้เปิดดูเดือนไหนก็ได้ · เปิด `?month=2025-03` แล้วขึ้นว่า
+     * "ยังไม่มีข้อมูลใน**เดือนนี้**" ทั้งที่ตัวเลือกเดือนบนจอเดียวกันโชว์ มี.ค. 2568
+     * ผู้ใช้อ่านแล้วเข้าใจว่าเป็นเดือนปัจจุบัน — ต้องเรียกชื่อเดือนที่กำลังดูจริง
+     *
+     * เป็นรูปแบบเดิมที่เคยแก้ไปแล้ว 5 จุด (แดชบอร์ด/รายปี/รวมร้าน) แต่หน้านี้ตกสำรวจ
+     */
+    public function testTheEmptyMonthMessageNamesTheMonthOnScreen(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $response = $this->get('/history.php?month=2025-03', $session);
+        $body = (string)$response['body'];
+
+        $this->assertSame(200, $response['status']);
+        $this->assertStringNotContainsString(
+            'ยังไม่มีข้อมูลในเดือนนี้',
+            $body,
+            'เรียกเดือนที่ผู้ใช้เลือกว่า "เดือนนี้" ทั้งที่ตัวเลือกเดือนบนจอโชว์เดือนอื่น'
+        );
+        $this->assertStringContainsString(
+            'มี.ค. 2568',
+            $body,
+            'ต้องเรียกชื่อเดือนที่กำลังดูจริง'
+        );
+    }
+
+    /**
      * ⭐ `?month=` / `?year=` ที่เป็นอนาคต ต้องถูกหดกลับมาเสมอ ไม่ใช่โชว์ช่วงที่ยังไม่เกิด
      *
      * @return array<string,array{0:string,1:string,2:string}>

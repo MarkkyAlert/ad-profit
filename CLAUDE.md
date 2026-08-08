@@ -413,7 +413,10 @@ PHP ที่รองรับ: **≥ 8.3** — **enforce ใน composer.json 
 
 **`?month` ต้องผ่าน `resolve_calendar_month()` ทุกจุด ไม่มีข้อยกเว้น** — ปัจจุบันครบแล้วทั้ง 7 จุด
 (`dashboard.php`, `overview.php`, `history.php`, `api/dashboard-data.php`, `api/overview-data.php`,
-`api/month-grid.php`, `api/export.php`) และ picker ทุกตัวมี `max="<เดือนนี้>"`
+`api/month-grid.php`, `api/export.php`) และ picker มี `max="<เดือนนี้>"` **ยกเว้น `history.php`**
+⚠️ **`history.php` ตั้งใจไม่ใส่ `max`** — ต้องเปิดเดือนอนาคตที่มี "แถวเก่า" ให้ได้ ไม่งั้นข้อมูลที่ลงไว้
+ก่อนกติกา "ห้ามบันทึกวันอนาคต" จะแก้/ลบผ่านหน้าเว็บไม่ได้อีกเลย · เดือนอนาคตที่ **ไม่มี** ข้อมูล
+ยังถูกหดกลับ + แจ้งผู้ใช้ตามปกติ
 ⚠️ `dashboard.php`/`api/dashboard-data.php` ต้องแยก `month=` **ที่ว่าง** (= ไม่ได้เลือก → `null`)
 ออกจากเดือนปัจจุบัน — สองไฟล์นี้ต้องเขียนเหมือนกันเป๊ะ ๆ ไม่งั้นหน้าเว็บกับ endpoint ตอบคนละอย่าง
 
