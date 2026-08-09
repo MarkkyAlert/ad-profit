@@ -530,7 +530,7 @@ require __DIR__ . '/includes/header.php';
                             $bestDayProfit = (float)($dayBest['profit'] ?? 0);
                             $worstDayProfit = $dayWorst !== null ? (float)($dayWorst['profit'] ?? 0) : null;
                             ?>
-                            <span class="text-slate-600">·</span>
+                            <span class="text-slate-400">·</span>
                             วันกำไรดีสุด<span class="text-xs text-slate-400">(เฉพาะวันที่กรอกครบ)</span>
                             <span class="font-bold <?= $bestDayProfit < 0 ? 'text-red-400' : 'text-green-400' ?>">
                                 <?= e(formatThaiDate((string)($dayBest['record_date'] ?? ''))) ?>
@@ -543,7 +543,7 @@ require __DIR__ . '/includes/header.php';
                             $dayExtremesComparable = extremes_are_comparable($dayBest, $dayWorst, 'record_date');
                             ?>
                             <?php if ($dayExtremesComparable): ?>
-                                <span class="text-slate-600">·</span>
+                                <span class="text-slate-400">·</span>
                                 แย่สุด
                                 <span class="font-bold <?= ($worstDayProfit ?? 0) >= 0 ? 'text-slate-300' : 'text-red-400' ?>">
                                     <?= e(formatThaiDate((string)($dayWorst['record_date'] ?? ''))) ?>
@@ -900,7 +900,7 @@ require __DIR__ . '/includes/header.php';
                         <span class="font-bold <?= $bestMonthProfit !== null && $bestMonthProfit < 0 ? 'text-red-400' : 'text-green-400' ?>">
                             <?= e($bestMonthLabel) ?><?= $bestMonthProfit !== null ? ' (' . e(formatMoney($bestMonthProfit)) . ')' : '' ?>
                         </span>
-                        <span class="text-slate-600">·</span>
+                        <span class="text-slate-400">·</span>
                         แย่สุด
                         <span class="font-bold <?= $worstMonthProfit !== null && $worstMonthProfit >= 0 ? 'text-slate-300' : 'text-red-400' ?>">
                             <?= e($worstMonthLabel) ?><?= $worstMonthProfit !== null ? ' (' . e(formatMoney($worstMonthProfit)) . ')' : '' ?>
@@ -1208,7 +1208,7 @@ require __DIR__ . '/includes/header.php';
                 <?php endif; ?>
                 <div class="h-80 w-full overflow-x-auto">
                     <div style="min-width: <?= max(100, count($barPayload['labels']) * 120) ?>px; height: 100%;">
-                        <canvas id="overview-bar-chart"></canvas>
+                        <canvas id="overview-bar-chart" role="img" aria-label="กราฟแท่งเปรียบเทียบกำไรของแต่ละร้าน — ตัวเลขชุดเดียวกันอยู่ในตารางเทียบร้านด้านบน"></canvas>
                     </div>
                 </div>
             </section>
@@ -1224,7 +1224,7 @@ require __DIR__ . '/includes/header.php';
                     </p>
                 <?php endif; ?>
                 <div class="h-80">
-                    <canvas id="overview-trend-chart"></canvas>
+                    <canvas id="overview-trend-chart" role="img" aria-label="กราฟเส้นแนวโน้มกำไรของแต่ละร้าน — ตัวเลขชุดเดียวกันอยู่ในตารางเทียบร้านด้านบน"></canvas>
                 </div>
             </section>
 

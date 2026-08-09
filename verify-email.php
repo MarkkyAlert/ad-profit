@@ -128,7 +128,10 @@ $pageTitle = 'ยืนยันอีเมล';
 require __DIR__ . '/includes/header.php';
 ?>
 
-<main class="mx-auto w-full max-w-lg px-4 py-10">
+<?php /* ⚠️ ต้องเป็น <div> ไม่ใช่ <main> — `includes/header.php` เปิด <main> ให้แล้ว
+         หน้านี้เคยมี <main> ซ้อนอยู่ข้างใน <main> อีกชั้น ซึ่งทำให้โปรแกรมอ่านหน้าจอ
+         เจอ "เนื้อหาหลัก" สองก้อนในหน้าเดียว · เป็นหน้าเดียวในระบบที่ชนแบบนี้ */ ?>
+<div class="mx-auto w-full max-w-lg px-4 py-10">
     <section class="section-card px-5 py-6">
         <?php if ($awaitingConfirm): ?>
             <h1 class="text-lg font-bold text-slate-100">ยืนยันการเปลี่ยนอีเมล</h1>
@@ -170,6 +173,6 @@ require __DIR__ . '/includes/header.php';
         <a href="<?= e(app_url('/login.php')) ?>"
            class="btn-ghost mt-5 inline-flex px-4 py-2 text-sm">ไปหน้าเข้าสู่ระบบ</a>
     </section>
-</main>
+</div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

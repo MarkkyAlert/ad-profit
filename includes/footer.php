@@ -13,7 +13,9 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
 
 <?php if ($isSignedIn): ?>
 <nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#0d1526]/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
-    <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-0.5 py-1.5 text-center text-[10px] text-slate-400 sm:gap-1 sm:py-2 sm:text-xs">
+    <?php /* ป้ายเมนูเดิม 10px ซึ่งเล็กกว่าตัวอักษรที่เล็กที่สุดในหน้าอื่นทั้งระบบ ·
+             ขยับเป็น 11px ยังพอดีทั้ง 5 ปุ่มบนจอ 320px (วัดแล้ว) */ ?>
+    <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-0.5 py-1.5 text-center text-[11px] text-slate-400 sm:gap-1 sm:py-2 sm:text-xs">
         <?php
         $navLinks = [
             ['href' => '/dashboard.php', 'page' => 'dashboard',   'icon' => '📈', 'label' => 'แดชบอร์ด'],
@@ -44,14 +46,19 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
     </div>
 </div>
 
-<div id="global-confirm-modal" class="modal-bg fixed inset-0 z-[70] hidden items-center justify-center p-4 opacity-0 transition-opacity duration-200">
+<?php /* ⚠️ `aria-labelledby` ชี้ไปที่หัวข้อที่มีอยู่แล้ว — โปรแกรมอ่านหน้าจอจะประกาศชื่อ
+         หน้าต่างตอนโฟกัสเข้ามา · `role`/`aria-modal` ถูกติดให้โดย `setupAccessibleModal()`
+         ใน header.php ซึ่งเป็นจุดเดียวของกติกาหน้าต่างซ้อนทั้งระบบ */ ?>
+<div id="global-confirm-modal" aria-labelledby="global-confirm-title" class="modal-bg fixed inset-0 z-[70] hidden items-center justify-center p-4 opacity-0 transition-opacity duration-200">
     <div id="global-confirm-card" class="section-card w-full max-w-sm transform scale-95 p-6 text-center shadow-2xl shadow-black/60 transition-transform duration-200">
-        <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 ring-1 ring-red-500/20">
+        <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 ring-1 ring-red-500/20" aria-hidden="true">
             <svg class="h-7 w-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
             </svg>
         </div>
-        <h3 class="mb-2 text-lg font-bold text-slate-100">ยืนยันการดำเนินการ</h3>
+        <?php /* ⚠️ ต้องเป็น h2 ไม่ใช่ h3 — หน้าต่างนี้อยู่ในทุกหน้า และ `verify-email.php`
+                 มีแค่ h1 ตัวเดียว การกระโดดจาก h1 ไป h3 ทำให้ลำดับหัวข้อขาดตอน */ ?>
+        <h2 id="global-confirm-title" class="mb-2 text-lg font-bold text-slate-100">ยืนยันการดำเนินการ</h2>
         <p id="global-confirm-message" class="mb-6 text-sm text-slate-400">คุณแน่ใจหรือไม่ว่าต้องการดำเนินการนี้?</p>
         <div id="global-confirm-typed" class="mb-6 hidden text-left">
             <p id="global-confirm-typed-prompt" class="mb-2 text-xs text-slate-400"></p>
@@ -106,7 +113,64 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
             const isError = toast.getAttribute('data-toast-kind') === 'error';
             setTimeout(dismissToast, isError ? 10000 : 6000);
             toast.addEventListener('click', dismissToast);
+
+            /* ⚠️⚠️ กรอกผิดแล้วต้องพาไปที่คำอธิบาย ไม่ใช่ทิ้งไว้เฉย ๆ
+               วัดจริงก่อนแก้: กรอกรายได้เป็น "12,500" แล้วกดบันทึก → เด้งกลับมาหน้าเดิม
+               โฟกัสอยู่ที่ <body> · คนที่ใช้แป้นพิมพ์หรือโปรแกรมอ่านหน้าจอต้องเดินหาเองว่า
+               เกิดอะไรขึ้น ทั้งที่คำตอบอยู่มุมขวาบน
+               ⚠️ เฉพาะข้อความผิดพลาด — ข้อความสำเร็จไม่ควรแย่งโฟกัสจากสิ่งที่ผู้ใช้กำลังทำต่อ */
+            if (isError) {
+                toast.focus({ preventScroll: true });
+            }
         }
+
+        /* ⭐ ช่องที่กรอกผิดต้องถูกทำเครื่องหมายไว้ ไม่ใช่บอกแค่ในแถบข้อความ
+           ใช้ผลตรวจของเบราว์เซอร์เอง (required · type=email · min/max) จึงครอบทุกฟอร์ม
+           ในระบบโดยไม่ต้องไปแก้ทีละหน้า · ธงหลุดทันทีที่ผู้ใช้แตะช่องนั้น */
+        document.addEventListener('invalid', function(event) {
+            const field = event.target;
+            if (!field || !field.setAttribute) {
+                return;
+            }
+
+            field.setAttribute('aria-invalid', 'true');
+            field.addEventListener('input', function clearInvalid() {
+                field.removeAttribute('aria-invalid');
+                field.removeEventListener('input', clearInvalid);
+            });
+        }, true);
+
+        /* ⭐⭐ กล่องที่ต้องเลื่อนดูแนวนอน (ตารางกว้าง · กริดฤดูกาล · กราฟ)
+           · Chrome รุ่นใหม่ทำให้กล่องแบบนี้โฟกัสได้เอง (วัดแล้วว่าจริง) แต่ Safari/Firefox ไม่ทำ
+             ซึ่งเป็นเบราว์เซอร์ของผู้ใช้ iPhone ส่วนใหญ่ → ต้องติด tabindex เอง
+           · ชื่อกล่องเอามาจากหัวข้อที่อยู่เหนือมัน ไม่พิมพ์ใหม่ — วันที่มีคนแก้หัวข้อ
+             ชื่อที่โปรแกรมอ่านหน้าจอประกาศจะตามไปเอง
+           ⚠️ ติดเฉพาะกล่องที่ "ล้นจริง" ไม่งั้นจอคอมที่ตารางพอดีอยู่แล้วจะมีจุดหยุด Tab
+              เพิ่มขึ้นมาโดยไม่มีอะไรให้ทำ */
+        const markScrollRegions = () => {
+            document.querySelectorAll('.overflow-x-auto').forEach((box) => {
+                const overflows = box.scrollWidth > box.clientWidth + 2;
+
+                if (!overflows) {
+                    box.removeAttribute('tabindex');
+                    box.removeAttribute('role');
+                    box.removeAttribute('data-scroll-region');
+                    return;
+                }
+
+                const card = box.closest('section, details, div.section-card');
+                const heading = card ? card.querySelector('h1, h2, h3, summary') : null;
+                const label = heading ? heading.textContent.trim().replace(/\s+/g, ' ') : 'ตารางข้อมูล';
+
+                box.setAttribute('tabindex', '0');
+                box.setAttribute('role', 'region');
+                box.setAttribute('data-scroll-region', 'true');
+                box.setAttribute('aria-label', label + ' (เลื่อนดูด้านข้างได้)');
+            });
+        };
+
+        markScrollRegions();
+        window.addEventListener('resize', markScrollRegions);
 
         const loading = document.getElementById('global-loading');
         const showLoading = () => {
@@ -185,22 +249,37 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
             return true;
         };
 
+        /* ⚠️ ประกาศไว้ก่อน showConfirmModal เพราะทั้งคู่เรียกใช้ — helper มาจาก header.php
+           ซึ่งเป็นบล็อก <script> แรกของหน้า จึงมองเห็นได้จากตรงนี้ */
+        const confirmModalA11y = setupAccessibleModal(confirmModal, () => hideConfirmModal());
+
         const showConfirmModal = (message) => {
             if (confirmMessageEl) confirmMessageEl.textContent = message;
             configureTypedConfirm(pendingForm);
             if (confirmModal) {
                 confirmModal.classList.remove('hidden');
                 confirmModal.classList.add('flex');
+
+                /* ⚠️⚠️ ย้ายโฟกัส "ทันที" ห้ามผูกกับ requestAnimationFrame
+                   rAF มีไว้ให้อนิเมชันจางเข้าทำงาน แต่เบราว์เซอร์ "หยุดจ่ายเฟรม" เมื่อแท็บ
+                   ไม่ได้อยู่หน้าจอ — วัดเจอจริงตอนตรวจ: หน้าต่างเปิดค้างแบบโปร่งใสสนิท
+                   (`opacity-0` ไม่เคยถูกถอด) และโฟกัสไม่ขยับเลย เพราะโค้ดทั้งก้อนไม่เคยถูกเรียก
+                   · เดิมการโฟกัสช่องพิมพ์ยืนยันตอนลบร้านก็อยู่ใน rAF จึงมีปัญหาเดียวกัน
+                   · การมองเห็นเป็นเรื่องของอนิเมชัน แต่โฟกัสเป็นเรื่องของการใช้งานได้ ต้องแยกกัน
+
+                   ⚠️⚠️ เดิมย้ายโฟกัสเฉพาะตอนที่ต้องพิมพ์ยืนยัน (ลบร้าน) เท่านั้น
+                   การลบทั่วไป (รายการ/เป้าหมาย) โฟกัสจึงค้างอยู่ที่ปุ่มลบหลังฉากมืด
+                   วัดจริง: ต้องกด Tab 67 ครั้งกว่าจะถึงปุ่ม "ยืนยัน" บนเดือนที่มี 31 รายการ
+                   ⚠️ ปลายทางปริยายคือปุ่ม "ยกเลิก" ไม่ใช่ "ยืนยัน" — เผลอกด Enter ต้องไม่ลบอะไร */
+                const expected = normalizeText(pendingForm?.getAttribute('data-confirm-typed-expected'));
+                const preferred = (expected !== '' && confirmTypedInputEl) ? confirmTypedInputEl : btnConfirmCancel;
+                confirmModalA11y.opened(preferred);
+
                 requestAnimationFrame(() => {
                     confirmModal.classList.remove('opacity-0');
                     if (confirmCard) {
                         confirmCard.classList.remove('scale-95');
                         confirmCard.classList.add('scale-100');
-                    }
-
-                    const expected = normalizeText(pendingForm?.getAttribute('data-confirm-typed-expected'));
-                    if (expected !== '' && confirmTypedInputEl) {
-                        confirmTypedInputEl.focus();
                     }
                 });
             }
@@ -219,6 +298,9 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
                     pendingForm = null;
                     resetTypedConfirm();
                 }, 200);
+                /* คืนโฟกัสกลับปุ่มที่กดมา ไม่ต้องรออนิเมชัน — ไม่งั้นระหว่าง 200ms นั้น
+                   โฟกัสอยู่บนปุ่มที่กำลังจะถูกซ่อน แล้วเบราว์เซอร์จะโยนกลับไปที่ <body> */
+                confirmModalA11y.closed();
             }
         };
 

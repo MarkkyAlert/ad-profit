@@ -235,10 +235,10 @@ require __DIR__ . '/includes/header.php';
     </div>
 </section>
 
-<div id="edit-modal" class="modal-bg fixed inset-0 z-50 hidden items-center justify-center p-4">
+<div id="edit-modal" aria-labelledby="edit-modal-title" class="modal-bg fixed inset-0 z-50 hidden items-center justify-center p-4">
     <div class="section-card w-full max-w-lg p-6 shadow-2xl shadow-indigo-900/10">
         <div class="mb-5 flex items-center justify-between">
-            <h2 class="text-lg font-bold text-slate-100">✏️ แก้ไขรายการ</h2>
+            <h2 id="edit-modal-title" class="text-lg font-bold text-slate-100">✏️ แก้ไขรายการ</h2>
             <button type="button" id="close-edit-modal" class="btn-ghost rounded-lg px-3 py-1 text-sm">ปิด ✕</button>
         </div>
 
@@ -294,6 +294,11 @@ require __DIR__ . '/includes/header.php';
             note: document.getElementById('edit-note')
         };
 
+        /* ⚠️ กติกา "หน้าต่างซ้อนต้องใช้กับแป้นพิมพ์ได้" อยู่ที่ `setupAccessibleModal()`
+           ใน includes/header.php ที่เดียว — ห้ามเขียนการดักโฟกัส/Escape ซ้ำตรงนี้
+           (`SharedHelperContractTest::testEveryModalUsesTheSharedKeyboardRules` กวาดไว้) */
+        const editModalA11y = setupAccessibleModal(modal, () => closeModal());
+
         const openModal = () => {
             if (!modal) {
                 return;
@@ -301,6 +306,7 @@ require __DIR__ . '/includes/header.php';
 
             modal.classList.remove('hidden');
             modal.classList.add('flex');
+            editModalA11y.opened(fields.recordDate);
         };
 
         const closeModal = () => {
@@ -310,6 +316,7 @@ require __DIR__ . '/includes/header.php';
 
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+            editModalA11y.closed();
         };
 
         editButtons.forEach((button) => {

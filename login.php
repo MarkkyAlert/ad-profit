@@ -250,13 +250,13 @@ $flashError = get_flash('error');
                         <input type="hidden" name="action" value="login">
                         <div>
                             <label for="login-email" class="mb-1.5 block text-sm font-medium text-slate-300">อีเมล</label>
-                            <input id="login-email" name="email" type="email" required maxlength="255"
+                            <input id="login-email" name="email" type="email" autocomplete="username email" required maxlength="255"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="your@email.com">
                         </div>
                         <div>
                             <label for="login-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>
-                            <input id="login-password" name="password" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
+                            <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="••••••••">
                         </div>
@@ -273,13 +273,13 @@ $flashError = get_flash('error');
                         <input type="hidden" name="action" value="register">
                         <div>
                             <label for="register-email" class="mb-1.5 block text-sm font-medium text-slate-300">อีเมล</label>
-                            <input id="register-email" name="email" type="email" required maxlength="255"
+                            <input id="register-email" name="email" type="email" autocomplete="username email" required maxlength="255"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="your@email.com">
                         </div>
                         <div>
                             <label for="register-password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่าน</label>
-                            <input id="register-password" name="password" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
+                            <input id="register-password" name="password" type="password" autocomplete="new-password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
                                 aria-describedby="register-password-rule"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="••••••••">
@@ -288,7 +288,7 @@ $flashError = get_flash('error');
                         </div>
                         <div>
                             <label for="register-password-confirm" class="mb-1.5 block text-sm font-medium text-slate-300">ยืนยันรหัสผ่าน</label>
-                            <input id="register-password-confirm" name="password_confirm" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
+                            <input id="register-password-confirm" name="password_confirm" type="password" autocomplete="new-password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="••••••••">
                         </div>

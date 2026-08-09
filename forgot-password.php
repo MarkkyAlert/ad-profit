@@ -108,7 +108,7 @@ $pageTitle = 'ลืมรหัสผ่าน - ' . APP_NAME;
                 <input type="hidden" name="action" value="forgot_password">
                 <div>
                     <label for="email" class="mb-1.5 block text-sm font-medium text-slate-300">อีเมล</label>
-                    <input id="email" name="email" type="email" required maxlength="255"
+                    <input id="email" name="email" type="email" autocomplete="username email" required maxlength="255"
                         class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                         placeholder="your@email.com">
                 </div>

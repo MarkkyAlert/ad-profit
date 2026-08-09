@@ -521,7 +521,24 @@ final class BrowserScriptParityTest extends ControllerTestCase
             // ชื่อที่ก้อนนี้ประกาศ — เพิ่มเข้าคลังหลังจากเก็บจุดเรียกของก้อนนี้แล้ว
             preg_match_all('/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/', $block, $blockDeclared);
             preg_match_all('/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/', $block, $blockFunctions);
-            foreach (array_merge($blockDeclared[1], $blockFunctions[1]) as $name) {
+
+            /* ⚠️ พารามิเตอร์ของฟังก์ชันก็ถูกเรียกแบบฟังก์ชันได้ (callback ที่รับเข้ามา)
+               เดิมนับแต่ตัวที่ประกาศด้วย const/let/var/function จึงรายงานว่า `onClose`
+               ของ `setupAccessibleModal(modal, onClose)` เป็นฟังก์ชันที่ไม่มีนิยาม
+               (ตัวกวาดฝั่ง "ตัวแปร" รู้จักพารามิเตอร์อยู่แล้ว — ฝั่ง "ฟังก์ชัน" ตกสำรวจ) */
+            preg_match_all('/\(([^)(]*)\)\s*=>/', $block, $arrowParams);
+            preg_match_all('/\bfunction\s*[A-Za-z_$\w]*\s*\(([^)(]*)\)/', $block, $fnParams);
+            $paramNames = [];
+            foreach (array_merge($arrowParams[1], $fnParams[1]) as $list) {
+                foreach (explode(',', $list) as $piece) {
+                    $piece = trim(explode('=', $piece)[0]);
+                    if (preg_match('/^[A-Za-z_$][\w$]*$/', $piece) === 1) {
+                        $paramNames[] = $piece;
+                    }
+                }
+            }
+
+            foreach (array_merge($blockDeclared[1], $blockFunctions[1], $paramNames) as $name) {
                 $known[$name] = true;
             }
 
@@ -543,6 +560,8 @@ final class BrowserScriptParityTest extends ControllerTestCase
             'padStart', 'trim', 'do', 'else', 'in', 'of', 'await', 'async', 'try', 'throw',
             'querySelector', 'querySelectorAll', 'addEventListener', 'getElementById',
             'requestAnimationFrame', 'cancelAnimationFrame', 'structuredClone', 'queueMicrotask',
+            // อ่านค่าสไตล์ที่เรนเดอร์จริง — ใช้ตอนหาว่าตัวควบคุมในหน้าต่างซ้อนตัวไหน "มองเห็นอยู่"
+            'getComputedStyle',
         ]);
 
         $missing = [];

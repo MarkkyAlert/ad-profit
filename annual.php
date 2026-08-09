@@ -408,7 +408,7 @@ require __DIR__ . '/includes/header.php';
         <div class="mt-2 border-t border-white/[0.06] pt-2 text-sm text-slate-400">
             กำไรสะสม ณ <?= e($thaiMonths[count($months)] ?? '') ?>
             <span class="font-bold <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></span>
-            <span class="text-slate-600">·</span>
+            <span class="text-slate-400">·</span>
             ปีก่อนช่วงเดียวกัน <span class="font-medium text-slate-300"><?= e(formatMoney($prevYearProfit)) ?></span>
             <?php if ($yoyPercent !== null): ?>
                 <span class="font-medium <?= e($yoyToneClass($yoyPercent)) ?>">
@@ -421,12 +421,12 @@ require __DIR__ . '/includes/header.php';
     <?php if ($monthsWithData > 0): ?>
         <div class="mt-2 border-t border-white/[0.06] pt-2 text-sm text-slate-400">
             <span class="font-medium text-slate-300"><?= e((string)$monthsWithData) ?></span> เดือนมีข้อมูล
-            <span class="text-slate-600">·</span>
+            <span class="text-slate-400">·</span>
             กำไร <span class="font-medium text-green-400"><?= e((string)$profitMonths) ?></span>
-            <span class="text-slate-600">/</span>
+            <span class="text-slate-400">/</span>
             ขาดทุน <span class="font-medium <?= $lossMonths > 0 ? 'text-red-400' : 'text-slate-300' ?>"><?= e((string)$lossMonths) ?></span>
             <?php if ($breakEvenMonths > 0): ?>
-                <span class="text-slate-600">·</span>
+                <span class="text-slate-400">·</span>
                 เท่าทุน <span class="font-medium text-slate-300"><?= e((string)$breakEvenMonths) ?></span>
             <?php endif; ?>
         </div>
@@ -587,7 +587,7 @@ require __DIR__ . '/includes/header.php';
     </div>
     <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
         <div style="min-width: 600px; height: 100%;">
-            <canvas id="annual-bar-chart"></canvas>
+            <canvas id="annual-bar-chart" role="img" aria-label="กราฟแท่งรายได้ ค่าแอด และกำไรของแต่ละเดือน — ตัวเลขชุดเดียวกันอยู่ในตารางรายเดือนด้านบน"></canvas>
         </div>
     </div>
 </section>
@@ -599,7 +599,7 @@ require __DIR__ . '/includes/header.php';
     </div>
     <div class="h-52 sm:h-64 w-full overflow-x-auto">
         <div style="min-width: 600px; height: 100%;">
-            <canvas id="annual-cumulative-chart"></canvas>
+            <canvas id="annual-cumulative-chart" role="img" aria-label="กราฟเส้นกำไรสะสมตลอดปี — คำนวณจากตัวเลขในตารางรายเดือนด้านบน"></canvas>
         </div>
     </div>
 </section>
@@ -639,7 +639,7 @@ require __DIR__ . '/includes/header.php';
                                 $heatHasData = ($heatCell['has_data'] ?? false) === true;
                                 $heatProfit = $heatHasData && $heatCell['profit'] !== null ? (float)$heatCell['profit'] : null;
                                 ?>
-                                <td class="px-2 py-2 text-center font-medium <?= $heatProfit === null ? 'text-slate-600' : 'text-slate-100' ?>"
+                                <td class="px-2 py-2 text-center font-medium <?= $heatProfit === null ? 'text-slate-400' : 'text-slate-100' ?>"
                                     style="<?= e($heatCellStyle($heatCell)) ?>"
                                     title="<?= e($thaiMonths[$heatMonth] . ' ' . ((int)$heatYear + 543) . ': ' . ($heatProfit === null ? 'ไม่มีข้อมูล' : formatMoney($heatProfit))) ?>">
                                     <?= e($heatProfit === null ? '–' : formatMoney($heatProfit)) ?>

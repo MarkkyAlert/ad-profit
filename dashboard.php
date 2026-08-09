@@ -734,10 +734,10 @@ require __DIR__ . '/includes/header.php';
     <?php endif; ?>
 </section>
 
-<div id="goal-modal" class="modal-bg fixed inset-0 z-50 hidden items-center justify-center p-4">
+<div id="goal-modal" aria-labelledby="goal-modal-title" class="modal-bg fixed inset-0 z-50 hidden items-center justify-center p-4">
     <div class="section-card w-full max-w-lg p-6 shadow-2xl shadow-black/50">
         <div class="mb-5 flex items-center justify-between">
-            <h2 class="text-lg font-bold text-slate-100"><?= e($goalHasGoal ? '✏️ แก้ไขเป้าหมายเดือน ' . $goalMonthLabel : '🎯 ตั้งเป้าหมายเดือน ' . $goalMonthLabel) ?></h2>
+            <h2 id="goal-modal-title" class="text-lg font-bold text-slate-100"><?= e($goalHasGoal ? '✏️ แก้ไขเป้าหมายเดือน ' . $goalMonthLabel : '🎯 ตั้งเป้าหมายเดือน ' . $goalMonthLabel) ?></h2>
             <button type="button" id="close-goal-modal" class="btn-ghost rounded-lg px-3 py-1 text-sm">ปิด ✕</button>
         </div>
 
@@ -936,7 +936,7 @@ require __DIR__ . '/includes/header.php';
     <?php else: ?>
     <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
         <div style="min-width: <?= max(100, count((array)($dailyChartPayload['dates'] ?? [])) * 60) ?>px; height: 100%;">
-            <canvas id="daily-bar-chart"></canvas>
+            <canvas id="daily-bar-chart" role="img" aria-label="กราฟแท่งกำไรรายวันในช่วงที่เลือก — ตัวเลขชุดเดียวกันอยู่ในตารางด้านล่าง"></canvas>
         </div>
     </div>
     <?php endif; ?>
@@ -951,7 +951,7 @@ require __DIR__ . '/includes/header.php';
         <p class="text-sm text-slate-400">ยังไม่มีข้อมูลย้อนหลัง 6 เดือน</p>
     <?php else: ?>
     <div class="h-52 sm:h-64 lg:h-80">
-        <canvas id="six-month-line-chart"></canvas>
+        <canvas id="six-month-line-chart" role="img" aria-label="กราฟเส้นกำไรย้อนหลัง 6 เดือน — ตัวเลขชุดเดียวกันอยู่ในหน้าสรุปประจำปี"></canvas>
     </div>
     <?php endif; ?>
 </section>
@@ -1085,14 +1085,22 @@ require __DIR__ . '/includes/header.php';
         toggleRangeFields();
 
         if (goalModal) {
+            /* ⚠️ กติกา "หน้าต่างซ้อนต้องใช้กับแป้นพิมพ์ได้" อยู่ที่ `setupAccessibleModal()`
+               ใน includes/header.php ที่เดียว — ห้ามเขียนการดักโฟกัส/Escape ซ้ำตรงนี้
+               วัดจริงก่อนแก้: เปิดหน้าต่างนี้แล้ว Tab ครั้งแรกไปตกที่ปุ่ม
+               "🗑️ ลบเป้าหมายเดือน …" ซึ่งอยู่หลังฉากมืด และ Escape ไม่ปิด */
+            const goalModalA11y = setupAccessibleModal(goalModal, () => closeGoalModal());
+
             const openGoalModal = () => {
                 goalModal.classList.remove('hidden');
                 goalModal.classList.add('flex');
+                goalModalA11y.opened(document.getElementById('goal-target-revenue'));
             };
 
             const closeGoalModal = () => {
                 goalModal.classList.add('hidden');
                 goalModal.classList.remove('flex');
+                goalModalA11y.closed();
             };
 
             openGoalModalButtons.forEach((button) => {

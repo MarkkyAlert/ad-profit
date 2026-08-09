@@ -304,7 +304,7 @@ $flashError = get_flash('error');
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
             box-shadow: 0 4px 14px rgba(99, 102, 241, .40);
             color: #fff;
             font-weight: 600;
@@ -338,7 +338,7 @@ $flashError = get_flash('error');
         }
 
         .btn-orange {
-            background: linear-gradient(135deg, #f97316, #ea580c);
+            background: linear-gradient(135deg, #c2410c, #9a3412);
             box-shadow: 0 4px 14px rgba(249, 115, 22, .40);
             color: #fff;
             font-weight: 600;
@@ -372,7 +372,7 @@ $flashError = get_flash('error');
         }
 
         .btn-teal {
-            background: linear-gradient(135deg, #06b6d4, #0284c7);
+            background: linear-gradient(135deg, #0e7490, #0369a1);
             box-shadow: 0 4px 14px rgba(6, 182, 212, .40);
             color: #fff;
             font-weight: 600;
@@ -413,7 +413,7 @@ $flashError = get_flash('error');
         }
 
         .btn-danger {
-            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            background: linear-gradient(135deg, #dc2626, #991b1b);
             box-shadow: 0 4px 14px rgba(239, 68, 68, .40);
             color: #fff;
             font-weight: 600;
@@ -687,10 +687,133 @@ $flashError = get_flash('error');
                 transform: translate(-50%, -50%)
             }
         }
+
+        /* ⭐ ลิงก์ข้ามไปเนื้อหาหลัก — ซ่อนไว้จนกว่าจะถูกโฟกัสด้วยแป้นพิมพ์
+           ⚠️ ห้ามใช้ display:none หรือ visibility:hidden ซ่อน เพราะสิ่งที่ซ่อนแบบนั้น
+              โฟกัสไม่ได้เลย ลิงก์จะไม่มีวันโผล่ออกมา — ต้องดันออกนอกจอแทน */
+        .skip-link {
+            position: absolute;
+            left: 12px;
+            top: -100px;
+            z-index: 100;
+            padding: 10px 18px;
+            border-radius: 12px;
+            /* ⚠️ ตัวอักษรขาวบนพื้นส้ม #f97316 ได้คอนทราสต์แค่ 2.8:1 (เกณฑ์ 4.5)
+               ใช้พื้นเข้มกับขอบส้มแทน ได้ทั้งความชัดและยังเป็นสีของแอป */
+            background: #0b1739;
+            border: 2px solid #f97316;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            transition: top .15s ease
+        }
+
+        .skip-link:focus {
+            top: 12px
+        }
+
+        /* ⭐ กล่องที่ต้องเลื่อนดูแนวนอน (ตารางกว้าง · กริดฤดูกาล · กราฟ)
+           สคริปต์ใน footer.php ติด tabindex ให้เฉพาะกล่องที่ล้นจริง เส้นขอบตอนโฟกัส
+           จึงต้องมี ไม่งั้นคนใช้แป้นพิมพ์ไม่รู้ว่าตอนนี้ปุ่มลูกศรจะเลื่อนอะไร */
+        [data-scroll-region]:focus-visible {
+            outline: 2px solid #6366f1;
+            outline-offset: 2px;
+            border-radius: 12px
+        }
     </style>
 </head>
 
 <body class="text-slate-200">
+
+    <?php /* ⭐ ลิงก์ข้ามไปเนื้อหาหลัก — มองไม่เห็นจนกว่าจะกด Tab ถึง
+             คนที่ใช้แป้นพิมพ์ไม่ต้องเดินผ่านหัวเว็บทุกครั้งที่เปลี่ยนหน้า */ ?>
+    <a href="#main-content" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
+
+    <?php /* ⭐⭐ กติกา "หน้าต่างซ้อนต้องใช้กับแป้นพิมพ์ได้" อยู่ที่นี่ที่เดียว
+             ⚠️ ต้องประกาศในบล็อก <script> แรกของหน้าและอยู่นอก IIFE — บล็อกที่มาทีหลัง
+                (dashboard.php · footer.php) ถึงจะมองเห็น (กติกาเดียวกับ MONTH_GRID_URL ใน add-record.php)
+
+             วัดจริงก่อนแก้ (กดแป้นพิมพ์จริงบนหน้า history เดือนที่มี 31 รายการ):
+             · กด "ลบ" แล้วโฟกัสค้างอยู่ที่ปุ่มเดิมซึ่งตอนนี้อยู่หลังฉากมืด
+             · ต้องกด Tab อีก 67 ครั้งกว่าจะถึงปุ่ม "ยืนยัน" — 60 ครั้งในนั้นเป็นปุ่ม
+               แก้ไข/ลบ ของ "รายการอื่น" ที่มองไม่เห็น กด Enter ผิดจังหวะ = เปิดหน้าต่างของรายการอื่น
+             · กด Escape ไม่ปิด (ทั้งโปรเจกต์ไม่มีไฟล์ไหนจัดการปุ่มนี้เลย)
+
+             ⚠️ โฟกัสตัวแรกต้องเป็นปุ่มที่ "ไม่ทำอะไร" (ยกเลิก/ปิด) ไม่ใช่ปุ่มยืนยัน —
+                หน้าต่างพวกนี้เกือบทั้งหมดคือด่านสุดท้ายก่อนลบข้อมูล เผลอกด Enter ต้องไม่เสียหาย */ ?>
+    <script>
+        const FOCUSABLE_IN_MODAL = 'a[href],button:not([disabled]),input:not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"])';
+
+        const visibleFocusable = (root) => Array.from(root.querySelectorAll(FOCUSABLE_IN_MODAL))
+            .filter((el) => el.offsetParent !== null || getComputedStyle(el).position === 'fixed');
+
+        /**
+         * ทำให้หน้าต่างซ้อนใช้กับแป้นพิมพ์ได้ครบ: ย้ายโฟกัสเข้า · ขังไว้ข้างใน ·
+         * Escape ปิด · ปิดแล้วคืนโฟกัสกลับที่เดิม
+         *
+         * onClose = ฟังก์ชันปิดของหน้าต่างนั้นเอง (แต่ละหน้าปิดคนละวิธี — บางที่สลับคลาส
+         * บางที่มีอนิเมชัน) helper ตัวนี้จึงไม่ปิดเอง แค่บอกว่า "ถึงเวลาปิดแล้ว"
+         */
+        const setupAccessibleModal = (modal, onClose) => {
+            if (!modal) {
+                return {
+                    opened: function() {},
+                    closed: function() {}
+                };
+            }
+
+            let lastFocused = null;
+
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+
+            modal.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    onClose();
+                    return;
+                }
+
+                if (event.key !== 'Tab') {
+                    return;
+                }
+
+                const items = visibleFocusable(modal);
+                if (items.length === 0) {
+                    return;
+                }
+
+                const first = items[0];
+                const last = items[items.length - 1];
+
+                /* ขังโฟกัสไว้ข้างใน — เดิม Tab ทะลุออกไปหาปุ่มที่อยู่หลังฉากมืด */
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            });
+
+            return {
+                opened: function(preferred) {
+                    lastFocused = document.activeElement;
+                    const items = visibleFocusable(modal);
+                    const target = preferred || items[0];
+                    if (target) {
+                        target.focus();
+                    }
+                },
+                closed: function() {
+                    if (lastFocused && lastFocused.isConnected) {
+                        lastFocused.focus();
+                    }
+                    lastFocused = null;
+                }
+            };
+        };
+    </script>
 
     <header class="sticky top-0 z-40 border-b border-white/[0.07] bg-[rgb(8,16,40)]/95 backdrop-blur-xl">
         <div class="mx-auto w-full max-w-6xl px-3 py-2.5 sm:px-4 sm:py-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-3 sm:gap-4">
@@ -709,11 +832,15 @@ $flashError = get_flash('error');
             <?php if ($isSignedIn): ?>
             <!-- User Profile Dropdown -->
             <div class="flex justify-end relative order-2 md:order-3 shrink-0" id="profile-menu-container">
-                <button type="button" onclick="document.getElementById('profile-dropdown').classList.toggle('hidden')" class="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 sm:py-1.5 text-xs text-slate-300 shadow-sm hover:bg-white/10 transition-colors">
-                    <span>👤</span>
+                <?php /* ⚠️ ปุ่มที่เปิด/ปิดอะไรได้ ต้องบอกสถานะด้วย `aria-expanded` —
+                         โปรแกรมอ่านหน้าจอจะได้บอกว่า "ยุบอยู่/กางอยู่" · เดิมได้ยินแค่ชื่ออีเมล
+                         กับสามเหลี่ยม ▼ โดยไม่รู้ว่ากดแล้วมีอะไร ทั้งที่ "ออกจากระบบ" ซ่อนอยู่ในนี้
+                         · ▼ เป็นแค่ภาพประกอบ ซ่อนจากโปรแกรมอ่านหน้าจอ ไม่งั้นถูกอ่านเป็นชื่อรูปสามเหลี่ยม */ ?>
+                <button type="button" id="profile-menu-button" aria-expanded="false" aria-haspopup="true" aria-controls="profile-dropdown" class="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 sm:py-1.5 text-xs text-slate-300 shadow-sm hover:bg-white/10 transition-colors">
+                    <span aria-hidden="true">👤</span>
                     <?php /* title = อีเมลเสมอ ผู้ใช้จะได้ยืนยันบัญชีได้แม้ตั้งชื่อเล่นไว้ */ ?>
                     <span class="max-w-[120px] sm:max-w-[180px] truncate" title="<?= e($userEmail) ?>"><?= e($userLabel) ?></span>
-                    <span class="text-[10px] text-slate-400 ml-0.5">▼</span>
+                    <span class="text-[10px] text-slate-400 ml-0.5" aria-hidden="true">▼</span>
                 </button>
 
                 <div id="profile-dropdown" class="hidden absolute right-0 top-full mt-1.5 w-56 origin-top-right rounded-xl border border-white/10 bg-[#0a1120] p-1.5 shadow-xl z-50 ring-1 ring-black/5">
@@ -767,13 +894,50 @@ $flashError = get_flash('error');
             </div>
 
             <script>
-                document.addEventListener('click', function(event) {
+                (function() {
                     const container = document.getElementById('profile-menu-container');
                     const dropdown = document.getElementById('profile-dropdown');
-                    if (container && !container.contains(event.target)) {
-                        dropdown.classList.add('hidden');
+                    const trigger = document.getElementById('profile-menu-button');
+                    if (!container || !dropdown || !trigger) {
+                        return;
                     }
-                });
+
+                    /* สถานะที่ปุ่มประกาศ ต้องมาจากสภาพจริงของเมนูเสมอ ไม่ใช่ตัวแปรที่จำไว้เอง
+                       ไม่งั้นวันที่มีคนปิดเมนูด้วยวิธีอื่น ปุ่มจะยังบอกว่า "กางอยู่" */
+                    const syncExpanded = () => {
+                        trigger.setAttribute('aria-expanded', dropdown.classList.contains('hidden') ? 'false' : 'true');
+                    };
+
+                    const closeMenu = (returnFocus) => {
+                        dropdown.classList.add('hidden');
+                        syncExpanded();
+                        if (returnFocus) {
+                            trigger.focus();
+                        }
+                    };
+
+                    trigger.addEventListener('click', function() {
+                        dropdown.classList.toggle('hidden');
+                        syncExpanded();
+                    });
+
+                    document.addEventListener('click', function(event) {
+                        if (!container.contains(event.target)) {
+                            closeMenu(false);
+                        }
+                    });
+
+                    /* กด Escape ปิดแล้วโฟกัสกลับมาที่ปุ่ม — ไม่งั้นคนใช้แป้นพิมพ์เปิดเมนูแล้วออกไม่ได้
+                       นอกจากกด Tab ทะลุรายการข้างในไปจนหมด */
+                    container.addEventListener('keydown', function(event) {
+                        if (event.key === 'Escape' && !dropdown.classList.contains('hidden')) {
+                            event.preventDefault();
+                            closeMenu(true);
+                        }
+                    });
+
+                    syncExpanded();
+                })();
             </script>
             <?php else: ?>
                 <?php // ยังไม่ได้ล็อกอิน — มีทางไปได้ทางเดียวคือหน้าเข้าสู่ระบบ ?>
@@ -785,7 +949,7 @@ $flashError = get_flash('error');
         </div>
     </header>
 
-    <main class="mx-auto min-h-[calc(100vh-160px)] w-full max-w-6xl px-3 pt-4 pb-28 sm:px-4 sm:pt-6 sm:pb-32">
+    <main id="main-content" class="mx-auto min-h-[calc(100vh-160px)] w-full max-w-6xl px-3 pt-4 pb-28 sm:px-4 sm:pt-6 sm:pb-32">
         <?php if ($flashSuccess !== null): ?>
             <?php /* ⚠️ ข้อความผิดพลาดต้องอยู่นานกว่าข้อความสำเร็จ — คนอ่านต้องใช้เวลาทำความเข้าใจ
                              และมักต้องทำอะไรต่อ · `data-toast-kind` บอกสคริปต์ใน footer.php ว่าจะให้อยู่นานเท่าไร */ ?>

@@ -148,7 +148,7 @@ $pageTitle = 'รีเซ็ตรหัสผ่าน - ' . APP_NAME;
                 <input type="hidden" name="token" value="<?= e($token) ?>">
                 <div>
                     <label for="password" class="mb-1.5 block text-sm font-medium text-slate-300">รหัสผ่านใหม่</label>
-                    <input id="password" name="password" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
+                    <input id="password" name="password" type="password" autocomplete="new-password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
                         aria-describedby="password-rule"
                         class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                         placeholder="••••••••">
@@ -159,7 +159,7 @@ $pageTitle = 'รีเซ็ตรหัสผ่าน - ' . APP_NAME;
                 </div>
                 <div>
                     <label for="password_confirm" class="mb-1.5 block text-sm font-medium text-slate-300">ยืนยันรหัสผ่านใหม่</label>
-                    <input id="password_confirm" name="password_confirm" type="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
+                    <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" required minlength="<?= PASSWORD_MIN_LENGTH ?>"
                         class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                         placeholder="กรอกรหัสผ่านอีกครั้ง">
                 </div>

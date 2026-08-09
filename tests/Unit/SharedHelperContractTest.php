@@ -634,4 +634,344 @@ final class SharedHelperContractTest extends TestCase
             . ' — ให้ย้ายไป Repository ตามกฎในคู่มือ'
         );
     }
+
+    /**
+     * ⚠️⚠️ สีเทาที่จางเกินไปห้ามใช้กับข้อความที่ต้องอ่าน
+     *
+     * คู่มือห้าม `text-slate-500` ไว้แล้ว (วัดได้ 3.69:1 เกณฑ์ 4.5) แต่ห้ามไว้เป็น
+     * "ตัวหนังสือในเอกสาร" เฉย ๆ ไม่มีอะไรบังคับ · ผลคือ **`text-slate-600` ซึ่งจางกว่านั้นอีก
+     * หลุดเข้ามา 8 จุด** โดยไม่มีอะไรทัก
+     *
+     * วัดจากสีที่เรนเดอร์จริงบนเบราว์เซอร์: `text-slate-600` = rgb(71,85,105)
+     * บนพื้นการ์ด rgb(11,23,57) ได้ **2.32 : 1** ซึ่งต่ำกว่าครึ่งของเกณฑ์
+     * จุดที่โดนหนักสุดคือเครื่องหมาย "ไม่มีข้อมูล" ในกริดฤดูกาล 16 ช่อง —
+     * ช่องที่บอกว่า "ปีนั้นยังไม่มีข้อมูล" กลายเป็นช่องที่มองแทบไม่เห็น
+     *
+     * ⚠️ เทสต์นี้กวาด "ชื่อคลาส" ไม่ได้วัดสีจริง — ถ้าวันหนึ่งเปลี่ยนชุดสีของ Tailwind
+     * ต้องกลับมาวัดใหม่ด้วยเบราว์เซอร์ ไม่ใช่เชื่อรายชื่อนี้อย่างเดียว
+     */
+    public function testNobodyUsesGreyTooFaintToRead(): void
+    {
+        $banned = ['text-slate-500', 'text-slate-600', 'text-slate-700', 'text-gray-500', 'text-gray-600'];
+
+        $offenders = [];
+        foreach ($this->everyPhpFileThatRendersHtml() as $file) {
+            $code = (string)file_get_contents($file);
+            foreach ($banned as $class) {
+                if (preg_match('/\b' . preg_quote($class, '/') . '\b/', $code) === 1) {
+                    $offenders[] = basename($file) . ' → ' . $class;
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'ใช้สีเทาที่จางเกินเกณฑ์คอนทราสต์: ' . implode(', ', $offenders)
+            . ' — ใช้ text-slate-400 แทน (ดูหัวข้อ UI ในคู่มือ)'
+        );
+    }
+
+    /**
+     * ⚠️⚠️ ปุ่มที่ตัวหนังสือเป็นสีขาว พื้นต้องเข้มพอ
+     *
+     * ⚠️⚠️ **รอบแรกตกสำรวจทั้งชุด** เพราะเครื่องวัดคอนทราสต์อ่าน `background-color`
+     * ซึ่งของ element ที่ใช้ "พื้นไล่สี" จะเป็นโปร่งใสเสมอ → เครื่องวัดเดินผ่านปุ่มทั้งใบ
+     * ไปใช้สีการ์ดข้างหลังแทน แล้วรายงานว่าผ่าน ทั้งที่ตัวอักษรอยู่บนสีสด
+     *
+     * วัดจริงจากสีที่เรนเดอร์ (หลังแก้เครื่องวัดให้อ่าน `background-image` ด้วย):
+     *   ปุ่มหลักสีส้ม "บันทึกข้อมูล" 2.80:1 · ฟ้า 2.43:1 · แดง 3.76:1 · ม่วง 4.23:1
+     * ทั้งสี่ตกเกณฑ์ 4.5 — และตัวที่แย่ที่สุดคือปุ่มที่ผู้ใช้กดทุกวัน
+     *
+     * ⚠️ เทสต์นี้คำนวณคอนทราสต์จริงจากเลขสีใน CSS ไม่ได้เทียบกับรายชื่อสีที่อนุญาต
+     * เปลี่ยนเป็นสีอะไรก็ได้ ขอแค่ผ่านเกณฑ์
+     */
+    public function testWhiteTextOnColouredButtonsIsDarkEnough(): void
+    {
+        $css = (string)file_get_contents(dirname(__DIR__, 2) . '/includes/header.php');
+
+        $buttons = [];
+        foreach (['btn-primary', 'btn-orange', 'btn-teal', 'btn-danger'] as $name) {
+            $pattern = '/\.' . $name . '\s*\{(.*?)\}/s';
+            if (preg_match($pattern, $css, $rule) !== 1) {
+                $buttons[$name] = null;
+                continue;
+            }
+
+            if (!str_contains($rule[1], 'color: #fff')) {
+                continue;
+            }
+
+            preg_match_all('/#([0-9a-f]{6})/i', (string)preg_replace('/box-shadow[^;]*;/', '', $rule[1]), $hex);
+            $buttons[$name] = $hex[1];
+        }
+
+        $offenders = [];
+        foreach ($buttons as $name => $shades) {
+            if ($shades === null || $shades === []) {
+                $offenders[] = $name . ' → หานิยามสีไม่เจอ (เปลี่ยนวิธีเขียน CSS แล้วต้องมาอัปเดตเทสต์)';
+                continue;
+            }
+
+            foreach ($shades as $shade) {
+                $ratio = $this->contrastWithWhite($shade);
+                if ($ratio < 4.5) {
+                    $offenders[] = sprintf('%s #%s = %.2f:1', $name, $shade, $ratio);
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'ตัวหนังสือขาวบนพื้นที่สว่างเกินเกณฑ์ 4.5:1 — ' . implode(' | ', $offenders)
+        );
+    }
+
+    /** คอนทราสต์ของสีหนึ่งกับสีขาว ตามสูตร WCAG 2.x */
+    private function contrastWithWhite(string $hex): float
+    {
+        $channel = static function (int $value): float {
+            $v = $value / 255;
+
+            return $v <= 0.03928 ? $v / 12.92 : (float)(((($v + 0.055) / 1.055)) ** 2.4);
+        };
+
+        $r = $channel((int)hexdec(substr($hex, 0, 2)));
+        $g = $channel((int)hexdec(substr($hex, 2, 2)));
+        $b = $channel((int)hexdec(substr($hex, 4, 2)));
+        $luminance = 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
+
+        return 1.05 / ($luminance + 0.05);
+    }
+
+    /**
+     * ⚠️⚠️ ทุกช่องที่ผู้ใช้กรอกต้องมีชื่อให้โปรแกรมอ่านหน้าจอประกาศ
+     *
+     * วัดจริงก่อนแก้: จาก 27 ช่องทั้งระบบ มี **1 ช่องที่ไม่มีชื่อเลย** คือช่องเลือกไฟล์ CSV
+     * ในหน้าบันทึก — โปรแกรมอ่านหน้าจอพูดแค่ "เลือกไฟล์" โดยไม่บอกว่าไฟล์อะไร
+     *
+     * ⚠️ นับ `<label for>` · `aria-label` · `aria-labelledby` เป็นชื่อที่ใช้ได้
+     * แต่ **ไม่นับ `placeholder`** เพราะมันหายทันทีที่เริ่มพิมพ์
+     */
+    public function testEveryInputTheUserTypesIntoHasAName(): void
+    {
+        $offenders = [];
+        foreach ($this->everyPhpFileThatRendersHtml() as $file) {
+            $code = (string)file_get_contents($file);
+
+            /* ⚠️ ต้องตัดโค้ด PHP แบบเดียวกับตอนหาแท็ก ไม่งั้น id ที่สร้างจากตัวแปร
+               จะเทียบกับ `for` ไม่ติด แล้วรายงานว่าช่องนั้นไม่มีชื่อทั้งที่มี */
+            $labelledIds = [];
+            if (preg_match_all('/<label[^>]*\bfor="([^"]+)"/i', $this->markupOnly($code), $labels) > 0) {
+                $labelledIds = $labels[1];
+            }
+
+            foreach ($this->htmlTagsIn($file, 'input|select|textarea') as $tag) {
+                if (preg_match('/type="(hidden|submit|button|image)"/i', $tag) === 1) {
+                    continue;
+                }
+
+                if (preg_match('/aria-label(ledby)?="/i', $tag) === 1) {
+                    continue;
+                }
+
+                preg_match('/\bid="([^"]+)"/i', $tag, $idMatch);
+                $id = $idMatch[1] ?? '';
+                if ($id !== '' && in_array($id, $labelledIds, true)) {
+                    continue;
+                }
+
+                $offenders[] = basename($file) . ' → ' . mb_substr(preg_replace('/\s+/', ' ', $tag) ?? '', 0, 60);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'ช่องกรอกที่ไม่มีชื่อให้โปรแกรมอ่านหน้าจอ: ' . implode(' | ', $offenders)
+        );
+    }
+
+    /**
+     * ⚠️⚠️ ช่องอีเมล/รหัสผ่านต้องบอกเบราว์เซอร์ว่าเป็นช่องอะไร
+     *
+     * วัดจริงก่อนแก้: `profile.php` ใส่ `autocomplete` ครบถูกต้อง แต่ `login.php`
+     * (ทั้งแท็บเข้าสู่ระบบและสมัครสมาชิก) กับ `forgot-password.php` **ไม่มีเลยสักช่อง**
+     * — หน้าที่ผู้ใช้เข้าบ่อยที่สุดกลับเป็นหน้าที่โปรแกรมจำรหัสผ่านช่วยไม่ได้
+     * ผลคือต้องพิมพ์อีเมลกับรหัสผ่านเองทุกครั้งบนมือถือ
+     */
+    public function testPasswordAndEmailFieldsTellTheBrowserWhatTheyAre(): void
+    {
+        $offenders = [];
+        foreach ($this->everyPhpFileThatRendersHtml() as $file) {
+            foreach ($this->htmlTagsIn($file, 'input') as $tag) {
+                if (preg_match('/type="(email|password)"/i', $tag) !== 1) {
+                    continue;
+                }
+
+                if (preg_match('/\bautocomplete="/i', $tag) === 1) {
+                    continue;
+                }
+
+                /* ช่องที่ถูกปิดไว้ให้ดูเฉย ๆ (เช่นอีเมลปัจจุบันในหน้าโปรไฟล์) ไม่ได้รับค่าจากผู้ใช้ */
+                if (preg_match('/\b(disabled|readonly)\b/i', $tag) === 1) {
+                    continue;
+                }
+
+                $offenders[] = basename($file) . ' → ' . mb_substr(preg_replace('/\s+/', ' ', $tag) ?? '', 0, 60);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'ช่องอีเมล/รหัสผ่านที่ไม่มี autocomplete: ' . implode(' | ', $offenders)
+        );
+    }
+
+    /**
+     * ⚠️⚠️ หน้าต่างซ้อนต้องเรียกกติกากลาง ห้ามเขียนการดักโฟกัส/Escape ขึ้นใหม่เอง
+     *
+     * `setupAccessibleModal()` ใน `includes/header.php` เป็นจุดเดียวที่ทำ 4 อย่าง:
+     * ย้ายโฟกัสเข้า · ขังโฟกัสไว้ข้างใน · Escape ปิด · ปิดแล้วคืนโฟกัสกลับที่เดิม
+     *
+     * วัดจริงก่อนมี helper (กดแป้นพิมพ์จริง หน้าประวัติเดือนที่มี 31 รายการ):
+     * กด "ลบ" แล้วโฟกัสค้างอยู่หลังฉากมืด ต้องกด Tab อีก **67 ครั้ง** กว่าจะถึงปุ่มยืนยัน
+     * และ 60 ครั้งในนั้นเป็นปุ่มลบของรายการอื่นที่มองไม่เห็น
+     *
+     * ⚠️ เทสต์นี้แดงแม้โค้ดที่เขียนซ้ำจะทำงานถูกต้อง — เพราะปัญหาอยู่ที่วันที่มีคน
+     * แก้ที่หนึ่งแล้วอีกที่ไม่ตาม (หลักเดียวกับ testNobodyReimplementsTheUnfinishedMonthRule)
+     */
+    public function testEveryModalUsesTheSharedKeyboardRules(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $helper = (string)file_get_contents($root . '/includes/header.php');
+        $this->assertStringContainsString(
+            'const setupAccessibleModal',
+            $helper,
+            'ไม่พบกติกากลางของหน้าต่างซ้อนใน includes/header.php'
+        );
+
+        $offenders = [];
+        foreach ($this->everyPhpFileThatRendersHtml() as $file) {
+            $name = basename($file);
+            if ($name === 'header.php') {
+                continue;
+            }
+
+            /* ⚠️⚠️ ต้องตัดคอมเมนต์ทิ้งก่อนตรวจ — คอมเมนต์ที่อธิบายกติกามักเอ่ยชื่อ
+               `setupAccessibleModal()` อยู่แล้ว · วัดจริงตอนยังไม่ตัด: ถอดการเรียกจริง
+               ออกทั้ง 3 บรรทัด เทสต์ยัง **เขียว** เพราะไปเจอชื่อในคอมเมนต์ที่อยู่เหนือมันพอดี */
+            $code = $this->codeWithoutComments((string)file_get_contents($file));
+            if (preg_match('/id="[a-z-]*modal"/i', $code) !== 1) {
+                continue;
+            }
+
+            if (preg_match('/\bsetupAccessibleModal\s*\(/', $code) !== 1) {
+                $offenders[] = $name . ' → มีหน้าต่างซ้อนแต่ไม่ได้เรียก setupAccessibleModal()';
+            }
+
+            /* ⚠️ ต้องรับทั้งเครื่องหมายคำพูดเดี่ยวและคู่ — เขียนไว้แบบเดียวแล้ววัดจริง
+               พบว่ามิวเทชันที่ใช้ `"Escape"` หลุดไปได้ทั้งที่เป็นการเขียนกติกาซ้ำเหมือนกัน */
+            if (preg_match('/key\s*===\s*[\x27"]Escape[\x27"]/', $code) === 1) {
+                $offenders[] = $name . ' → เขียนตัวดัก Escape เอง (ต้องใช้ของกลาง)';
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            implode(' | ', $offenders)
+        );
+    }
+
+    /**
+     * ดึงแท็ก HTML ออกมาจากไฟล์ PHP
+     *
+     * ⚠️⚠️ ต้อง **ตัดโค้ด PHP ทิ้งก่อน** แล้วค่อยหาแท็ก ไม่ใช่ทางกลับกัน
+     * `<?= e($v) ?>` มีเครื่องหมาย `>` อยู่ข้างใน — regex ที่หาแท็กตรง ๆ จะคิดว่าแท็กจบตรงนั้น
+     * แล้วตัดครึ่งแท็กทิ้ง · วัดจริง: ตัวกวาดเวอร์ชันแรกรายงานว่ามี 8 ช่องไม่มีชื่อ
+     * ทั้งที่เปิดหน้าจริงบนเบราว์เซอร์แล้วทุกช่องมีชื่อครบ — **ตัวกวาดผิด ไม่ใช่โค้ดผิด**
+     * (บทเรียนเดียวกับ BrowserScriptParityTest ที่ต้องตัดคอมเมนต์ก่อนตัดสตริง)
+     *
+     * ⚠️ และต้องยอมให้แท็กขึ้นหลายบรรทัด — โปรเจกต์นี้เขียน `<input` กระจายบรรทัดเป็นปกติ
+     *
+     * @return list<string>
+     */
+    private function htmlTagsIn(string $file, string $tagNames): array
+    {
+        $code = $this->markupOnly((string)file_get_contents($file));
+
+        if (preg_match_all('/<(' . $tagNames . ')\b[^>]*>/is', $code, $matches) === 0) {
+            return [];
+        }
+
+        return array_values($matches[0]);
+    }
+
+    /**
+     * เหลือไว้เฉพาะ HTML ที่ผู้ใช้ได้รับจริง
+     *
+     * ⚠️ ทั้งสามขั้นนี้จำเป็นทั้งหมด — ตัดขั้นไหนออกก็ได้ผลลวง (ลองมาแล้วทีละขั้น):
+     *  1. `<script>` — คอมเมนต์ JS ในโปรเจกต์นี้พูดถึง `<input type="number">` ตรง ๆ
+     *     (เป็นกติกาที่ต้องเตือนคนอ่านโค้ด) ถ้าไม่ตัด ตัวกวาดจะนับคอมเมนต์เป็นช่องกรอก
+     *  2. โค้ด PHP — ⚠️⚠️ **ต้องยอมให้ไม่มี `?>` ปิดท้าย** เพราะไฟล์ที่เป็น PHP ล้วน
+     *     (เช่น `includes/functions.php`) เปิด `<?php` บรรทัดแรกแล้วไม่ปิดเลยทั้งไฟล์
+     *     regex ที่บังคับให้มี `?>` จะไม่ตัดอะไรเลย แล้ว docblock ทั้งไฟล์ถูกนับเป็น HTML
+     *  3. แทนที่ด้วย `__PHP__` ไม่ใช่ช่องว่าง — `id="shop-name-<?= $id ?>"` กับ
+     *     `for="shop-name-<?= $id ?>"` ต้องยังเทียบกันติดหลังตัด ไม่งั้นช่องที่ id
+     *     สร้างจากตัวแปรจะถูกหาว่าไม่มีชื่อทั้งที่มี
+     */
+    /**
+     * ตัดคอมเมนต์ทุกแบบที่โปรเจกต์นี้ใช้ออก เหลือไว้แต่โค้ดที่ทำงานจริง
+     *
+     * ⚠️ ตัวกวาดที่ตรวจว่า "เรียกกติกากลางหรือยัง" จะถูกคอมเมนต์หลอกได้ง่ายมาก
+     * เพราะคอมเมนต์ที่ดีมักอ้างชื่อฟังก์ชันที่มันอธิบายอยู่ — วัดจริงแล้วเจอ (ดูที่จุดเรียกใช้)
+     */
+    private function codeWithoutComments(string $code): string
+    {
+        $code = (string)preg_replace('#/\*.*?\*/#s', ' ', $code);
+        $code = (string)preg_replace('#^\s*//.*$#m', ' ', $code);
+
+        return (string)preg_replace('/<!--.*?-->/s', ' ', $code);
+    }
+
+    private function markupOnly(string $code): string
+    {
+        $code = (string)preg_replace('#<script\b[^>]*>.*?</script>#is', ' ', $code);
+        $code = (string)preg_replace('/<\?(php|=)(.*?)(\?>|$)/s', '__PHP__', $code);
+
+        return (string)preg_replace('/<!--.*?-->/s', ' ', $code);
+    }
+
+    /**
+     * ทุกไฟล์ PHP ที่พ่น HTML ออกไปหาผู้ใช้ — หน้าเว็บที่รากกับไฟล์ include
+     *
+     * ⚠️ กวาดจากดิสก์จริง ไม่ใช่รายชื่อที่พิมพ์ไว้ตายตัว — เพิ่มหน้าใหม่แล้วลืมตรวจ
+     * จะไม่มีวันรู้ (บทเรียนเดียวกับ SchemaGuardTest ที่เคยเทียบกับรายชื่อตายตัว)
+     *
+     * @return list<string>
+     */
+    private function everyPhpFileThatRendersHtml(): array
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/*.php'),
+            (array)glob($root . '/includes/*.php')
+        );
+
+        $out = [];
+        foreach ($files as $file) {
+            $path = (string)$file;
+            $code = (string)file_get_contents($path);
+            if (preg_match('/<(input|select|textarea|button|main|div|table)\b/i', $code) === 1) {
+                $out[] = $path;
+            }
+        }
+
+        sort($out);
+
+        return $out;
+    }
 }

@@ -1158,7 +1158,11 @@ require __DIR__ . '/includes/header.php';
         <?= shop_context_field($shopId) ?>
         <input type="hidden" name="action" value="import_csv">
 
+        <?php /* ⚠️ ช่องนี้เคยเป็นช่องเดียวใน 27 ช่องทั้งระบบที่ไม่มีชื่อ —
+                 โปรแกรมอ่านหน้าจอพูดแค่ "เลือกไฟล์" โดยไม่บอกว่าไฟล์อะไร */ ?>
+        <label for="csv-file" class="sr-only">เลือกไฟล์ CSV ที่จะนำเข้า</label>
         <input
+            id="csv-file"
             type="file"
             name="csv"
             accept=".csv,text/csv"
