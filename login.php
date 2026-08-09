@@ -292,7 +292,9 @@ $flashError = get_flash('error');
                                 class="w-full rounded-xl px-4 py-3 text-sm transition-all"
                                 placeholder="••••••••">
                         </div>
-                        <button type="submit" class="btn-primary mt-2">✨ สมัครสมาชิก</button>
+                        <?php /* ส้ม = ปุ่มหลักของทั้งระบบ · เดิมแท็บนี้เป็นม่วงขณะที่แท็บ "เข้าสู่ระบบ"
+                                 ในการ์ดเดียวกันเป็นส้ม กดสลับแท็บแล้วปุ่มเปลี่ยนสี */ ?>
+                        <button type="submit" class="btn-orange mt-2">✨ สมัครสมาชิก</button>
                     </form>
                 </section>
             </div>

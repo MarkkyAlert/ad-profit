@@ -82,6 +82,30 @@ function format_share_percent(?float $value): string
     return formatPercent($value);
 }
 
+/**
+ * เตรียมจำนวนเงินสำหรับใส่ใน `<input type="number">` — จุดเดียวของกติกา
+ *
+ * ⚠️ ไม่เติม `.00` ให้เลขที่ไม่มีเศษสตางค์ · เป้ารายเดือนเป็นเลข 7 หลัก การเห็น
+ * `1200000.00` ทำให้ต้องนับหลักเองว่าล้านสองหรือแสนสอง และ `.00` ไม่ได้ช่วยอะไร
+ * (แทบไม่มีใครตั้งเป้าเป็นเศษสตางค์) · มีเศษจริงยังคง 2 ตำแหน่งเหมือนเดิม
+ *
+ * ⚠️ ใส่ตัวคั่นหลักพันในช่องนี้ไม่ได้ — `<input type="number">` ของเบราว์เซอร์
+ * ไม่รับจุลภาค (ข้อจำกัดของช่องมาตรฐาน เหมือนช่องเดือนที่เป็นภาษาอังกฤษ)
+ * จึงต้องเขียนจำนวนแบบอ่านง่ายกำกับไว้ข้าง ๆ แทน
+ */
+function format_amount_for_input(?float $value): string
+{
+    if ($value === null) {
+        return '';
+    }
+
+    $rounded = round($value, 2);
+
+    return abs($rounded - round($rounded)) < 0.005
+        ? number_format($rounded, 0, '.', '')
+        : number_format($rounded, 2, '.', '');
+}
+
 function formatRoas(?float $value): string
 {
     return $value === null ? no_value_text() : number_format($value, 2);

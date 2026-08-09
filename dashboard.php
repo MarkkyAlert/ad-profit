@@ -739,9 +739,14 @@ require __DIR__ . '/includes/header.php';
                     type="number"
                     min="0"
                     step="0.01"
-                    value="<?= e($goalTargetRevenue !== null ? number_format($goalTargetRevenue, 2, '.', '') : '') ?>"
+                    value="<?= e(format_amount_for_input($goalTargetRevenue)) ?>"
+                    aria-describedby="goal-revenue-readable"
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
                     placeholder="เว้นว่าง = คงค่าเดิม">
+                <?php /* ⚠️ ช่อง <input type="number"> ใส่ตัวคั่นหลักพันไม่ได้ (เบราว์เซอร์ไม่รับจุลภาค)
+                         เป้ารายเดือนเป็นเลข 7 หลัก ผู้ใช้จึงต้องนับหลักเองว่าล้านสองหรือแสนสอง
+                         → เขียนจำนวนแบบอ่านง่ายกำกับไว้ใต้ช่อง แล้วอัปเดตตามที่พิมพ์ */ ?>
+                <p id="goal-revenue-readable" class="mt-1 text-xs text-slate-400"></p>
             </div>
 
             <div>
@@ -752,14 +757,20 @@ require __DIR__ . '/includes/header.php';
                     type="number"
                     min="0"
                     step="0.01"
-                    value="<?= e($goalTargetProfit !== null ? number_format($goalTargetProfit, 2, '.', '') : '') ?>"
+                    value="<?= e(format_amount_for_input($goalTargetProfit)) ?>"
+                    aria-describedby="goal-profit-readable"
                     class="w-full rounded-xl px-4 py-2.5 text-sm transition-all"
                     placeholder="เว้นว่าง = คงค่าเดิม">
+                <?php /* ⚠️ ช่อง <input type="number"> ใส่ตัวคั่นหลักพันไม่ได้ (เบราว์เซอร์ไม่รับจุลภาค)
+                         เป้ารายเดือนเป็นเลข 7 หลัก ผู้ใช้จึงต้องนับหลักเองว่าล้านสองหรือแสนสอง
+                         → เขียนจำนวนแบบอ่านง่ายกำกับไว้ใต้ช่อง แล้วอัปเดตตามที่พิมพ์ */ ?>
+                <p id="goal-profit-readable" class="mt-1 text-xs text-slate-400"></p>
             </div>
 
             <div class="md:col-span-2 flex items-center justify-end gap-2">
                 <button type="button" id="cancel-goal-modal" class="btn-ghost px-4 py-2 text-sm">ยกเลิก</button>
-                <button type="submit" class="btn-primary px-4 py-2 text-sm">💾 บันทึกเป้าหมาย</button>
+                <?php /* ส้ม = ปุ่มหลักของทั้งระบบ (หน้าต่างนี้ตกสำรวจตอนรวมสีปุ่ม) */ ?>
+                <button type="submit" class="btn-orange px-4 py-2 text-sm">💾 บันทึกเป้าหมาย</button>
             </div>
         </form>
     </div>
@@ -947,6 +958,43 @@ require __DIR__ . '/includes/header.php';
         const closeGoalModalButton = document.getElementById('close-goal-modal');
         const cancelGoalModalButton = document.getElementById('cancel-goal-modal');
         const deleteGoalForm = document.getElementById('delete-goal-form');
+
+        /* ⭐ เขียนจำนวนเป้าหมายแบบอ่านง่ายกำกับใต้ช่อง
+           ช่อง <input type="number"> ใส่ตัวคั่นหลักพันไม่ได้ (เบราว์เซอร์ไม่รับจุลภาค) เป้ารายเดือน
+           เป็นเลข 7 หลัก ผู้ใช้จึงต้องนับหลักเองว่าล้านสองหรือแสนสอง — ข้อจำกัดเดียวกับช่องเลือกเดือน
+           ที่เป็นภาษาอังกฤษ วิธีแก้จึงเหมือนกัน คือเขียนกำกับไว้ข้าง ๆ
+           ⚠️ ต้องให้ผลตรงกับ `formatMoney()` ฝั่ง PHP: มีตัวคั่นหลักพัน · สตางค์เฉพาะตอนมีเศษ */
+        const readableAmount = (raw) => {
+            const value = Number(raw);
+            if (raw === '' || !Number.isFinite(value)) {
+                return '';
+            }
+
+            const hasSatang = Math.abs(value - Math.round(value)) >= 0.005;
+
+            return '= ฿' + value.toLocaleString('en-US', {
+                minimumFractionDigits: hasSatang ? 2 : 0,
+                maximumFractionDigits: 2
+            });
+        };
+
+        const bindReadableAmount = (inputId, outputId) => {
+            const input = document.getElementById(inputId);
+            const output = document.getElementById(outputId);
+            if (!input || !output) {
+                return;
+            }
+
+            const sync = () => {
+                output.textContent = readableAmount(input.value);
+            };
+
+            input.addEventListener('input', sync);
+            sync();
+        };
+
+        bindReadableAmount('goal-target-revenue', 'goal-revenue-readable');
+        bindReadableAmount('goal-target-profit', 'goal-profit-readable');
 
         const dailyPayload = <?= json_encode($dailyChartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         const sixMonthPayload = <?= json_encode($sixMonthPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;

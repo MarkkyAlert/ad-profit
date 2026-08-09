@@ -192,8 +192,8 @@ require __DIR__ . '/includes/header.php';
                                         data-edit-button
                                         data-record-id="<?= e((string)$recordId) ?>"
                                         data-record-date="<?= e($recordDate) ?>"
-                                        data-revenue="<?= e(number_format($revenue, 2, '.', '')) ?>"
-                                        data-ad-cost="<?= e(number_format($adCost, 2, '.', '')) ?>"
+                                        data-revenue="<?= e(format_amount_for_input($revenue)) ?>"
+                                        data-ad-cost="<?= e(format_amount_for_input($adCost)) ?>"
                                         data-note="<?= e($note) ?>">
                                         ✏️ แก้ไข
                                     </button>
