@@ -1176,7 +1176,28 @@ class RecordService
         $records = $this->recordRepository->getByDateRange($shopId, $startDate, $endDate);
 
         $mappedRecords = [];
-        $previousRevenue = null;
+
+        /* ⚠️⚠️ "ครั้งก่อน" ต้องหมายถึงรายการก่อนหน้า **จริง ๆ** ไม่ใช่ "รายการก่อนหน้าในเดือนนี้"
+           เดิมตัวแปรนี้เริ่มที่ null ทุกเดือน แถวแรกของทุกเดือนจึงขึ้นขีดเสมอ
+           วัดจริง (ข้อมูลต่อเนื่องทุกวันตั้งแต่ ม.ค. 2567):
+             1 มิ.ย. → –   ·   1 ก.ค. → –   ·   1 ส.ค. → –
+           ทั้งที่วันสุดท้ายของเดือนก่อนมีรายการอยู่ครบทุกเดือน
+           · ขีดในคอลัมน์นี้ที่แถวอื่นแปลว่า "ไม่มีรายการก่อนหน้า" จริง ๆ — สัญลักษณ์เดียว
+             จึงสื่อสองความหมาย ซึ่งเป็นบทเรียนเดียวกับที่เปลี่ยน "เทียบเมื่อวาน" เป็น
+             "เทียบครั้งก่อน" (ชื่อคอลัมน์ต้องตรงกับสิ่งที่คำนวณ)
+           ⚠️ ใช้ `findLatestOnOrBeforeDate()` กับ **วันก่อนหน้าวันที่ 1** เพื่อให้ได้รายการ
+              ที่อยู่ก่อนเดือนนี้จริง ๆ (เมธอดนี้เป็น `<=` จึงต้องถอยไปหนึ่งวัน)
+           ⚠️ ระยะห่างจะกี่วันก็ได้ — เหมือนกรณีเว้นช่องกลางเดือนที่ระบบรองรับอยู่แล้ว */
+        /* ⚠️ ห้ามใช้ `$dateObject->modify()` — มันเป็น `DateTime` ที่แก้ตัวเอง
+           การเรียก modify จะเปลี่ยนค่าของ `$dateObject` ไปเลย ใครเพิ่มโค้ดที่ใช้มันต่อ
+           ข้างล่างจะได้เดือนก่อนหน้าโดยไม่มีอะไรเตือน (ตอนนี้ `$endDate` ถูกคำนวณไปก่อนแล้ว
+           จึงยังไม่พัง แต่เป็นกับดักที่รอคนถัดไป) */
+        $dayBeforeMonth = (new DateTimeImmutable($startDate))->modify('-1 day')->format('Y-m-d');
+        $recordBeforeMonth = $this->recordRepository->findLatestOnOrBeforeDate($shopId, $dayBeforeMonth);
+        $previousRevenue = is_array($recordBeforeMonth)
+            ? (float)($recordBeforeMonth['revenue'] ?? 0)
+            : null;
+
         $totalRevenue = 0.0;
         $totalAdCost = 0.0;
 
