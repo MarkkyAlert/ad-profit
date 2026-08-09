@@ -799,8 +799,13 @@ class DashboardService
 
     private function resolveComparisonCutoffDay(string $selectedMonth, ?string $today): ?int
     {
-        // helper กลาง — หน้ารวมร้านใช้ตัวเดียวกัน (เดิมมีแค่ที่นี่ที่ตัดวัน)
-        return resolve_comparison_cutoff_day($selectedMonth, $today);
+        /* helper กลาง — หน้ารวมร้านใช้ตัวเดียวกัน (เดิมมีแค่ที่นี่ที่ตัดวัน)
+           ⚠️⚠️ ต้องเป็น `resolve_month_over_month_cutoff_day()` ไม่ใช่ตัวธรรมดา —
+           ค่านี้ถูกใช้ 2 อย่างพร้อมกัน: ตัดช่วงของ **ทั้งสองเดือน** และเป็นตัวเลขที่ป้าย
+           "เทียบเดือนก่อน (ถึงวันที่ N)" เอาไปประกาศ · ถ้าไม่หดให้พอดีเดือนก่อน
+           วันที่ 31 มี.ค. ป้ายจะบอกว่าเทียบถึงวันที่ 31 ทั้งที่ ก.พ. ไม่มีวันนั้น
+           (ดูตัวเลขที่วัดได้ในคำอธิบายของ helper) */
+        return resolve_month_over_month_cutoff_day($selectedMonth, $today);
     }
 
     /**

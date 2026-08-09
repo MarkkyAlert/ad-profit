@@ -195,7 +195,10 @@ class OverviewService
         // ⭐ เดือนปัจจุบันต้องเทียบกับ "เดือนก่อนถึงวันเดียวกัน" ไม่ใช่ทั้งเดือน
         // เดิมเทียบทั้งเดือนเสมอ วันที่ 4 ของเดือนจึงขึ้น −87.1% ขณะที่แดชบอร์ดบอก 0%
         // สำหรับข้อมูลชุดเดียวกัน — helper ตัวเดียวกับที่แดชบอร์ดใช้
-        $cutoffDay = resolve_comparison_cutoff_day($selectedMonth, $today);
+        // ⚠️⚠️ ต้องหดวันตัดให้พอดี "เดือนก่อน" ด้วย ไม่งั้น 31 มี.ค. จะเทียบ 31 วันของ มี.ค.
+        // กับ 28 วันของ ก.พ. → คอลัมน์นี้ขึ้น +10.7% ให้ร้านที่ทำกำไรวันละเท่ากันเป๊ะ
+        // (วัดจริงแล้ว เกิดพร้อมกันทั้งหน้านี้และแดชบอร์ด เพราะใช้ helper ตัวเดียวกัน)
+        $cutoffDay = resolve_month_over_month_cutoff_day($selectedMonth, $today);
         $previousEnd = comparison_range_end($previousMonth->format('Y-m'), $cutoffDay);
 
         $shopIds = [];
@@ -208,11 +211,26 @@ class OverviewService
 
         $previousProfitByShopId = $this->sumProfitByShopId($shopIds, $previousStart, $previousEnd);
 
-        // ตารางถูกสร้างจากช่วงที่ตัดวันแล้ว จึงใช้กำไรของแถวได้ตรง ๆ
+        /* ⚠️⚠️ ห้ามใช้ `$row['profit']` มาเทียบตรง ๆ — มันคือกำไร "ถึงวันนี้" ซึ่งถูกต้อง
+           สำหรับคอลัมน์กำไร แต่ผิดสำหรับคอลัมน์เทียบ เมื่อเดือนก่อนสั้นกว่า
+           · 31 มี.ค.: กำไรของแถว = 31 วัน · เดือนก่อนถูกหดเหลือ 28 วัน → +10.7%
+             ให้ร้านที่ทำกำไรวันละเท่ากันเป๊ะ
+           · สองคอลัมน์นี้ตอบคนละคำถาม จึงต้องใช้คนละช่วงโดยตั้งใจ:
+             "กำไร" = เดือนนี้ถึงวันนี้ · "เทียบเดือนก่อน" = ช่วงเดียวกันทั้งสองฝั่ง
+           ⚠️ เดือนที่จบแล้ว (`$cutoffDay === null`) ทั้งสองช่วงเท่ากันอยู่แล้ว
+              ไม่ต้องยิง query เพิ่ม */
+        $selectedEnd = comparison_range_end($selectedMonth, $cutoffDay);
+        $selectedStart = $selectedMonth . '-01';
+        $currentProfitByShopId = $cutoffDay === null
+            ? null
+            : $this->sumProfitByShopId($shopIds, $selectedStart, $selectedEnd);
+
         foreach ($rows as $index => $row) {
             $shopId = (int)($row['shop_id'] ?? 0);
             $previousProfit = $previousProfitByShopId[$shopId] ?? 0.0;
-            $profit = (float)($row['profit'] ?? 0);
+            $profit = $currentProfitByShopId === null
+                ? (float)($row['profit'] ?? 0)
+                : ($currentProfitByShopId[$shopId] ?? 0.0);
             $change = $profit - $previousProfit;
 
             $rows[$index]['prev_profit'] = $previousProfit;

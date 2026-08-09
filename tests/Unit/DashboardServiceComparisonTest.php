@@ -237,7 +237,18 @@ final class DashboardServiceComparisonTest extends TestCase
         $this->assertSame(100.0, $comparison['change']['total_revenue']);
     }
 
-    /** ตัดวันที่ 31 กับเดือนที่มี 28 วัน ต้องได้ทั้งเดือน ไม่ใช่ช่วงว่าง */
+    /**
+     * ตัดวันที่ 31 กับเดือนที่มี 28 วัน ต้องได้ทั้งเดือน ไม่ใช่ช่วงว่าง
+     *
+     * ⚠️⚠️ **ข้อมูลตั้งต้นเดิมพิสูจน์สิ่งที่ชื่อเทสต์บอกไม่ได้** — เดิมมีแถวเดียวใน มี.ค.
+     * และอยู่ที่วันที่ 31 พอดี · ตอนที่วันตัดยังไม่ถูกหด สองฝั่งได้ 500 เท่ากันจึงเป็น 0%
+     * ซึ่ง "ผ่าน" ด้วยเหตุผลที่ไม่เกี่ยวกับสิ่งที่ต้องพิสูจน์เลย (คือ "ยอดวันที่ 28 ก.พ.
+     * ต้องไม่ตกหล่น") — และ 0% นั้นเองคืออาการของบั๊กที่พบภายหลัง: 31 วันของ มี.ค.
+     * ถูกเทียบกับ 28 วันของ ก.พ. โดยที่ป้ายประกาศว่า "ถึงวันที่ 31" ซึ่ง ก.พ. ไม่มี
+     *
+     * ตอนนี้วันตัดถูกหดให้พอดีทั้งสองฝั่ง (ดู `MonthOverMonthCutoffTest`) เทสต์นี้จึง
+     * ยืนยันเจตนาเดิมตรง ๆ แทน: **ยอดของวันที่ 28 ก.พ. ต้องถูกนับ** (ยอดเดือนก่อน ≠ 0)
+     */
     public function testCutoffDayIsClampedToShorterPreviousMonth(): void
     {
         $recordRepository = $this->createStub(RecordRepository::class);
@@ -245,8 +256,11 @@ final class DashboardServiceComparisonTest extends TestCase
         $recordRepository->method('getByDateRange')->willReturnCallback(
             static function (int $shopId, string $start, string $end): array {
                 $rows = [
+                    // ⚠️ วันสุดท้ายของ ก.พ. — ตัวที่ต้องพิสูจน์ว่าไม่ตกหล่น
                     ['record_date' => '2026-02-28', 'revenue' => 500.0, 'ad_cost' => 0.0],
-                    ['record_date' => '2026-03-31', 'revenue' => 500.0, 'ad_cost' => 0.0],
+                    // มี.ค. ต้องมีแถวที่อยู่ **ในช่วงเทียบ** ด้วย ไม่งั้นเทสต์วัดอย่างอื่นแทน
+                    ['record_date' => '2026-03-10', 'revenue' => 500.0, 'ad_cost' => 0.0],
+                    ['record_date' => '2026-03-31', 'revenue' => 900.0, 'ad_cost' => 0.0],
                 ];
 
                 return array_values(array_filter(
@@ -265,6 +279,10 @@ final class DashboardServiceComparisonTest extends TestCase
             ->buildDashboard(1, 1, 'month_this', null, null, null, '2026-03-31')['data'];
 
         // ก.พ. มี 28 วัน — ยอดวันที่ 28 ต้องถูกนับ ไม่ใช่ตกหล่นเพราะตัดที่วันที่ 31
+        // (ถ้าตกหล่น ยอดเดือนก่อนจะเป็น 0 แล้ว % จะเป็น null หรือค่าที่คิดจากฐานศูนย์)
         $this->assertSame(0.0, $data['comparison']['change']['total_revenue']);
+
+        // ⚠️ และวันตัดที่ประกาศต้องมีอยู่จริงในเดือนก่อน
+        $this->assertSame(28, $data['comparison']['compared_up_to_day']);
     }
 }
