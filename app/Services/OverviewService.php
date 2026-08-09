@@ -164,7 +164,7 @@ class OverviewService
 
         foreach ($rows as $index => $row) {
             $rows[$index]['profit_share'] = $shareAvailable
-                ? round(((float)($row['profit'] ?? 0) / $totalProfit) * 100, 1)
+                ? round(((float)($row['profit'] ?? 0) / $totalProfit) * 100, 2)
                 : null;
         }
 

@@ -550,7 +550,7 @@ $flashError = get_flash('error');
             background: rgba(255, 255, 255, 0.22)
         }
 
-        /* ⭐⭐ ตารางบนมือถือ — แปลงเป็นการ์ด 1 แถว/1 ใบ
+        /* ⭐⭐ ตารางบนจอแคบ — แปลงเป็นการ์ด 1 แถว/1 ใบ
            วัดจริงก่อนแก้ (จอ 375): ตารางประวัติกว้าง 727px ในกรอบ 317px · หน้ารวมร้าน
            กว้างกว่านั้น · ผลคือ **คอลัมน์กำไรอยู่นอกจอ** ทั้งที่เป็นตัวเลขเดียวที่แอปนี้
            มีไว้เพื่อบอก และเจ้าของร้านใช้มือถือเป็นหลัก
@@ -559,7 +559,7 @@ $flashError = get_flash('error');
            เติมค่าเดิม · ตัวกันวันอนาคต) ผูกกับโครง `tbody tr` + ลำดับ input อยู่
            การเปลี่ยนมาร์กอัปจะพังเงียบและไม่มี test runner ฝั่ง JS มาจับ
            หน้าที่ของ `data-label` คือเอาชื่อคอลัมน์จาก thead มาแปะหน้าค่าแต่ละช่อง */
-        @media (max-width: 767px) {
+        @media (max-width: 1023px) {
             .table-cards thead {
                 display: none
             }
@@ -626,6 +626,39 @@ $flashError = get_flash('error');
                 content: none
             }
 
+            /* ⭐ แถวที่ไม่มีข้อมูลเลยสักช่อง — ยุบเหลือบรรทัดเดียว ไม่ต้องกางเป็นการ์ดเต็มใบ
+               วัดจริงบนจอ 375 (หน้ารายปีของร้านที่เริ่มใช้กลางปี): 6 จาก 8 การ์ดมีแต่ขีด
+               กินพื้นที่ 1,884 จาก 2,512px = 75% ของตาราง ผู้ใช้ต้องปัดผ่านความว่างเปล่า
+               ราว 2 จอครึ่งกว่าจะถึงเดือนที่มีข้อมูลจริง */
+            .table-cards tbody tr.row-no-data {
+                margin-bottom: .375rem;
+                padding: 0
+            }
+
+            .table-cards tbody tr.row-no-data td:not(:first-child) {
+                display: none
+            }
+
+            .table-cards tbody tr.row-no-data td:first-child {
+                justify-content: space-between;
+                border-bottom: 0;
+                margin-bottom: 0;
+                padding: .625rem .75rem;
+                font-size: .875rem
+            }
+
+            /* ไม่ต้องมีป้าย "เดือน" นำหน้า — เหลือแค่ชื่อเดือนกับเหตุผลว่าทำไมว่าง */
+            .table-cards tbody tr.row-no-data td:first-child::before {
+                content: none
+            }
+
+            .table-cards tbody tr.row-no-data td:first-child::after {
+                content: attr(data-empty-note);
+                color: #94a3b8;
+                font-weight: 400;
+                font-size: .8125rem
+            }
+
             /* ตารางที่ยังต้องเลื่อนแนวนอน (ตารางกรอกหลายวัน) — ตรึงคอลัมน์วันที่ไว้ */
             .sticky-first-col tbody td:first-child,
             .sticky-first-col thead th:first-child {
@@ -639,7 +672,7 @@ $flashError = get_flash('error');
         /* ⭐ พื้นที่กดบนมือถือ — วัดจริงก่อนแก้: ปุ่ม "ลบ" 46×24px · ปุ่มลบแถว 11×18px
            ขณะที่เกณฑ์ที่ใช้กันคือ 44×44 · ขยาย "พื้นที่กด" ด้วย ::after ที่มองไม่เห็น
            แทนการขยายตัวปุ่ม หน้าตาจึงไม่เปลี่ยนแต่กดโดนขึ้นมาก */
-        @media (max-width: 767px) {
+        @media (max-width: 1023px) {
             .tap-target {
                 position: relative
             }

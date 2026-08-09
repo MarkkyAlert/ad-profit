@@ -104,8 +104,8 @@ $yearlyPrevProfit = null;
 $yearlyPrevHasData = false;
 $yearlyPrevUnavailable = false;
 $yearlyYoyPercent = null;
-$yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
-$yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
+$yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['text'];
+$yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['class'];
 
 if ($view === 'day') {
     $overviewDailyService = new OverviewDailyService($recordRepository, $shopRepository);
@@ -250,8 +250,8 @@ if ($view === 'day') {
         ? (float)$yearlySummary['yoy_profit_change_percent']
         : null;
 
-    $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
-    $yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
+    $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['text'];
+    $yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['class'];
 
     $chartRaw = (array)($yearlyData['chart'] ?? []);
     $chartLabels = array_map(
@@ -1008,9 +1008,9 @@ require __DIR__ . '/includes/header.php';
                                     <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
                                     <td class="px-3 py-2 font-medium <?= $rowProfitShare === null ? 'text-slate-400' : ($rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300') ?>">
-                                        <?= e($rowProfitShare === null ? '—' : formatPercent($rowProfitShare)) ?>
+                                        <?= e(format_share_percent($rowProfitShare)) ?>
                                     </td>
-                                    <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : '—') ?></td>
+                                    <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : no_value_text()) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -1022,8 +1022,8 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-3 py-3 <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($yearProfit)) ?></td>
                                 <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($yearRoas)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($yearProfitMargin)) ?></td>
-                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyShareTotal === null ? '—' : formatPercent($yearlyShareTotal)) ?></td>
-                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyDaysTotal > 0 ? 'สูงสุด ' . $yearlyDaysTotal . ' วัน' : '—') ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyShareTotal === null ? no_value_text() : formatPercent($yearlyShareTotal)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyDaysTotal > 0 ? 'สูงสุด ' . $yearlyDaysTotal . ' วัน' : no_value_text()) ?></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -1146,7 +1146,7 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-3 py-1.5 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
                                 <td class="px-3 py-1.5 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
                                 <td class="px-3 py-1.5 font-medium <?= $rowProfitShare !== null && $rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300' ?>">
-                                    <?= $rowProfitShare !== null ? e(formatPercent($rowProfitShare)) : '—' ?>
+                                    <?= e(format_share_percent($rowProfitShare)) ?>
                                 </td>
                                 <td class="px-3 py-1.5 font-medium">
                                     <?php
@@ -1186,11 +1186,11 @@ require __DIR__ . '/includes/header.php';
                             <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
                             <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
                             <td class="px-3 py-2 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
-                            <td class="px-3 py-2 text-slate-400">—</td>
-                            <td class="px-3 py-2 text-slate-400">—</td>
+                            <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
+                            <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
                             <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
                             <td class="px-3 py-2 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
-                            <td class="px-3 py-2 text-slate-400">—</td>
+                            <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
                         </tr>
                     </tfoot>
                 </table>

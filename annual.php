@@ -256,8 +256,8 @@ $prevYearHasData = ($summary['prev_year_has_data'] ?? false) === true;
 $prevYearUnavailable = ($summary['prev_year_unavailable'] ?? false) === true;
 
 // แสดง % การเปลี่ยนแปลง — helper กลาง (null ต้องไม่กลายเป็น 0%)
-$formatYoyPercent = static fn(?float $percent): string => format_change_badge($percent, '—')['text'];
-$yoyToneClass = static fn(?float $percent): string => format_change_badge($percent, '—')['class'];
+$formatYoyPercent = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['text'];
+$yoyToneClass = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['class'];
 
 $chartRaw = (array)($annualData['chart'] ?? []);
 $chartLabels = array_map(
@@ -538,10 +538,15 @@ require __DIR__ . '/includes/header.php';
                        เป็น "ตก 100%" ทั้งที่แค่ยังไม่ได้เริ่มบันทึก
                        (หลักเดียวกับทั้งระบบ: หน้าเว็บห้ามเดาแทนข้อมูล) */
                     $rowHasData = $rowDaysCount > 0;
-                    $blank = '—';
+                    $blank = no_value_text();
                     ?>
-                    <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap<?= $rowHasData ? '' : ' text-slate-400' ?>">
-                        <td class="px-3 py-2 text-slate-300 font-medium"><?= e($monthLabel($row)) ?></td>
+                    <?php /* ⚠️ `row-no-data` = บนจอแคบให้ยุบเหลือบรรทัดเดียว
+                             การ์ดบนมือถือแสดง 1 แถว/1 ใบ เดือนที่ไม่มีข้อมูลจึงกลายเป็นการ์ดเต็มใบ
+                             9 บรรทัดที่มีแต่ขีด · วัดจริงบนจอ 375: 6 จาก 8 การ์ดเป็นแบบนั้น
+                             กินพื้นที่ 1,884 จาก 2,512px (75%) = ต้องปัดผ่านความว่างเปล่าราว 2 จอครึ่ง
+                             กว่าจะถึงเดือนที่มีข้อมูลจริง (CSS อยู่ใน `includes/header.php`) */ ?>
+                    <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap<?= $rowHasData ? '' : ' row-no-data text-slate-400' ?>">
+                        <td class="px-3 py-2 text-slate-300 font-medium" data-empty-note="ยังไม่มีข้อมูล"><?= e($monthLabel($row)) ?></td>
                         <td class="px-3 py-2 font-medium <?= $rowHasData ? 'text-orange-400' : 'text-slate-400' ?>"><?= e($rowHasData ? formatMoney($rowRevenue) : $blank) ?></td>
                         <td class="px-3 py-2 font-medium <?= $rowHasData ? 'text-cyan-400' : 'text-slate-400' ?>"><?= e($rowHasData ? formatMoney($rowAdCost) : $blank) ?></td>
                         <td class="px-3 py-2 font-bold <?= !$rowHasData ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?>"><?= e($rowHasData ? formatMoney($rowProfit) : $blank) ?></td>
@@ -564,9 +569,9 @@ require __DIR__ . '/includes/header.php';
                     <td class="px-3 py-3 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
                     <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
                     <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
-                    <td class="px-3 py-3 text-slate-300"><?= e($totalDaysCount > 0 ? $totalDaysCount . ' วัน' : '—') ?></td>
+                    <td class="px-3 py-3 text-slate-300"><?= e($totalDaysCount > 0 ? $totalDaysCount . ' วัน' : no_value_text()) ?></td>
                     <td class="px-3 py-3 <?= $totalProfitPerDay === null ? 'text-slate-400' : ($totalProfitPerDay >= 0 ? 'text-green-400' : 'text-red-400') ?>">
-                        <?= e($totalProfitPerDay === null ? '—' : formatMoney($totalProfitPerDay)) ?>
+                        <?= e($totalProfitPerDay === null ? no_value_text() : formatMoney($totalProfitPerDay)) ?>
                     </td>
                     <td class="px-3 py-3 <?= e($yoyToneClass($yoyPercent)) ?>"><?= e($formatYoyPercent($yoyPercent)) ?></td>
                 </tr>

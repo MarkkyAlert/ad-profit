@@ -41,10 +41,31 @@ if ($action === 'upsert') {
     $adCostParsed = parse_decimal_input($_POST['ad_cost'] ?? '', false);
     $note = isset($_POST['note']) ? (string)$_POST['note'] : null;
 
-    if (($revenueParsed['valid'] ?? false) !== true || ($adCostParsed['valid'] ?? false) !== true) {
+    // ⚠️⚠️ บอกให้ชัดว่า "ช่องไหน" และ "ทำไม" — ไม่ใช่ข้อความรวมที่ครอบทุกความผิดพลาด
+    //
+    // เดิมตอบ 'กรุณากรอกรายได้และค่าแอดให้ถูกต้อง' อันเดียวสำหรับ 3 เรื่องที่ต่างกันสิ้นเชิง:
+    // ทศนิยมเกิน 2 ตำแหน่ง · พิมพ์ `12,500` (รูปแบบเงินบาทที่คนพิมพ์กันจริง) · เว้นช่องว่าง
+    // ⚠️ ทางไฟล์ CSV ซึ่งใช้นาน ๆ ครั้ง กลับอธิบายครบถ้วนอยู่แล้ว (`AMOUNT_FORMAT_HINT`)
+    // ส่วนฟอร์มนี้ซึ่งใช้ **ทุกวัน** ได้ข้อความที่ไม่บอกอะไรเลย — ใช้ข้อความเดียวกันทั้งสองทาง
+    $amountProblem = static function (array $parsed, string $label, string $raw): ?string {
+        if (($parsed['valid'] ?? false) === true) {
+            return null;
+        }
+
+        if (trim($raw) === '') {
+            return 'กรุณากรอก' . $label;
+        }
+
+        return $label . ' "' . $raw . '" ' . RecordService::AMOUNT_FORMAT_HINT;
+    };
+
+    $amountError = $amountProblem($revenueParsed, 'รายได้', (string)($_POST['revenue'] ?? ''))
+        ?? $amountProblem($adCostParsed, 'ค่าแอด', (string)($_POST['ad_cost'] ?? ''));
+
+    if ($amountError !== null) {
         $respond([
             'success' => false,
-            'error' => 'กรุณากรอกรายได้และค่าแอดให้ถูกต้อง',
+            'error' => $amountError,
         ], 422, '/add-record.php');
     }
 

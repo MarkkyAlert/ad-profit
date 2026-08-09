@@ -599,11 +599,22 @@ require __DIR__ . '/includes/header.php';
     $bestDayRow = isset($statistics['best_day']) && is_array($statistics['best_day']) ? $statistics['best_day'] : null;
     $worstDayRow = isset($statistics['worst_day']) && is_array($statistics['worst_day']) ? $statistics['worst_day'] : null;
     $dayExtremesComparable = extremes_are_comparable($bestDayRow, $worstDayRow, 'record_date');
+
+    /* ⚠️⚠️ ทุกวันขาดทุน = ห้ามเรียกวันไหนว่า "กำไรดีสุด"
+       วัดจริง (ร้านที่ขาดทุนทุกวัน 9 วัน): การ์ดขึ้น "วันกำไรดีสุด 6 ส.ค. 2569 (฿-7,346)"
+       ตัวเลขถูกตามคณิตศาสตร์ (ขาดทุนน้อยสุด) แต่คำที่ใช้ขัดกับตัวเลขที่อยู่ข้าง ๆ ในการ์ดเดียวกัน
+       · ร้านที่กำลังขาดทุนคือร้านที่ต้องการอ่านหน้านี้ให้เข้าใจมากที่สุด
+       (หลักเดียวกับทั้งระบบ: ห้ามให้คำกับตัวเลขพูดคนละเรื่อง) */
+    $bestDayProfit = $bestDayRow === null ? null : (float)($bestDayRow['profit'] ?? 0);
+    $allDaysAreLosses = $dayExtremesComparable && $bestDayProfit !== null && $bestDayProfit < 0;
+    $bestDayTitle = $allDaysAreLosses ? 'วันที่ขาดทุนน้อยสุด' : 'วันกำไรดีสุด';
+    $worstDayTitle = $allDaysAreLosses ? 'วันที่ขาดทุนมากสุด' : 'วันกำไรแย่สุด';
     ?>
     <article class="stat-card s-best">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันกำไรดีสุด</p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400"><?= e($bestDayTitle) ?></p>
         <?php if ($dayExtremesComparable): ?>
-            <p class="mt-1 text-sm font-semibold text-green-400"><?= e($formatDayMetric($bestDayRow)) ?></p>
+            <?php // ขาดทุนน้อยสุดก็ยังขาดทุน — ไม่ควรเป็นสีเขียวเหมือนวันที่ได้กำไรจริง ?>
+            <p class="mt-1 text-sm font-semibold <?= $allDaysAreLosses ? 'text-amber-400' : 'text-green-400' ?>"><?= e($formatDayMetric($bestDayRow)) ?></p>
         <?php else: ?>
             <p class="mt-1 text-sm font-semibold text-slate-400">ยังเทียบไม่ได้</p>
             <p class="text-xs text-slate-400">ต้องมีข้อมูลตั้งแต่ 2 วันขึ้นไปที่กำไรต่างกัน</p>
@@ -611,7 +622,7 @@ require __DIR__ . '/includes/header.php';
     </article>
 
     <article class="stat-card s-worst">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">วันกำไรแย่สุด</p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400"><?= e($worstDayTitle) ?></p>
         <?php if ($dayExtremesComparable): ?>
             <p class="mt-1 text-sm font-semibold text-red-400"><?= e($formatDayMetric($worstDayRow)) ?></p>
         <?php else: ?>
@@ -866,9 +877,9 @@ require __DIR__ . '/includes/header.php';
                         <tr class="border-b border-white/[0.06] <?= e($rowClass) ?>">
                             <td class="px-3 py-2 font-medium text-slate-300"><?= e(formatThaiWeekday($rowWeekday)) ?></td>
                             <?php if ($rowSampleCount === 0 || $rowAvgProfit === null): ?>
-                                <td class="px-3 py-2 text-slate-400">—</td>
-                                <td class="px-3 py-2 text-slate-400">—</td>
-                                <td class="px-3 py-2 text-slate-400">—</td>
+                                <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
+                                <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
+                                <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
                             <?php else: ?>
                                 <td class="px-3 py-2 font-semibold <?= ((float)$rowAvgProfit) >= 0 ? 'text-green-400' : 'text-red-400' ?>">
                                     <?= e(formatMoney((float)$rowAvgProfit)) ?>

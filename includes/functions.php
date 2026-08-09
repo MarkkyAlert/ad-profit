@@ -49,14 +49,47 @@ function formatMoney(float|int $value): string
     return '฿' . number_format($amount, $decimals);
 }
 
+/**
+ * เครื่องหมายที่ใช้แทน "ไม่มีค่า" ในตารางและการ์ด — จุดเดียวของกติกา
+ *
+ * ⚠️ เดิมกระจายเป็นตัวอักษรดิบ 2 แบบปนกัน: `–` (U+2013) ที่ `formatRoas()`/`formatPercent()`
+ * กับ `—` (U+2014) ที่หน้าเว็บพิมพ์เอง · หน้าตาใกล้กันมากจนไม่มีใครสังเกต แต่ในตารางเดียวกัน
+ * ช่อง ROAS กับช่องเงินใช้คนละตัว (เจอตอนตรวจเดือนที่ไม่มีข้อมูลในหน้ารายปี)
+ */
+function no_value_text(): string
+{
+    return '–';
+}
+
+/**
+ * แสดง "สัดส่วน %" โดยไม่ให้ค่าที่ไม่ใช่ศูนย์ถูกปัดจนอ่านว่าเป็นศูนย์
+ *
+ * ⚠️ วัดจริง: ร้านที่มีกำไร ฿71,648 จริง ถูกแสดงเป็น `0.0%` เพราะอีกร้านหนึ่งกำไรสูงกว่า
+ * เป็นพันเท่า · ผู้ใช้อ่านว่า "ร้านนี้ไม่ทำกำไรเลย" ทั้งที่คอลัมน์กำไรข้าง ๆ บอกว่ามี
+ * (หลักเดียวกับทั้งระบบ: ตัวเลขกับคำที่อยู่ข้าง ๆ ต้องไม่ขัดกัน)
+ */
+function format_share_percent(?float $value): string
+{
+    if ($value === null) {
+        return no_value_text();
+    }
+
+    // ไม่ใช่ศูนย์จริง แต่ปัด 1 ตำแหน่งแล้วกลายเป็น 0.0
+    if ($value !== 0.0 && abs($value) < 0.05) {
+        return $value > 0 ? '<0.1%' : '>-0.1%';
+    }
+
+    return formatPercent($value);
+}
+
 function formatRoas(?float $value): string
 {
-    return $value === null ? '–' : number_format($value, 2);
+    return $value === null ? no_value_text() : number_format($value, 2);
 }
 
 function formatPercent(?float $value): string
 {
-    return $value === null ? '–' : number_format($value, 1) . '%';
+    return $value === null ? no_value_text() : number_format($value, 1) . '%';
 }
 
 /**

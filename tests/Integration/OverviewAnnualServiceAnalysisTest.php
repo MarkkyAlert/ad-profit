@@ -121,9 +121,12 @@ final class OverviewAnnualServiceAnalysisTest extends IntegrationTestCase
         }
 
         // สัดส่วนคิดจากฐานของ user ตัวเองเท่านั้น (2000 + 1000 = 3000)
+        // ⚠️ Service เก็บทศนิยม 2 ตำแหน่ง (หน้าเว็บยังแสดง 1 ตำแหน่งเหมือนเดิม) —
+        // ต้องพอให้แยก "ศูนย์จริง" ออกจาก "เล็กมากจนปัดแล้วเป็นศูนย์" ได้
+        // ดู `format_share_percent()` และเทสต์ `testATinyShareIsNotReportedAsZero()`
         $shops = $this->byShopName($data['shops']);
-        $this->assertSame(66.7, $shops['ร้าน A']['profit_share']);
-        $this->assertSame(33.3, $shops['ร้าน B']['profit_share']);
+        $this->assertSame(66.67, $shops['ร้าน A']['profit_share']);
+        $this->assertSame(33.33, $shops['ร้าน B']['profit_share']);
     }
 
     public function testFutureDatedRecordsDoNotAffectShareOrDays(): void
@@ -141,7 +144,38 @@ final class OverviewAnnualServiceAnalysisTest extends IntegrationTestCase
 
         $this->assertSame(1, $shops['ร้าน B']['days_count']);
         $this->assertSame(1000.0, $shops['ร้าน B']['profit']);
-        $this->assertSame(66.7, $shops['ร้าน A']['profit_share']);
-        $this->assertSame(33.3, $shops['ร้าน B']['profit_share']);
+        $this->assertSame(66.67, $shops['ร้าน A']['profit_share']);
+        $this->assertSame(33.33, $shops['ร้าน B']['profit_share']);
+    }
+
+    /**
+     * ⭐⭐ ร้านที่มีกำไรจริงต้องไม่ถูกรายงานว่าสัดส่วน "0.0%"
+     *
+     * วัดจริง: ร้านที่กำไร ฿71,648 ถูกแสดงเป็น `0.0%` เพราะอีกร้านหนึ่งกำไรสูงกว่าเป็นพันเท่า
+     * ผู้ใช้อ่านว่า "ร้านนี้ไม่ทำกำไรเลย" ทั้งที่คอลัมน์กำไรข้าง ๆ บนแถวเดียวกันบอกว่ามี
+     *
+     * ⚠️ ต้องล็อก **2 อย่าง**: Service ต้องเก็บค่าที่ไม่ใช่ศูนย์ไว้ (ไม่ปัดทิ้ง)
+     * และตัวแสดงผลต้องไม่พิมพ์ว่าเป็นศูนย์ — ล็อกอย่างเดียวแก้ครึ่งเดียวแล้วยังพังอยู่
+     */
+    public function testATinyShareIsNotReportedAsZero(): void
+    {
+        $userId = $this->createUser();
+        $big = $this->createShop($userId, 'ร้านใหญ่');
+        $small = $this->createShop($userId, 'ร้านเล็ก');
+
+        // ร้านเล็กมีกำไรจริง แต่คิดเป็นสัดส่วนแล้วราว 0.01%
+        $this->createRecord($big, '2026-08-10', 10000000.0, 0.0);
+        $this->createRecord($small, '2026-08-10', 1000.0, 0.0);
+
+        $shops = $this->byShopName($this->makeService()->buildYearlyOverview($userId, 2026, self::TODAY)['data']['shops']);
+        $tinyShare = $shops['ร้านเล็ก']['profit_share'];
+
+        $this->assertNotSame(0.0, $tinyShare, 'Service ปัดสัดส่วนของร้านที่มีกำไรจริงจนเหลือศูนย์');
+        $this->assertGreaterThan(0.0, $tinyShare);
+        $this->assertStringNotContainsString(
+            '0.0%',
+            format_share_percent((float)$tinyShare),
+            'หน้าเว็บยังพิมพ์ว่าร้านที่มีกำไรจริงมีสัดส่วน 0.0%'
+        );
     }
 }

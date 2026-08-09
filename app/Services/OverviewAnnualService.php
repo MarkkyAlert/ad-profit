@@ -249,7 +249,7 @@ class OverviewAnnualService
                 // กันเทียบร้านที่กรอก 3 วันกับร้านที่กรอกทั้งปีตรง ๆ
                 'days_count' => (int)($shopTotal['days_count'] ?? 0),
                 // กำไรรวมติดลบ/เท่าทุน → สัดส่วนไม่มีความหมาย (เทียบกับฐานที่ไม่ใช่ "ของทั้งหมด")
-                'profit_share' => $profit > 0 ? round(($shopProfit / $profit) * 100, 1) : null,
+                'profit_share' => $profit > 0 ? round(($shopProfit / $profit) * 100, 2) : null,
             ];
         }
 

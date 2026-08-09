@@ -1207,7 +1207,9 @@ require __DIR__ . '/includes/header.php';
                             <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($adCost)) ?></td>
                             <td class="px-3 py-2 <?= $profit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($profit)) ?></td>
                             <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($roas)) ?></td>
-                            <td class="px-3 py-2 text-slate-400"><?= $note !== '' ? e($note) : '-' ?></td>
+                            <?php /* เพดานความกว้าง + ตัดบรรทัด เหตุผลเดียวกับตารางในหน้าประวัติ
+                                     (โน้ตยาวเคยดันตารางจนคอลัมน์ท้าย ๆ หลุดออกนอกจอ) */ ?>
+                            <td class="px-3 py-2 text-slate-400 whitespace-normal break-words lg:max-w-[16rem] lg:align-top"><?= $note !== '' ? e($note) : '-' ?></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

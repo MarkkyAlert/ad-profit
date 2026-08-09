@@ -177,7 +177,13 @@ require __DIR__ . '/includes/header.php';
                                 <?php $compareBadge = format_change_badge($comparePercent); ?>
                                 <span class="<?= e($compareBadge['class']) ?>"><?= e($compareBadge['text']) ?></span>
                             </td>
-                            <td class="px-3 py-2 text-slate-400"><?= $note !== '' ? e($note) : '-' ?></td>
+                            <?php /* ⚠️⚠️ ช่องโน้ตต้องมีเพดานความกว้างและตัดบรรทัดได้
+                                     แถวตั้ง `whitespace-nowrap` ไว้ให้ตัวเลขไม่ตัดคำ แต่โน้ตยาวได้ถึง 255 ตัว
+                                     · วัดจริงบนจอ 1280: โน้ต 223 ตัวทำให้ช่องนี้กว้าง 1,396px ดันตารางเป็น
+                                       2,249px ในกรอบ 1,078px → **ปุ่มแก้ไข/ลบไปอยู่ที่ x=2,212 คือนอกจอ**
+                                       ผู้ใช้แก้หรือลบรายการนั้นไม่ได้จนกว่าจะเลื่อนตารางไปทางขวาไกลมาก
+                                     · เป็นการปิดกั้นการกระทำหลักด้วยข้อมูลที่ระบบเองอนุญาตให้กรอก */ ?>
+                            <td class="px-3 py-2 text-slate-400 whitespace-normal break-words lg:max-w-[16rem] lg:align-top"><?= $note !== '' ? e($note) : '-' ?></td>
                             <td class="px-3 py-2 text-center">
                                 <div class="inline-flex items-center gap-2">
                                     <button
@@ -265,7 +271,8 @@ require __DIR__ . '/includes/header.php';
 
             <div class="md:col-span-2 flex items-center justify-end gap-2">
                 <button type="button" id="cancel-edit-modal" class="btn-ghost px-4 py-2 text-sm">ยกเลิก</button>
-                <button type="submit" class="btn-primary px-4 py-2 text-sm">💾 บันทึกการแก้ไข</button>
+                <?php /* ส้ม = ปุ่มหลักของทั้งระบบ (หน้าต่างนี้ตกสำรวจตอนรวมสีปุ่ม) */ ?>
+                <button type="submit" class="btn-orange px-4 py-2 text-sm">💾 บันทึกการแก้ไข</button>
             </div>
         </form>
     </div>
