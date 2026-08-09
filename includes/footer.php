@@ -85,12 +85,27 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
 
 <script>
     (function() {
+        /* ⚠️⚠️ แถบแจ้งผลเดิมหายใน 3 วินาที ซึ่งสั้นเกินไปในหน้าที่มีคำเตือนถาวรอยู่ด้วย
+           · วัดจริงที่หน้าบันทึก: กดบันทึกสำเร็จ → เห็นแถบเขียว "บันทึกข้อมูลเรียบร้อยแล้ว"
+             แวบหนึ่ง → 3 วินาทีต่อมาเหลือแต่แถบเหลืองถาวรว่า "วันที่นี้มีข้อมูลอยู่แล้ว
+             กดบันทึกจะเป็นการแก้ไขทับ" · คนที่ละสายตาไปหยิบใบเสร็จใบถัดไป กลับมาเห็นแต่
+             คำเตือน ไม่เห็นคำยืนยัน แล้วอาจกดซ้ำเพราะไม่แน่ใจว่าสำเร็จหรือยัง
+           · ข้อความผิดพลาดอยู่นานกว่า เพราะต้องใช้เวลาอ่านและมักต้องทำอะไรต่อ
+           · แตะที่แถบเพื่อปิดเองได้ (บางคนอยากให้พ้นทางเลย) */
         const toast = document.getElementById('app-toast');
         if (toast) {
-            setTimeout(() => {
+            const dismissToast = () => {
+                if (!toast.isConnected) {
+                    return;
+                }
+
                 toast.classList.add('opacity-0', 'transition', 'duration-300');
                 setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            };
+
+            const isError = toast.getAttribute('data-toast-kind') === 'error';
+            setTimeout(dismissToast, isError ? 10000 : 6000);
+            toast.addEventListener('click', dismissToast);
         }
 
         const loading = document.getElementById('global-loading');

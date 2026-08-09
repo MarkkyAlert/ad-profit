@@ -523,6 +523,19 @@ require __DIR__ . '/includes/header.php';
           // และ "เดือนนี้ทำได้ ฿0 · ยังไม่มีข้อมูลในช่วงนี้" พร้อมกันในหน้าเดียว ?>
 <?php else: ?>
 
+<?php /* ⚠️⚠️ ร้านที่ยังไม่เคยกรอกอะไรเลย = ไม่ต้องกางการ์ดตัวเลขที่เป็น ฿0 ทั้งหมด
+         แถบชวนเริ่ม + ข้อความ "ยังไม่มีข้อมูล" ด้านบนบอกไปครบแล้ว การ์ดที่ตามมาไม่ได้
+         เพิ่มอะไรนอกจากความยาว
+         · วัดจริงบนจอ 375 (บัญชีที่เพิ่งสมัคร): หน้ายาว 2,107px = 2.6 จอ ในนั้นเป็น
+           การ์ดที่เป็นศูนย์ทั้งใบ 6 ใบ รวม 640px
+         · ⚠️ **กราฟถูกซ่อนไปตั้งแต่รอบก่อนแล้ว** (`<canvas>` เหลือ 0 ในสภาพนี้)
+           การ์ดจึงเป็นของที่ตกสำรวจ — หน้าเดียวกันซ่อนอย่างหนึ่งแต่ไม่ซ่อนอีกอย่าง
+         · ⚠️ เงื่อนไขคือ "ร้านนี้ไม่เคยมีข้อมูลเลย" ไม่ใช่ "ช่วงที่เลือกไม่มีข้อมูล" —
+           ผู้ใช้ที่เลือกช่วงเองแล้วได้ ฿0 ยังต้องเห็นเลข ฿0 เพราะนั่นคือคำตอบของคำถามเขา
+         · ⚠️⚠️ ต้องเป็น `if` ของตัวเอง **ห้ามต่อเป็น `elseif` ของ `$dashboardFailed`** —
+           `else:` ของบล็อกนั้นครอบยาวไปจนจบหน้า (รวมส่วนเป้าหมาย/กราฟ/ตาราง)
+           ต่อเป็น elseif แล้วส่วนเป้าหมายหายไปทั้งก้อน (เผลอทำมาแล้ว จับได้ตอนวัดหน้าจริง) */ ?>
+<?php if (!$showFirstRecordInvite): ?>
 <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <article class="stat-card s-revenue">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวม</p>
@@ -558,14 +571,17 @@ require __DIR__ . '/includes/header.php';
         <?php endif; ?>
     </article>
 </section>
+<?php endif; ?>
 
-<?php if ($comparisonEnabled): ?>
+<?php if ($comparisonEnabled && !$showFirstRecordInvite): ?>
     <section class="section-card mt-4 p-4 text-sm text-slate-400">
         เทียบผลของ <span class="font-semibold text-slate-200"><?= e(formatThaiMonth($selectedMonth)) ?></span>
         กับ <span class="font-semibold text-slate-200"><?= e(formatThaiMonth($previousMonth)) ?></span>
     </section>
 <?php endif; ?>
 
+<?php /* ร้านที่ยังไม่เคยกรอกอะไรเลย — ชุดการ์ดนี้ก็ไม่ต้องกาง (เหตุผลเดียวกับชุดบน) */ ?>
+<?php if (!$showFirstRecordInvite): ?>
 <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <?php
     $avgProfitPerDay = isset($statistics['avg_profit_per_day']) && $statistics['avg_profit_per_day'] !== null
@@ -630,6 +646,7 @@ require __DIR__ . '/includes/header.php';
         <?php endif; ?>
     </article>
 </section>
+<?php endif; ?>
 
 <section class="section-card mt-6 p-5">
     <div class="flex flex-wrap items-start justify-between gap-3">
