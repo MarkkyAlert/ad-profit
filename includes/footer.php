@@ -12,7 +12,10 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
 </main>
 
 <?php if ($isSignedIn): ?>
-<nav class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#0d1526]/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
+<?php /* ⚠️ landmark ต้องมีชื่อ — โปรแกรมอ่านหน้าจอมีคำสั่ง "ข้ามไปเมนู" ถ้าไม่มีชื่อ
+         ผู้ใช้จะได้ยินแค่ "การนำทาง" โดยไม่รู้ว่าเมนูอะไร
+         (ระบบนี้มี <nav> เดียวต่อหน้า แต่ชื่อยังช่วยตอนอ่านรายการ landmark ทั้งหน้า) */ ?>
+<nav aria-label="เมนูหลัก" class="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.07] bg-[#0d1526]/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
     <?php /* ป้ายเมนูเดิม 10px ซึ่งเล็กกว่าตัวอักษรที่เล็กที่สุดในหน้าอื่นทั้งระบบ ·
              ขยับเป็น 11px ยังพอดีทั้ง 5 ปุ่มบนจอ 320px (วัดแล้ว) */ ?>
     <div class="mx-auto grid max-w-6xl <?= e($navGridClass) ?> gap-0.5 py-1.5 text-center text-[11px] text-slate-400 sm:gap-1 sm:py-2 sm:text-xs">
@@ -39,7 +42,10 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
 </nav>
 <?php endif; ?>
 
-<div id="global-loading" class="modal-bg fixed inset-0 z-[60] hidden items-center justify-center">
+<?php /* ⚠️ ต้องประกาศให้โปรแกรมอ่านหน้าจอรู้ — คนที่มองไม่เห็นกดบันทึกแล้วเงียบสนิท
+         จนหน้าเปลี่ยน ไม่มีอะไรบอกว่าระบบกำลังทำงานอยู่หรือค้าง
+         `role="status"` ประกาศแบบไม่ขัดจังหวะ (ต่างจาก alert ที่ใช้กับข้อผิดพลาด) */ ?>
+<div id="global-loading" role="status" aria-live="polite" class="modal-bg fixed inset-0 z-[60] hidden items-center justify-center">
     <div class="section-card flex items-center gap-3 px-5 py-4 text-sm text-slate-300 shadow-2xl shadow-black/50">
         <span class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-indigo-500/40 border-t-indigo-500"></span>
         <span>กำลังประมวลผล...</span>
@@ -171,6 +177,70 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
 
         markScrollRegions();
         window.addEventListener('resize', markScrollRegions);
+
+        /* ⭐ ช่องที่ต้องกรอกต้องเห็นได้ด้วยตา ไม่ใช่รู้เฉพาะตอนกดส่งแล้วไม่ผ่าน
+           โปรแกรมอ่านหน้าจอรู้อยู่แล้วจาก attribute `required` — ที่ขาดคือฝั่งคนตาดี
+           เดิมรู้ได้ทางเดียวคืออนุมานจากช่องโน้ตที่เขียนว่า "(ไม่บังคับ)"
+
+           ⚠️ ติดป้ายเฉพาะฟอร์มที่ **มีทั้งช่องบังคับและไม่บังคับปนกัน** — ฟอร์มที่ทุกช่อง
+              บังคับหมด (เข้าสู่ระบบ · ลืมรหัสผ่าน) การเขียน "จำเป็น" ทุกบรรทัดคือเสียงรบกวน
+              ที่ไม่ได้บอกอะไรใหม่เลย
+           ⚠️ ป้ายเป็นของสายตาล้วน จึง `aria-hidden` — ไม่งั้นจะได้ยินคำว่า "จำเป็น" สองรอบ */
+        document.querySelectorAll('form').forEach((form) => {
+            const fields = Array.from(form.querySelectorAll('input, select, textarea'))
+                .filter((el) => !['hidden', 'submit', 'button', 'image'].includes((el.type || '').toLowerCase()));
+
+            const required = fields.filter((el) => el.required);
+            if (required.length === 0 || required.length === fields.length) {
+                return;
+            }
+
+            required.forEach((el) => {
+                if (!el.id) {
+                    return;
+                }
+
+                const label = form.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+                if (!label || label.querySelector('.label-required')) {
+                    return;
+                }
+
+                const mark = document.createElement('span');
+                mark.className = 'label-required';
+                mark.setAttribute('aria-hidden', 'true');
+                mark.textContent = 'จำเป็น';
+                label.appendChild(mark);
+            });
+        });
+
+        /* ⭐ ตั้งชื่อให้ตาราง โดยชี้ไปที่หัวข้อที่อยู่เหนือมัน
+           คนที่ใช้โปรแกรมอ่านหน้าจอมักกดข้ามทีละตาราง — เดิมได้ยินแค่ "ตาราง 8 แถว"
+           โดยไม่รู้ว่าตารางอะไร (ทั้งระบบมี 10 ตาราง ไม่มีตัวไหนมีชื่อเลย)
+           ⚠️ ชี้ไปที่หัวข้อจริง ไม่พิมพ์ชื่อใหม่ — วันที่มีคนแก้หัวข้อ ชื่อที่ประกาศจะตามไปเอง
+              (หลักเดียวกับป้ายของกล่องเลื่อน และกับ `aria-labelledby` ของหน้าต่างซ้อน) */
+        let tableNameSeq = 0;
+        document.querySelectorAll('table').forEach((table) => {
+            if (table.getAttribute('aria-label') || table.getAttribute('aria-labelledby')) {
+                return;
+            }
+
+            if (table.tCaption) {
+                return;
+            }
+
+            const card = table.closest('section, details, div.section-card');
+            const heading = card ? card.querySelector('h1, h2, h3, summary') : null;
+            if (!heading) {
+                return;
+            }
+
+            if (!heading.id) {
+                tableNameSeq += 1;
+                heading.id = 'table-heading-' + tableNameSeq;
+            }
+
+            table.setAttribute('aria-labelledby', heading.id);
+        });
 
         const loading = document.getElementById('global-loading');
         const showLoading = () => {
@@ -463,6 +533,23 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
 
                         if (!cell.hasAttribute('data-label') && heading !== '') {
                             cell.setAttribute('data-label', heading);
+                        }
+
+                        /* ⚠️⚠️ ป้ายต้องเป็น "ข้อความจริงใน DOM" ไม่ใช่ข้อความที่ CSS สร้าง
+                           บนจอแคบ `thead` ถูก `display: none` = หัวคอลัมน์หายไปจากสิ่งที่
+                           โปรแกรมอ่านหน้าจอเห็น · ตัวเดียวที่เหลือบอกว่าเลขนี้คืออะไรคือป้ายนี้
+                           ถ้าใช้ `::before { content: attr(data-label) }` การอ่านออกจะขึ้นกับ
+                           โปรแกรมอ่านหน้าจอแต่ละตัว (Chrome/Firefox อ่าน · VoiceOver ไม่แน่นอน)
+                           ซึ่งผู้ใช้ส่วนใหญ่ของแอปนี้อยู่บน iPhone พอดี
+                           · ใส่เป็น <span> จริงจึงอ่านได้ทุกตัว และซ่อนด้วย CSS ตอนจอกว้าง
+                             (ตอนนั้น `thead` โผล่มาทำหน้าที่แทนอยู่แล้ว)
+                           ⚠️ ต้องกันเติมซ้ำ — ฟังก์ชันนี้ถูกเรียกได้มากกว่าหนึ่งครั้ง */
+                        const label = cell.getAttribute('data-label') || '';
+                        if (label !== '' && !cell.querySelector(':scope > .cell-label')) {
+                            const tag = document.createElement('span');
+                            tag.className = 'cell-label';
+                            tag.textContent = label;
+                            cell.prepend(tag);
                         }
 
                         // กำไรคือเหตุผลที่แอปนี้มีอยู่ — บนการ์ดต้องเด่นกว่าช่องอื่น

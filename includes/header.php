@@ -48,6 +48,11 @@ $flashError = get_flash('error');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($pageTitle) ?> - <?= e(APP_NAME) ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <?php /* ⭐ สีปุ่มมาจากไฟล์เดียวกันทั้งระบบ — ห้ามเขียนสีปุ่มเองในหน้าไหน
+             เคยพลาดมาแล้ว: แก้คอนทราสต์ที่ header.php ที่เดียว แต่หน้ากลุ่มบัญชี
+             นิยาม .btn-orange ซ้ำไว้เอง ปุ่ม "เข้าสู่ระบบ" จึงยังตกเกณฑ์อยู่ */ ?>
+    <?php require __DIR__ . '/brand-colors.php'; ?>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -304,7 +309,7 @@ $flashError = get_flash('error');
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            background: linear-gradient(135deg, var(--btn-primary-from), var(--btn-primary-to));
             box-shadow: 0 4px 14px rgba(99, 102, 241, .40);
             color: #fff;
             font-weight: 600;
@@ -338,7 +343,7 @@ $flashError = get_flash('error');
         }
 
         .btn-orange {
-            background: linear-gradient(135deg, #c2410c, #9a3412);
+            background: linear-gradient(135deg, var(--btn-orange-from), var(--btn-orange-to));
             box-shadow: 0 4px 14px rgba(249, 115, 22, .40);
             color: #fff;
             font-weight: 600;
@@ -372,7 +377,7 @@ $flashError = get_flash('error');
         }
 
         .btn-teal {
-            background: linear-gradient(135deg, #0e7490, #0369a1);
+            background: linear-gradient(135deg, var(--btn-teal-from), var(--btn-teal-to));
             box-shadow: 0 4px 14px rgba(6, 182, 212, .40);
             color: #fff;
             font-weight: 600;
@@ -413,7 +418,7 @@ $flashError = get_flash('error');
         }
 
         .btn-danger {
-            background: linear-gradient(135deg, #dc2626, #991b1b);
+            background: linear-gradient(135deg, var(--btn-danger-from), var(--btn-danger-to));
             box-shadow: 0 4px 14px rgba(239, 68, 68, .40);
             color: #fff;
             font-weight: 600;
@@ -587,10 +592,12 @@ $flashError = get_flash('error');
                 border: 0
             }
 
-            /* ชื่อคอลัมน์ที่แปะหน้าค่า — ไม่มี label ก็ให้ค่ากินเต็มบรรทัด */
-            .table-cards tbody td[data-label]::before,
-            .table-cards tfoot td[data-label]::before {
-                content: attr(data-label);
+            /* ชื่อคอลัมน์ที่แปะหน้าค่า — ไม่มี label ก็ให้ค่ากินเต็มบรรทัด
+               ⚠️ เป็น <span> จริงที่สคริปต์ใน footer.php ใส่ให้ ไม่ใช่ `content:` ของ CSS
+                  เพราะข้อความที่ CSS สร้างขึ้น โปรแกรมอ่านหน้าจอบางตัวไม่อ่าน (โดยเฉพาะ
+                  VoiceOver บน iPhone) และบนจอแคบมันคือสิ่งเดียวที่บอกว่าเลขนี้คืออะไร */
+            .table-cards tbody td .cell-label,
+            .table-cards tfoot td .cell-label {
                 color: #94a3b8;
                 font-weight: 500;
                 text-align: left;
@@ -685,6 +692,28 @@ $flashError = get_flash('error');
                 width: max(100%, 44px);
                 height: max(100%, 44px);
                 transform: translate(-50%, -50%)
+            }
+        }
+
+        /* ป้าย "จำเป็น" ท้ายชื่อช่องที่ต้องกรอก — สคริปต์ใน footer.php ใส่ให้เฉพาะฟอร์ม
+           ที่มีช่องบังคับกับไม่บังคับปนกัน · สีต้องผ่านคอนทราสต์เหมือนข้อความอื่น */
+        .label-required {
+            margin-left: .375rem;
+            font-size: .6875rem;
+            font-weight: 500;
+            color: #fb923c
+        }
+
+        /* ป้ายชื่อคอลัมน์ในโหมดการ์ด: จอกว้างไม่ต้องมี เพราะ <thead> โผล่มาแทนแล้ว
+           ⚠️ ซ่อนด้วย display:none ตั้งใจ — ตอนจอกว้างโปรแกรมอ่านหน้าจอได้หัวตารางจริง
+              ถ้าปล่อยไว้จะได้ยินชื่อคอลัมน์สองรอบต่อหนึ่งช่อง */
+        .cell-label {
+            display: none
+        }
+
+        @media (max-width: 1023px) {
+            .table-cards .cell-label {
+                display: inline
             }
         }
 

@@ -130,14 +130,14 @@ require __DIR__ . '/includes/header.php';
         <table class="table-cards min-w-full text-sm">
             <thead>
                 <tr class="border-b border-white/10 text-left text-slate-400">
-                    <th class="px-3 py-2">วันที่</th>
-                    <th class="px-3 py-2">รายได้</th>
-                    <th class="px-3 py-2">ค่าแอด</th>
-                    <th class="px-3 py-2">กำไร</th>
-                    <th class="px-3 py-2">ROAS</th>
-                    <th class="px-3 py-2">เทียบครั้งก่อน</th>
-                    <th class="px-3 py-2">โน้ต</th>
-                    <th class="px-3 py-2 text-center">จัดการ</th>
+                    <th scope="col" class="px-3 py-2">วันที่</th>
+                    <th scope="col" class="px-3 py-2">รายได้</th>
+                    <th scope="col" class="px-3 py-2">ค่าแอด</th>
+                    <th scope="col" class="px-3 py-2">กำไร</th>
+                    <th scope="col" class="px-3 py-2">ROAS</th>
+                    <th scope="col" class="px-3 py-2">เทียบครั้งก่อน</th>
+                    <th scope="col" class="px-3 py-2">โน้ต</th>
+                    <th scope="col" class="px-3 py-2 text-center">จัดการ</th>
                 </tr>
             </thead>
             <tbody>

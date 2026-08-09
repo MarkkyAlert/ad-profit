@@ -218,12 +218,12 @@ require __DIR__ . '/includes/header.php';
             <table class="sticky-first-col w-full min-w-[560px] text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-slate-400">
-                        <th class="px-2 py-2 w-10">#</th>
-                        <th class="px-2 py-2 min-w-[140px]">วันที่</th>
-                        <th class="px-2 py-2 min-w-[104px]">รายได้ (฿)</th>
-                        <th class="px-2 py-2 min-w-[104px]">ค่าแอด (฿)</th>
-                        <th class="px-2 py-2 min-w-[140px]">โน้ต</th>
-                        <th class="px-2 py-2 w-12"></th>
+                        <th scope="col" class="px-2 py-2 w-10">#</th>
+                        <th scope="col" class="px-2 py-2 min-w-[140px]">วันที่</th>
+                        <th scope="col" class="px-2 py-2 min-w-[104px]">รายได้ (฿)</th>
+                        <th scope="col" class="px-2 py-2 min-w-[104px]">ค่าแอด (฿)</th>
+                        <th scope="col" class="px-2 py-2 min-w-[140px]">โน้ต</th>
+                        <th scope="col" class="px-2 py-2 w-12"></th>
                     </tr>
                 </thead>
                 <tbody id="bulk-rows"></tbody>
@@ -260,16 +260,16 @@ require __DIR__ . '/includes/header.php';
         <td class="px-2 py-2 text-slate-400 bulk-row-number"></td>
         <td class="px-2 py-2">
             <input type="hidden" name="row_number[]" value="">
-                <input name="record_date[]" aria-label="วันที่" type="date" max="<?= e($todayDate) ?>" class="w-full rounded-lg px-2 py-1.5 text-sm">
+                <input name="record_date[]" aria-label="วันที่" data-a11y-base="วันที่" type="date" max="<?= e($todayDate) ?>" class="w-full rounded-lg px-2 py-1.5 text-sm">
         </td>
         <td class="px-2 py-2">
-            <input name="revenue[]" aria-label="รายได้ (บาท)" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
+            <input name="revenue[]" aria-label="รายได้ (บาท)" data-a11y-base="รายได้ (บาท)" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
         </td>
         <td class="px-2 py-2">
-            <input name="ad_cost[]" aria-label="ค่าแอด (บาท)" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
+            <input name="ad_cost[]" aria-label="ค่าแอด (บาท)" data-a11y-base="ค่าแอด (บาท)" type="number" min="0" step="0.01" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="0.00">
         </td>
         <td class="px-2 py-2">
-            <input name="note[]" aria-label="โน้ต" type="text" maxlength="255" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="ไม่บังคับ">
+            <input name="note[]" aria-label="โน้ต" data-a11y-base="โน้ต" type="text" maxlength="255" class="w-full rounded-lg px-2 py-1.5 text-sm" placeholder="ไม่บังคับ">
             <?php /* ⚠️ ธง "แถวนี้ได้เทียบกับข้อมูลเดิมของวันนั้นแล้วหรือยัง" — JS ตั้งเป็น 1
                      เมื่อโหลดข้อมูลเดือนสำเร็จ · ถ้าโหลดไม่สำเร็จค่านี้ยังเป็นว่าง แล้วฝั่ง
                      เซิร์ฟเวอร์จะปฏิเสธการเขียนทับโน้ตที่มีอยู่ แทนที่จะลบทิ้งเงียบ ๆ
@@ -281,7 +281,7 @@ require __DIR__ . '/includes/header.php';
             <?php /* ⚠️ วัดจริงบนมือถือ: ปุ่มนี้เคยมีขนาด 11×18px — เล็กกว่าเกณฑ์นิ้วมือ (44px)
                      สี่เท่า และเป็นปุ่มที่ลบข้อมูลทิ้ง · `tap-target` ขยายเฉพาะ "พื้นที่กด"
                      ด้วย ::after ที่มองไม่เห็น หน้าตาจึงไม่เปลี่ยน */ ?>
-            <button type="button" class="bulk-remove-row tap-target text-red-400 hover:text-red-300 text-lg leading-none" aria-label="ลบแถวนี้" title="ลบแถว">×</button>
+            <button type="button" class="bulk-remove-row tap-target text-red-400 hover:text-red-300 text-lg leading-none" aria-label="ลบแถวนี้" data-a11y-base="ลบ" title="ลบแถว">×</button>
         </td>
     </tr>
 </template>
@@ -380,6 +380,18 @@ require __DIR__ . '/includes/header.php';
                 if (numberInput) {
                     numberInput.value = String(index + 1);
                 }
+
+                /* ⚠️⚠️ ชื่อของช่องต้องบอกด้วยว่าเป็น "แถวไหน"
+                   เดิมทุกแถวชื่อเดียวกันเป๊ะ ("รายได้ (บาท)" เหมือนกันหมด) และปุ่มลบ
+                   ทุกปุ่มชื่อ "ลบแถวนี้" เหมือนกันหมด · คนที่ใช้โปรแกรมอ่านหน้าจอกรอก
+                   ย้อนหลังทั้งเดือนจะได้ยินชุดคำเดิม 31 รอบ โดยไม่มีอะไรบอกว่าอยู่แถวไหน
+                   และปุ่มลบที่แยกกันไม่ออกคือปุ่มที่กดผิดแล้วเสียหาย
+                   · เลขแถวมีอยู่แล้วในคอลัมน์ "#" ที่ผู้ใช้เห็น — เอาเลขเดียวกันมาใช้
+                     จึงไม่มีทางที่เสียงกับหน้าจอจะบอกคนละแถว */
+                const rowLabel = ' แถวที่ ' + (index + 1);
+                row.querySelectorAll('[data-a11y-base]').forEach((field) => {
+                    field.setAttribute('aria-label', field.getAttribute('data-a11y-base') + rowLabel);
+                });
             });
 
             if (counter) {
@@ -1183,12 +1195,12 @@ require __DIR__ . '/includes/header.php';
         <table class="table-cards min-w-full text-sm">
             <thead>
                 <tr class="border-b border-white/10 text-left text-slate-400">
-                    <th class="px-3 py-2">วันที่</th>
-                    <th class="px-3 py-2">รายได้</th>
-                    <th class="px-3 py-2">ค่าแอด</th>
-                    <th class="px-3 py-2">กำไร</th>
-                    <th class="px-3 py-2">ROAS</th>
-                    <th class="px-3 py-2">โน้ต</th>
+                    <th scope="col" class="px-3 py-2">วันที่</th>
+                    <th scope="col" class="px-3 py-2">รายได้</th>
+                    <th scope="col" class="px-3 py-2">ค่าแอด</th>
+                    <th scope="col" class="px-3 py-2">กำไร</th>
+                    <th scope="col" class="px-3 py-2">ROAS</th>
+                    <th scope="col" class="px-3 py-2">โน้ต</th>
                 </tr>
             </thead>
             <tbody>

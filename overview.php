@@ -577,13 +577,13 @@ require __DIR__ . '/includes/header.php';
                     <table class="table-cards min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
-                                <th class="px-3 py-2">วันที่</th>
-                                <th class="px-3 py-2">ยอดขาย</th>
-                                <th class="px-3 py-2">ค่าแอด</th>
-                                <th class="px-3 py-2">กำไร</th>
-                                <th class="px-3 py-2">ROAS</th>
-                                <th class="px-3 py-2">อัตรากำไร</th>
-                                <th class="px-3 py-2">ร้านที่กรอก</th>
+                                <th scope="col" class="px-3 py-2">วันที่</th>
+                                <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                                <th scope="col" class="px-3 py-2">ค่าแอด</th>
+                                <th scope="col" class="px-3 py-2">กำไร</th>
+                                <th scope="col" class="px-3 py-2">ROAS</th>
+                                <th scope="col" class="px-3 py-2">อัตรากำไร</th>
+                                <th scope="col" class="px-3 py-2">ร้านที่กรอก</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -667,13 +667,13 @@ require __DIR__ . '/includes/header.php';
                     <table class="table-cards min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
-                                <th class="px-3 py-2">อันดับ</th>
-                                <th class="px-3 py-2">ร้าน</th>
-                                <th class="px-3 py-2">ยอดขาย</th>
-                                <th class="px-3 py-2">ค่าแอด</th>
-                                <th class="px-3 py-2">กำไร</th>
-                                <th class="px-3 py-2">ROAS</th>
-                                <th class="px-3 py-2">อัตรากำไร</th>
+                                <th scope="col" class="px-3 py-2">อันดับ</th>
+                                <th scope="col" class="px-3 py-2">ร้าน</th>
+                                <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                                <th scope="col" class="px-3 py-2">ค่าแอด</th>
+                                <th scope="col" class="px-3 py-2">กำไร</th>
+                                <th scope="col" class="px-3 py-2">ROAS</th>
+                                <th scope="col" class="px-3 py-2">อัตรากำไร</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -915,12 +915,12 @@ require __DIR__ . '/includes/header.php';
                     <table class="table-cards min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
-                                <th class="px-3 py-2">เดือน</th>
-                                <th class="px-3 py-2">ยอดขาย</th>
-                                <th class="px-3 py-2">ค่าแอด</th>
-                                <th class="px-3 py-2">กำไร</th>
-                                <th class="px-3 py-2">ROAS</th>
-                                <th class="px-3 py-2">อัตรากำไร</th>
+                                <th scope="col" class="px-3 py-2">เดือน</th>
+                                <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                                <th scope="col" class="px-3 py-2">ค่าแอด</th>
+                                <th scope="col" class="px-3 py-2">กำไร</th>
+                                <th scope="col" class="px-3 py-2">ROAS</th>
+                                <th scope="col" class="px-3 py-2">อัตรากำไร</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -977,15 +977,15 @@ require __DIR__ . '/includes/header.php';
                     <table class="table-cards min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
-                                <th class="px-3 py-2">อันดับ</th>
-                                <th class="px-3 py-2">ร้าน</th>
-                                <th class="px-3 py-2">ยอดขาย</th>
-                                <th class="px-3 py-2">ค่าแอด</th>
-                                <th class="px-3 py-2">กำไร</th>
-                                <th class="px-3 py-2">ROAS</th>
-                                <th class="px-3 py-2">อัตรากำไร</th>
-                                <th class="px-3 py-2">สัดส่วนกำไร</th>
-                                <th class="px-3 py-2">วันที่กรอก</th>
+                                <th scope="col" class="px-3 py-2">อันดับ</th>
+                                <th scope="col" class="px-3 py-2">ร้าน</th>
+                                <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                                <th scope="col" class="px-3 py-2">ค่าแอด</th>
+                                <th scope="col" class="px-3 py-2">กำไร</th>
+                                <th scope="col" class="px-3 py-2">ROAS</th>
+                                <th scope="col" class="px-3 py-2">อัตรากำไร</th>
+                                <th scope="col" class="px-3 py-2">สัดส่วนกำไร</th>
+                                <th scope="col" class="px-3 py-2">วันที่กรอก</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1113,16 +1113,16 @@ require __DIR__ . '/includes/header.php';
                 <table class="table-cards min-w-full text-sm">
                     <thead>
                         <tr class="border-b border-white/10 text-left text-slate-400">
-                            <th class="px-3 py-1.5">อันดับ</th>
-                            <th class="px-3 py-1.5">ร้าน</th>
-                            <th class="px-3 py-1.5">ยอดขาย</th>
-                            <th class="px-3 py-1.5">ค่าแอด</th>
-                            <th class="px-3 py-1.5">กำไร</th>
-                            <th class="px-3 py-1.5">สัดส่วนกำไร</th>
-                            <th class="px-3 py-1.5">เทียบเดือนก่อน</th>
-                            <th class="px-3 py-1.5">ROAS</th>
-                            <th class="px-3 py-1.5">อัตรากำไร</th>
-                            <th class="px-3 py-1.5">วันที่กรอก</th>
+                            <th scope="col" class="px-3 py-1.5">อันดับ</th>
+                            <th scope="col" class="px-3 py-1.5">ร้าน</th>
+                            <th scope="col" class="px-3 py-1.5">ยอดขาย</th>
+                            <th scope="col" class="px-3 py-1.5">ค่าแอด</th>
+                            <th scope="col" class="px-3 py-1.5">กำไร</th>
+                            <th scope="col" class="px-3 py-1.5">สัดส่วนกำไร</th>
+                            <th scope="col" class="px-3 py-1.5">เทียบเดือนก่อน</th>
+                            <th scope="col" class="px-3 py-1.5">ROAS</th>
+                            <th scope="col" class="px-3 py-1.5">อัตรากำไร</th>
+                            <th scope="col" class="px-3 py-1.5">วันที่กรอก</th>
                         </tr>
                     </thead>
                     <tbody>

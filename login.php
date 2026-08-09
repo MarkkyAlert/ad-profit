@@ -23,6 +23,11 @@ $flashError = get_flash('error');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e(APP_NAME) ?> - เข้าสู่ระบบ</title>
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <?php /* ⭐ สีปุ่มมาจากไฟล์เดียวกันทั้งระบบ — ห้ามเขียนสีปุ่มเองในหน้าไหน
+             เคยพลาดมาแล้ว: แก้คอนทราสต์ที่ header.php ที่เดียว แต่หน้ากลุ่มบัญชี
+             นิยาม .btn-orange ซ้ำไว้เอง ปุ่ม "เข้าสู่ระบบ" จึงยังตกเกณฑ์อยู่ */ ?>
+    <?php require __DIR__ . '/includes/brand-colors.php'; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -107,7 +112,7 @@ $flashError = get_flash('error');
         }
 
         .btn-orange {
-            background: linear-gradient(135deg, #f97316, #ea580c);
+            background: linear-gradient(135deg, var(--btn-orange-from), var(--btn-orange-to));
             box-shadow: 0 6px 18px rgba(249, 115, 22, .40);
             color: #fff;
             font-weight: 700;
@@ -141,7 +146,7 @@ $flashError = get_flash('error');
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            background: linear-gradient(135deg, var(--btn-primary-from), var(--btn-primary-to));
             box-shadow: 0 6px 18px rgba(99, 102, 241, .40);
             color: #fff;
             font-weight: 700;

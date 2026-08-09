@@ -504,15 +504,15 @@ require __DIR__ . '/includes/header.php';
         <table class="table-cards min-w-full text-sm">
             <thead>
                 <tr class="border-b border-white/10 text-left text-slate-400">
-                    <th class="px-3 py-2">เดือน</th>
-                    <th class="px-3 py-2">ยอดขาย</th>
-                    <th class="px-3 py-2">ค่าแอด</th>
-                    <th class="px-3 py-2">กำไร</th>
-                    <th class="px-3 py-2">ROAS</th>
-                    <th class="px-3 py-2">อัตรากำไร</th>
-                    <th class="px-3 py-2">วันที่กรอก</th>
-                    <th class="px-3 py-2">กำไร/วัน</th>
-                    <th class="px-3 py-2">เทียบ <?= e((string)($prevYear + 543)) ?></th>
+                    <th scope="col" class="px-3 py-2">เดือน</th>
+                    <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                    <th scope="col" class="px-3 py-2">ค่าแอด</th>
+                    <th scope="col" class="px-3 py-2">กำไร</th>
+                    <th scope="col" class="px-3 py-2">ROAS</th>
+                    <th scope="col" class="px-3 py-2">อัตรากำไร</th>
+                    <th scope="col" class="px-3 py-2">วันที่กรอก</th>
+                    <th scope="col" class="px-3 py-2">กำไร/วัน</th>
+                    <th scope="col" class="px-3 py-2">เทียบ <?= e((string)($prevYear + 543)) ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -623,9 +623,9 @@ require __DIR__ . '/includes/header.php';
             <table class="sticky-first-col min-w-[46rem] text-xs">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-slate-400">
-                        <th class="px-2 py-2">ปี</th>
+                        <th scope="col" class="px-2 py-2">ปี</th>
                         <?php for ($heatMonth = 1; $heatMonth <= 12; $heatMonth++): ?>
-                            <th class="px-2 py-2 text-center"><?= e($thaiMonths[$heatMonth] ?? '') ?></th>
+                            <th scope="col" class="px-2 py-2 text-center"><?= e($thaiMonths[$heatMonth] ?? '') ?></th>
                         <?php endfor; ?>
                     </tr>
                 </thead>

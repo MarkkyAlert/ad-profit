@@ -881,10 +881,10 @@ require __DIR__ . '/includes/header.php';
             <table class="table-cards min-w-full text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-slate-400">
-                        <th class="px-3 py-2">วัน</th>
-                        <th class="px-3 py-2">กำไรเฉลี่ย</th>
-                        <th class="px-3 py-2">ROAS เฉลี่ย</th>
-                        <th class="px-3 py-2">จาก</th>
+                        <th scope="col" class="px-3 py-2">วัน</th>
+                        <th scope="col" class="px-3 py-2">กำไรเฉลี่ย</th>
+                        <th scope="col" class="px-3 py-2">ROAS เฉลี่ย</th>
+                        <th scope="col" class="px-3 py-2">จาก</th>
                     </tr>
                 </thead>
                 <tbody>

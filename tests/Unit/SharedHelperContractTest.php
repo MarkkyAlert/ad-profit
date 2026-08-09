@@ -688,36 +688,17 @@ final class SharedHelperContractTest extends TestCase
      */
     public function testWhiteTextOnColouredButtonsIsDarkEnough(): void
     {
-        $css = (string)file_get_contents(dirname(__DIR__, 2) . '/includes/header.php');
+        $root = dirname(__DIR__, 2);
+        $palette = (string)file_get_contents($root . '/includes/brand-colors.php');
 
-        $buttons = [];
-        foreach (['btn-primary', 'btn-orange', 'btn-teal', 'btn-danger'] as $name) {
-            $pattern = '/\.' . $name . '\s*\{(.*?)\}/s';
-            if (preg_match($pattern, $css, $rule) !== 1) {
-                $buttons[$name] = null;
-                continue;
-            }
-
-            if (!str_contains($rule[1], 'color: #fff')) {
-                continue;
-            }
-
-            preg_match_all('/#([0-9a-f]{6})/i', (string)preg_replace('/box-shadow[^;]*;/', '', $rule[1]), $hex);
-            $buttons[$name] = $hex[1];
-        }
+        preg_match_all('/--btn-([a-z]+)-(from|to):\s*#([0-9a-f]{6})/i', $palette, $vars, PREG_SET_ORDER);
+        $this->assertNotEmpty($vars, 'ไม่พบนิยามสีปุ่มใน includes/brand-colors.php');
 
         $offenders = [];
-        foreach ($buttons as $name => $shades) {
-            if ($shades === null || $shades === []) {
-                $offenders[] = $name . ' → หานิยามสีไม่เจอ (เปลี่ยนวิธีเขียน CSS แล้วต้องมาอัปเดตเทสต์)';
-                continue;
-            }
-
-            foreach ($shades as $shade) {
-                $ratio = $this->contrastWithWhite($shade);
-                if ($ratio < 4.5) {
-                    $offenders[] = sprintf('%s #%s = %.2f:1', $name, $shade, $ratio);
-                }
+        foreach ($vars as [$_, $name, $end, $hex]) {
+            $ratio = $this->contrastWithWhite($hex);
+            if ($ratio < 4.5) {
+                $offenders[] = sprintf('--btn-%s-%s #%s = %.2f:1', $name, $end, $hex, $ratio);
             }
         }
 
@@ -725,6 +706,46 @@ final class SharedHelperContractTest extends TestCase
             [],
             $offenders,
             'ตัวหนังสือขาวบนพื้นที่สว่างเกินเกณฑ์ 4.5:1 — ' . implode(' | ', $offenders)
+        );
+    }
+
+    /**
+     * ⚠️⚠️⚠️ ห้ามไฟล์ไหนเขียนสีปุ่มเอง — ต้องอ้าง `var(--btn-…)` จาก `brand-colors.php`
+     *
+     * ⚠️⚠️ **เทสต์ตัวบนเคยมีรูโหว่ตรงนี้พอดี** — มันอ่านแค่ `includes/header.php`
+     * ไฟล์เดียว จึง **เขียวอยู่ทั้งที่ปุ่ม "เข้าสู่ระบบ" ยังตกเกณฑ์ที่ 2.80 : 1**
+     * เพราะ `login.php` · `forgot-password.php` · `reset-password.php` ไม่ได้ใช้ header.php
+     * (มี `<head>` ของตัวเอง) แล้วนิยาม `.btn-orange` ซ้ำไว้เองด้วยสีชุดเก่า
+     *
+     * นี่คือรูปแบบที่คู่มือเตือนไว้ทั้งเล่ม — "กติกาถูกบังคับใช้ที่หนึ่งแต่ไปไม่ถึงอีกที่หนึ่ง" —
+     * และรอบนั้นเกิดกับ **ตัวกวาดที่เขียนขึ้นมาเพื่อกันเรื่องนี้โดยเฉพาะ**
+     */
+    public function testNobodyWritesButtonColoursByHand(): void
+    {
+        $offenders = [];
+        foreach ($this->everyPhpFileThatRendersHtml() as $file) {
+            if (basename($file) === 'brand-colors.php') {
+                continue;
+            }
+
+            $code = $this->codeWithoutComments((string)file_get_contents($file));
+            foreach (['btn-primary', 'btn-orange', 'btn-teal', 'btn-danger'] as $name) {
+                if (preg_match('/\.' . $name . '\s*\{(.*?)\}/s', $code, $rule) !== 1) {
+                    continue;
+                }
+
+                $background = (string)preg_replace('/box-shadow[^;]*;/', '', $rule[1]);
+                if (preg_match('/background:[^;]*#[0-9a-f]{6}/i', $background) === 1) {
+                    $offenders[] = basename($file) . ' → .' . $name;
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'เขียนสีปุ่มเองแทนที่จะใช้ var(--btn-…) จาก includes/brand-colors.php: '
+            . implode(' | ', $offenders)
         );
     }
 

@@ -18,6 +18,11 @@ $pageTitle = 'ลืมรหัสผ่าน - ' . APP_NAME;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle) ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <?php /* ⭐ สีปุ่มมาจากไฟล์เดียวกันทั้งระบบ — ห้ามเขียนสีปุ่มเองในหน้าไหน
+             เคยพลาดมาแล้ว: แก้คอนทราสต์ที่ header.php ที่เดียว แต่หน้ากลุ่มบัญชี
+             นิยาม .btn-orange ซ้ำไว้เอง ปุ่ม "เข้าสู่ระบบ" จึงยังตกเกณฑ์อยู่ */ ?>
+    <?php require __DIR__ . '/includes/brand-colors.php'; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -42,7 +47,7 @@ $pageTitle = 'ลืมรหัสผ่าน - ' . APP_NAME;
             text-align: center;
             font-weight: 600;
             border-radius: 0.75rem;
-            background: linear-gradient(135deg, #f97316, #ea580c);
+            background: linear-gradient(135deg, var(--btn-orange-from), var(--btn-orange-to));
             box-shadow: 0 4px 14px rgba(249, 115, 22, .40);
             color: #fff;
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
