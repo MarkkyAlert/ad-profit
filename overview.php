@@ -998,17 +998,20 @@ require __DIR__ . '/includes/header.php';
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                                 $rowProfitShare = isset($row['profit_share']) && $row['profit_share'] !== null ? (float)$row['profit_share'] : null;
                                 $rowDaysCount = (int)($row['days_count'] ?? 0);
+                                /* ⚠️ กติกาเดียวกับตารางเทียบร้านของมุมรายเดือน — ร้านที่ยังไม่เคยกรอก
+                                   ต้องเป็นขีดทั้งแถว ไม่ใช่ ฿0 (ดูคำอธิบายเต็มที่ตารางนั้น) */
+                                $rowHasData = $rowDaysCount > 0;
                                 ?>
                                 <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
                                     <td class="px-3 py-2 text-slate-400 font-semibold"><?= e((string)($index + 1)) ?></td>
                                     <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
-                                    <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
-                                    <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
-                                    <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                                    <td class="px-3 py-2 text-orange-400 font-medium"><?= e($rowHasData ? formatMoney($rowRevenue) : no_value_text()) ?></td>
+                                    <td class="px-3 py-2 text-cyan-400 font-medium"><?= e($rowHasData ? formatMoney($rowAdCost) : no_value_text()) ?></td>
+                                    <td class="px-3 py-2 <?= !$rowHasData ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?> font-bold"><?= e($rowHasData ? formatMoney($rowProfit) : no_value_text()) ?></td>
                                     <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
-                                    <td class="px-3 py-2 font-medium <?= $rowProfitShare === null ? 'text-slate-400' : ($rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300') ?>">
-                                        <?= e(format_share_percent($rowProfitShare)) ?>
+                                    <td class="px-3 py-2 font-medium <?= !$rowHasData || $rowProfitShare === null ? 'text-slate-400' : ($rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300') ?>">
+                                        <?= e(format_share_percent($rowHasData ? $rowProfitShare : null)) ?>
                                     </td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : no_value_text()) ?></td>
                                 </tr>
@@ -1138,15 +1141,24 @@ require __DIR__ . '/includes/header.php';
                                 ? (float)$row['profit_change_percent']
                                 : null;
                             $rowChange = (float)($row['profit_change'] ?? 0);
+                            /* ⚠️⚠️ ร้านที่ยังไม่เคยกรอกเลย = "ยังไม่รู้" ไม่ใช่ "ทำได้ ฿0"
+                               กติกานี้ถูกบังคับใช้กับ **การเรียงลำดับ** แล้ว (ร้านที่ไม่มีข้อมูลไปท้ายตาราง)
+                               แต่เดิมไปไม่ถึง **ค่าที่พิมพ์ในช่อง** — แถวเดียวกันจึงใช้กติกาสองแบบ:
+                               ROAS/อัตรากำไร ตอบ `–` ถูกแล้ว แต่ยอดขาย/ค่าแอด/กำไร/สัดส่วน ตอบเป็นเลข
+                               · ตารางนี้คือเครื่องมือตัดสินว่า "ร้านไหนคุ้ม" — คนอ่านเทียบ
+                                 "ร้าน C กำไร ฿0" กับ "ร้าน D ขาดทุน ฿-5,000" จะสรุปว่า C ดีกว่า
+                                 ทั้งที่ C แค่ยังไม่มีข้อมูล · คอลัมน์ "วันที่กรอก" ที่เขียน 0 วัน
+                                 เป็นตัวอธิบายว่าทำไมทั้งแถวเป็นขีด */
+                            $rowHasData = (int)($row['days_count'] ?? 0) > 0;
                             ?>
                             <tr class="border-b border-white/[0.06] table-row-hover">
                                 <td class="px-3 py-1.5 text-slate-400"><?= e((string)($rowIndex + 1)) ?></td>
                                 <td class="px-3 py-1.5 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
-                                <td class="px-3 py-1.5 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
-                                <td class="px-3 py-1.5 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
-                                <td class="px-3 py-1.5 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
-                                <td class="px-3 py-1.5 font-medium <?= $rowProfitShare !== null && $rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300' ?>">
-                                    <?= e(format_share_percent($rowProfitShare)) ?>
+                                <td class="px-3 py-1.5 text-orange-400 font-medium"><?= e($rowHasData ? formatMoney($rowRevenue) : no_value_text()) ?></td>
+                                <td class="px-3 py-1.5 text-cyan-400 font-medium"><?= e($rowHasData ? formatMoney($rowAdCost) : no_value_text()) ?></td>
+                                <td class="px-3 py-1.5 <?= !$rowHasData ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?> font-bold"><?= e($rowHasData ? formatMoney($rowProfit) : no_value_text()) ?></td>
+                                <td class="px-3 py-1.5 font-medium <?= $rowHasData && $rowProfitShare !== null && $rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300' ?>">
+                                    <?= e(format_share_percent($rowHasData ? $rowProfitShare : null)) ?>
                                 </td>
                                 <td class="px-3 py-1.5 font-medium">
                                     <?php

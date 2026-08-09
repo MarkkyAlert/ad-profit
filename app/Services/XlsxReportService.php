@@ -223,9 +223,29 @@ class XlsxReportService
             $label = (string)($month['month_label'] ?? (self::THAI_MONTHS[(int)($month['month'] ?? 0)] ?? ''));
 
             $sheet->setCellValueExplicit('A' . $rowNumber, $label, DataType::TYPE_STRING);
-            $sheet->setCellValue('B' . $rowNumber, (float)($month['revenue'] ?? $month['total_revenue'] ?? 0));
-            $sheet->setCellValue('C' . $rowNumber, (float)($month['ad_cost'] ?? $month['total_ad_cost'] ?? 0));
-            $sheet->setCellValue('D' . $rowNumber, $profit);
+
+            /* ⚠️⚠️ เดือนที่ยังไม่ได้กรอกเลย ≠ เดือนที่ทำได้ ฿0 — กติกานี้ต้องลงถึงไฟล์ด้วย
+               หน้าจอ (`annual.php`) เว้นเป็นขีดให้เดือนที่ `days_count === 0` มานานแล้ว
+               และในไฟล์เอง คอลัมน์ ROAS/กำไรต่อวัน/เทียบปีก่อน ก็เว้นว่างถูกต้องอยู่แล้ว
+               — เหลือแค่ ยอดขาย/ค่าแอด/กำไร ที่ยังเขียน 0 ลงไป
+               · **แถวเดียวกันในไฟล์จึงใช้กติกาสองแบบ และไม่ตรงกับจอ**
+               · คนที่เปิดไฟล์แล้วลากกราฟจากคอลัมน์กำไร เห็นเส้นดิ่งลงศูนย์ตั้งแต่เดือนที่
+                 ยังไม่ได้กรอก ซึ่งอ่านว่า "กำไรหายไป" ไม่ใช่ "ยังไม่ได้บันทึก"
+               · เว้นเซลล์ว่างยังทำให้กราฟใน Excel ขาดช่วงเอง (หลักเดียวกับที่ส่ง null
+                 ให้ Chart.js บนหน้าเว็บ)
+               ⚠️ คอลัมน์ J (กำไรสะสม) ไม่เว้น — ยอดสะสมของเดือนที่ไม่ได้กรอกคือยอดเดิม
+                  ที่สะสมมา ไม่ใช่ "ไม่รู้" */
+            /* ⚠️ "ไม่มีคีย์ days_count" ≠ "days_count = 0" — ผู้เรียกที่ส่งแถวมาเองโดยไม่ระบุ
+               จำนวนวัน (เช่นชุดทดสอบของกราฟ) ต้องได้พฤติกรรมเดิม ไม่ใช่ถูกนับว่าเดือนว่าง
+               · `AnnualService` ส่ง `days_count` มาเสมอ ทางที่ผู้ใช้เดินจริงจึงถูกคุมครบ */
+            $monthHasData = !array_key_exists('days_count', $month)
+                || (int)$month['days_count'] > 0;
+
+            if ($monthHasData) {
+                $sheet->setCellValue('B' . $rowNumber, (float)($month['revenue'] ?? $month['total_revenue'] ?? 0));
+                $sheet->setCellValue('C' . $rowNumber, (float)($month['ad_cost'] ?? $month['total_ad_cost'] ?? 0));
+                $sheet->setCellValue('D' . $rowNumber, $profit);
+            }
 
             if (isset($month['roas']) && $month['roas'] !== null) {
                 $sheet->setCellValue('E' . $rowNumber, (float)$month['roas']);

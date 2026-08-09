@@ -19,6 +19,8 @@ $shopRepository = new ShopRepository($pdo);
 $recordRepository = new RecordRepository($pdo);
 $goalRepository = new GoalRepository($pdo);
 $annualService = new AnnualService($recordRepository, $shopRepository, $goalRepository);
+// ใช้ถามอย่างเดียวว่า "ร้านนี้เคยกรอกอะไรไหม" (ดูเหตุผลที่ `$showEmptyShopInvite`)
+$recordService = new RecordService($recordRepository, $shopRepository);
 
 $annualResult = $annualService->buildYearlySummary($userId, $shopId, $selectedYear);
 $heatmapResult = $annualService->buildMonthlyHeatmap($userId, $shopId, $selectedYear);
@@ -110,6 +112,19 @@ $breakEvenMonths = $monthOutcomes['break_even'];
 // คือข้อมูลจริง · เดิมเช็กจากยอดเงิน หน้าจึงขึ้นแถบ "ยังไม่มีข้อมูล" คู่กับตาราง
 // ที่แสดง "3 วัน" บนจอเดียวกัน (วัดจริงแล้ว)
 $hasAnnualData = (int)($summary['months_with_data'] ?? 0) > 0;
+
+/* ⚠️⚠️ "ร้านนี้ไม่เคยกรอกอะไรเลย" ≠ "ปีที่เลือกไม่มีข้อมูล" — สองอย่างนี้ต้องปฏิบัติต่างกัน
+   · ปีที่เลือกไม่มีข้อมูล (แต่ร้านมีข้อมูลปีอื่น) → ยังต้องเห็น ฿0 เพราะนั่นคือคำตอบ
+     ของคำถามที่ผู้ใช้ถามด้วยการเลือกปีนั้น
+   · ร้านที่ยังไม่เคยกรอกอะไรเลย → ฿0 ไม่ใช่คำตอบ มันคือ "ยังไม่ได้เริ่ม"
+   วัดจริงก่อนแก้ (ร้านใหม่ 0 แถว): หน้ารายปีกางการ์ด "ยอดขายรวมทั้งปี ฿0 · ค่าแอดรวมทั้งปี ฿0 ·
+   กำไรรวมทั้งปี ฿0" อยู่ใต้ข้อความ "ยังไม่มีข้อมูลยอดขาย ลองเริ่มบันทึกข้อมูล" บนจอเดียวกัน
+   ขณะที่ ROAS ในชุดการ์ดเดียวกันตอบ `–` ถูกต้องแล้ว — และแดชบอร์ดซ่อนการ์ดทั้งหมดในสถานะเดียวกัน
+   (กติกาเดียวกับ `$showFirstRecordInvite` ใน dashboard.php) */
+$lastRecordResult = $recordService->getDaysSinceLastRecord($userId, $shopId);
+$shopHasEverRecorded = ($lastRecordResult['success'] ?? false) === true
+    && (bool)($lastRecordResult['data']['has_records'] ?? false);
+$showEmptyShopInvite = ($lastRecordResult['success'] ?? false) === true && !$shopHasEverRecorded;
 
 $bestMonth = is_array($summary['best_month'] ?? null) ? (array)$summary['best_month'] : null;
 $worstMonth = is_array($summary['worst_month'] ?? null) ? (array)$summary['worst_month'] : null;
@@ -344,6 +359,11 @@ require __DIR__ . '/includes/header.php';
           // และ "ทั้งปีทำได้ ฿0 · เดือนกำไรดีสุด ม.ค." พร้อมกันในหน้าเดียว ?>
 <?php else: ?>
 
+<?php /* ⚠️⚠️ ต้องเป็น `if` ของตัวเอง ห้ามต่อเป็น `elseif` ของ `$annualError` ข้างบน —
+         `else:` ของบล็อกนั้นครอบยาวไปจนจบหน้า (ตาราง กราฟ ประมาณการ กริดฤดูกาล)
+         ต่อเป็น elseif แล้วทุกอย่างหายทั้งก้อน (เคยพลาดแบบนี้มาแล้วที่ dashboard.php
+         และจับได้ตอนวัดหน้าจริง ไม่ใช่ตอนอ่านโค้ด) */ ?>
+<?php if (!$showEmptyShopInvite): ?>
 <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
     <article class="stat-card s-revenue">
         <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวมทั้งปี</p>
@@ -374,6 +394,7 @@ require __DIR__ . '/includes/header.php';
         </p>
     </article>
 </section>
+<?php endif; ?>
 
 <section class="section-card mt-4 px-4 py-3 sm:px-5">
     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -404,7 +425,9 @@ require __DIR__ . '/includes/header.php';
         <?php endif; ?>
     </div>
 
-    <?php if (count($months) > 0): ?>
+    <?php /* ⚠️ ร้านที่ยังไม่เคยกรอกเลย ไม่มี "กำไรสะสม" ให้พูดถึง — เดิมพิมพ์ ฿0
+             ทั้งที่ยังไม่ได้เริ่ม (กติกาเดียวกับการ์ดตัวเลขด้านบน) */ ?>
+    <?php if (count($months) > 0 && !$showEmptyShopInvite): ?>
         <div class="mt-2 border-t border-white/[0.06] pt-2 text-sm text-slate-400">
             กำไรสะสม ณ <?= e($thaiMonths[count($months)] ?? '') ?>
             <span class="font-bold <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></span>
@@ -564,9 +587,12 @@ require __DIR__ . '/includes/header.php';
             <tfoot>
                 <tr class="border-t border-white/10 bg-white/[0.03] font-semibold">
                     <td class="px-3 py-3 text-slate-200">รวมทั้งปี</td>
-                    <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
-                    <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
-                    <td class="px-3 py-3 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
+                    <?php /* ⚠️ ทุกแถวเดือนเหนือแถวนี้เป็นขีดเมื่อไม่มีข้อมูล — แถวรวมต้องพูดภาษาเดียวกัน
+                             ไม่งั้นตารางที่ว่างทั้งตารางลงท้ายด้วย "รวมทั้งปี ฿0" ซึ่งอ่านว่า
+                             "ทำมาทั้งปีได้ศูนย์" (กติกาเดียวกับที่ ROAS/อัตรากำไร ในแถวนี้ทำอยู่แล้ว) */ ?>
+                    <td class="px-3 py-3 text-orange-400"><?= e($totalDaysCount > 0 ? formatMoney($totalRevenue) : no_value_text()) ?></td>
+                    <td class="px-3 py-3 text-cyan-400"><?= e($totalDaysCount > 0 ? formatMoney($totalAdCost) : no_value_text()) ?></td>
+                    <td class="px-3 py-3 <?= $totalDaysCount <= 0 ? 'text-slate-400' : ($totalProfit >= 0 ? 'text-green-400' : 'text-red-400') ?>"><?= e($totalDaysCount > 0 ? formatMoney($totalProfit) : no_value_text()) ?></td>
                     <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
                     <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
                     <td class="px-3 py-3 text-slate-300"><?= e($totalDaysCount > 0 ? $totalDaysCount . ' วัน' : no_value_text()) ?></td>
