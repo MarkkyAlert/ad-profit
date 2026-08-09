@@ -228,6 +228,205 @@ final class ScreenExportParityTest extends ControllerTestCase
     }
 
     /**
+     * แปลงวันที่แบบไทยบนหน้าจอ ("1 ส.ค. 2569") กลับเป็น ISO เพื่อจับคู่กับไฟล์
+     *
+     * ⚠️ เคยจับคู่หยาบ ๆ ด้วยเลขวันแล้วได้ผลลวงว่า 2 แถวไม่ตรงกัน ทั้งที่ตรง —
+     * ต้องแปลงให้ครบทั้ง วัน/เดือน/ปี พ.ศ. ไม่ใช่เทียบบางส่วน
+     */
+    private function thaiDateToIso(string $label): ?string
+    {
+        static $months = [
+            'ม.ค.' => 1, 'ก.พ.' => 2, 'มี.ค.' => 3, 'เม.ย.' => 4, 'พ.ค.' => 5, 'มิ.ย.' => 6,
+            'ก.ค.' => 7, 'ส.ค.' => 8, 'ก.ย.' => 9, 'ต.ค.' => 10, 'พ.ย.' => 11, 'ธ.ค.' => 12,
+        ];
+
+        if (preg_match('/^(\d{1,2})\s+(\S+)\s+(\d{4})$/u', trim($label), $parts) !== 1) {
+            return null;
+        }
+
+        $month = $months[$parts[2]] ?? null;
+        if ($month === null) {
+            return null;
+        }
+
+        return sprintf('%04d-%02d-%02d', (int)$parts[3] - 543, $month, (int)$parts[1]);
+    }
+
+    /**
+     * แถวรายวันที่ "อยู่บนจอ" ของหน้าประวัติ
+     *
+     * @return array<string,array<string,string>> ISO date → คอลัมน์ → ค่าที่แสดง
+     */
+    private function historyRowsOnScreen(string $sessionId, string $month): array
+    {
+        $response = $this->get('/history.php?month=' . $month, $sessionId);
+        $this->assertSame(200, $response['status'], 'เปิดหน้าประวัติไม่สำเร็จ');
+
+        libxml_use_internal_errors(true);
+        $doc = new DOMDocument();
+        $doc->loadHTML('<?xml encoding="utf-8"?>' . $response['body']);
+        $xpath = new DOMXPath($doc);
+
+        $rows = [];
+        foreach ($xpath->query('//table') as $table) {
+            if (!$table instanceof DOMElement) {
+                continue;
+            }
+
+            $headings = [];
+            foreach ($table->getElementsByTagName('th') as $th) {
+                $headings[] = trim((string)preg_replace('/\s+/u', ' ', $th->textContent));
+            }
+
+            if (!in_array('เทียบครั้งก่อน', $headings, true)) {
+                continue;
+            }
+
+            foreach ($table->getElementsByTagName('tr') as $tr) {
+                $cells = [];
+                foreach ($tr->childNodes as $node) {
+                    if ($node->nodeName === 'td') {
+                        $cells[] = trim((string)preg_replace('/\s+/u', ' ', $node->textContent));
+                    }
+                }
+
+                if (count($cells) < count($headings)) {
+                    continue;
+                }
+
+                $byName = [];
+                foreach ($headings as $index => $name) {
+                    $value = $cells[$index] ?? '';
+                    /* ⚠️ บนจอแคบสคริปต์แปะชื่อคอลัมน์ไว้หน้าค่า (`<span class="cell-label">`)
+                       ต้องตัดออกก่อน ไม่งั้นค่าที่อ่านได้จะเป็น "กำไร฿1,000" */
+                    if ($name !== '' && mb_strpos($value, $name) === 0) {
+                        $value = trim(mb_substr($value, mb_strlen($name)));
+                    }
+
+                    $byName[$name] = $value;
+                }
+
+                $iso = $this->thaiDateToIso($byName['วันที่'] ?? '');
+                if ($iso !== null) {
+                    $rows[$iso] = $byName;
+                }
+            }
+
+            break;
+        }
+
+        $this->assertNotSame([], $rows, 'อ่านแถวรายวันจากหน้าประวัติไม่ได้เลย');
+
+        return $rows;
+    }
+
+    /**
+     * แถวรายวันที่ "อยู่ในไฟล์ CSV"
+     *
+     * @return array<string,array<string,string>>
+     */
+    private function historyRowsInCsv(string $sessionId, string $month): array
+    {
+        $response = $this->get('/api/export.php?month=' . $month, $sessionId);
+        $this->assertSame(200, $response['status'], 'ดาวน์โหลด CSV ไม่สำเร็จ');
+
+        $body = (string)preg_replace('/^\xEF\xBB\xBF/', '', $response['body']);
+        $lines = explode("\n", trim($body));
+        $headings = str_getcsv(rtrim(array_shift($lines) ?? '', "\r"), ',', '"', '');
+
+        $rows = [];
+        foreach ($lines as $line) {
+            $cells = str_getcsv(rtrim($line, "\r"), ',', '"', '');
+            if (count($cells) < count($headings)) {
+                continue;
+            }
+
+            $byName = array_combine($headings, array_slice($cells, 0, count($headings)));
+            $date = (string)($byName['วันที่'] ?? '');
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
+                continue;
+            }
+
+            $rows[$date] = array_map(static fn($cell): string => (string)$cell, $byName);
+        }
+
+        $this->assertNotSame([], $rows, 'อ่านแถวรายวันจากไฟล์ CSV ไม่ได้เลย');
+
+        return $rows;
+    }
+
+    /**
+     * ⭐⭐ ทุกแถวรายวันบนหน้าประวัติ ต้องตรงกับไฟล์ CSV ที่ปุ่ม Export ให้มา
+     *
+     * รอบก่อนล็อกไว้แค่ฝั่ง xlsx — ทาง CSV ซึ่งเป็นปุ่มที่อยู่บนหน้าประวัติเองยังไม่มีตาข่าย
+     *
+     * ⚠️ เทียบ "เทียบครั้งก่อน" ด้วยหลังตัดตัวคั่นหลักพันออก — จอเขียน `25,825.9%`
+     * แต่ไฟล์เขียน `25825.9%` **โดยตั้งใจ** เพราะ Excel อ่านเซลล์ที่มีจุลภาคในตัวเลข
+     * เป็นสูตรผิดไวยากรณ์ (บันทึกไว้ในคู่มือแล้ว) — ค่าต้องเท่ากัน รูปแบบต่างได้
+     */
+    public function testEveryHistoryRowOnScreenMatchesTheDownloadedCsv(): void
+    {
+        [$userId, $shopId] = $this->seedShop();
+        $session = $this->startSession($userId, $shopId);
+
+        $screen = $this->historyRowsOnScreen($session, '2026-01');
+        $file = $this->historyRowsInCsv($session, '2026-01');
+
+        $this->assertSame(
+            array_keys($screen),
+            array_keys($file),
+            'วันที่ที่แสดงบนจอกับในไฟล์ไม่ตรงกัน'
+        );
+
+        $plain = static fn(string $value): string => trim(str_replace(['฿', ',', '↑', '↓', '+'], '', $value));
+
+        foreach ($screen as $date => $row) {
+            foreach (['รายได้', 'ค่าแอด', 'กำไร', 'ROAS'] as $column) {
+                $onScreen = $plain($row[$column] ?? '');
+                $inFile = $plain($file[$date][$column] ?? '');
+
+                if ($onScreen === no_value_text() || $inFile === '') {
+                    continue;
+                }
+
+                $this->assertEqualsWithDelta(
+                    (float)$onScreen,
+                    (float)$inFile,
+                    0.005,
+                    "{$column} ของวันที่ {$date}: จอแสดง {$onScreen} แต่ไฟล์เขียน {$inFile}"
+                );
+            }
+
+            /* ⚠️⚠️ ทิศทางถูกเขียนคนละแบบสองฝั่ง — จอใช้ลูกศร (`↓ 20.0%`) ไฟล์ใช้
+               เครื่องหมายลบ (`-20.0%`) เพราะ Excel ต้องอ่านเป็นจำนวนลบให้ได้
+               **ห้ามตัดลูกศรทิ้งเฉย ๆ** ไม่งั้นเทสต์จะมองว่า "ลง 20%" กับ "ขึ้น 20%"
+               เท่ากัน ซึ่งเป็นความต่างที่ร้ายแรงที่สุดที่คอลัมน์นี้จะผิดได้ */
+            $signed = static function (string $value): ?float {
+                $value = trim($value);
+                if ($value === '' || $value === no_value_text()) {
+                    return null;
+                }
+
+                $negative = str_contains($value, '↓') || str_starts_with($value, '-');
+                $number = (float)str_replace(['฿', ',', '↑', '↓', '+', '-', '%'], '', $value);
+
+                return $negative ? -$number : $number;
+            };
+
+            $changeOnScreen = $signed($row['เทียบครั้งก่อน'] ?? '');
+            $changeInFile = $signed($file[$date]['เทียบครั้งก่อน'] ?? '');
+            if ($changeOnScreen !== null && $changeInFile !== null) {
+                $this->assertEqualsWithDelta(
+                    $changeOnScreen,
+                    $changeInFile,
+                    0.05,
+                    "เทียบครั้งก่อนของวันที่ {$date} ไม่ตรงกันระหว่างจอกับไฟล์ (รวมทิศทางขึ้น/ลง)"
+                );
+            }
+        }
+    }
+
+    /**
      * ⭐ จำนวนเดือนต้องเท่ากันด้วย — ไฟล์ห้ามมีเดือนที่หน้าจอไม่แสดง (และกลับกัน)
      *
      * เดือนอนาคตถูกตัดที่ทั้งสองฝั่งด้วย `$today` ตัวเดียวกัน ถ้าฝั่งใดฝั่งหนึ่งลืมตัด
