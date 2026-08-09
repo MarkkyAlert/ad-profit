@@ -80,6 +80,34 @@ $escape = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTE
             box-shadow: 0 8px 32px rgba(1, 5, 17, .4)
         }
 
+        .brand {
+            margin: 0 0 20px
+        }
+
+        .brand-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 52px;
+            height: 52px;
+            margin-bottom: 10px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, .10);
+            background: rgba(255, 255, 255, .05);
+            font-size: 26px
+        }
+
+        /* ไล่สีเดียวกับหัวเว็บและหน้าเข้าสู่ระบบ — CSS ฝังในหน้าเพราะหน้านี้ต้องขึ้นได้แม้ระบบพัง */
+        .brand-name {
+            margin: 0;
+            font-size: 19px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #f97316 0%, #d946ef 55%, #6366f1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text
+        }
+
         .code {
             font-size: 13px;
             letter-spacing: .08em;
@@ -117,6 +145,15 @@ $escape = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTE
 
 <body>
     <div class="box">
+        <?php /* ⚠️ ต้องมีชื่อแอปอยู่บนสุด — กติกาเดียวกับหน้าลืมรหัสผ่าน/ตั้งรหัสใหม่
+                 หน้านี้คือหน้าที่ผู้ใช้มาถึงโดย "ไม่ได้ตั้งใจ" มากที่สุดในระบบ (ลิงก์ผิด ·
+                 ลิงก์เก่า · ระบบขัดข้อง) การ์ดเปล่าที่ไม่บอกว่าเป็นเว็บอะไรทำให้ยืนยันไม่ได้
+                 ว่ามาถูกที่ ซึ่งเป็นจังหวะที่คนระวังลิงก์ปลอมที่สุดพอดี
+                 ⚠️ ใช้คำว่า "วิเคราะห์ยอดขาย" ไม่ใช่ APP_NAME — เป็นชื่อที่ผู้ใช้เห็นบนจอทั้งระบบ */ ?>
+        <div class="brand">
+            <div class="brand-mark">📊</div>
+            <p class="brand-name">วิเคราะห์ยอดขาย</p>
+        </div>
         <p class="code">รหัส <?= $escape((string)$status) ?></p>
         <h1><?= $escape($heading) ?></h1>
         <p><?= $escape($detail) ?></p>

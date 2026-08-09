@@ -56,11 +56,22 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
         <div id="global-confirm-typed" class="mb-6 hidden text-left">
             <p id="global-confirm-typed-prompt" class="mb-2 text-xs text-slate-400"></p>
             <div id="global-confirm-typed-expected" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-mono text-slate-200 break-all"></div>
+            <?php /* ⚠️ ต้องมีชื่อให้โปรแกรมอ่านหน้าจอประกาศ — เดิมเป็นตัวควบคุมเดียวในทั้งระบบ
+                     ที่ไม่มีชื่อเลย (จาก 28 ตัวที่วัด) และมันคือด่านสุดท้ายของการกระทำที่ทำลายข้อมูล
+                     มากที่สุด (ลบร้านทั้งร้าน) · คนที่ใช้โปรแกรมอ่านหน้าจอจะได้ยินแค่ "ช่องกรอกข้อความ"
+                     โดยไม่รู้ว่าต้องพิมพ์อะไร
+                     ⚠️ ผูกกับข้อความอธิบายที่มีอยู่แล้ว (`…-typed-prompt`) แทนการเขียนคำใหม่ —
+                     ข้อความนั้นเปลี่ยนตามสิ่งที่กำลังลบ (เช่นบอกว่าให้พิมพ์กี่ตัวแรกของชื่อร้าน)
+                     ถ้าเขียนคำตายตัวไว้ตรงนี้ วันหนึ่งสองที่จะพูดไม่ตรงกัน
+                     · `aria-label` เป็นตัวสำรองสำหรับตอนที่ยังไม่มีข้อความอธิบาย */ ?>
             <input
                 id="global-confirm-typed-input"
                 type="text"
                 autocomplete="off"
                 spellcheck="false"
+                aria-label="พิมพ์ข้อความยืนยันให้ตรงกับด้านบน"
+                aria-labelledby="global-confirm-typed-prompt"
+                aria-describedby="global-confirm-typed-error"
                 class="mt-3 w-full rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 text-sm text-slate-200"
                 placeholder="พิมพ์ข้อความด้านบนให้ตรง">
             <p id="global-confirm-typed-error" class="mt-2 hidden text-xs text-red-300">ข้อความที่พิมพ์ไม่ตรงกัน</p>
