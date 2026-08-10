@@ -1204,7 +1204,7 @@ class RecordService
         foreach ($records as $record) {
             $revenue = (float)($record['revenue'] ?? 0);
             $adCost = (float)($record['ad_cost'] ?? 0);
-            $profit = $revenue - $adCost;
+            $profit = money_total($revenue - $adCost);
             $roas = $adCost > 0 ? round($revenue / $adCost, 2) : null;
 
             $compareRevenuePercent = null;

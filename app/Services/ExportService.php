@@ -75,7 +75,7 @@ class ExportService
         foreach ($records as $record) {
             $revenue = (float)($record['revenue'] ?? 0);
             $adCost = (float)($record['ad_cost'] ?? 0);
-            $profit = (float)($record['profit'] ?? ($revenue - $adCost));
+            $profit = money_total((float)($record['profit'] ?? ($revenue - $adCost)));
             $roas = isset($record['roas']) && $record['roas'] !== null ? (float)$record['roas'] : null;
             $comparePercent = isset($record['compare_revenue_percent']) && $record['compare_revenue_percent'] !== null
                 ? (float)$record['compare_revenue_percent']

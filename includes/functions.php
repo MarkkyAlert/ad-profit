@@ -794,13 +794,82 @@ function change_percent(?float $current, ?float $previous): ?float
     return round((($current - $previous) / abs($previous)) * 100, 1);
 }
 
+/**
+ * ⭐⭐ สัดส่วนกำไรของทุกแถว ต้องรวมกันได้ **100.00 พอดี** — จุดเดียวของกติกานี้
+ *
+ * ⚠️⚠️ ปัดทีละแถวแล้วปล่อยไว้ไม่มีวันรวมได้ 100 · วัดจริง: 3 ร้านที่กำไรเท่ากันเป๊ะ
+ * ได้ `[33.33, 33.33, 33.33]` = **99.99** ทั้งมุมเดือนและมุมปี · ผู้ใช้ที่บวกเองจะเจอ
+ * เศษหายไปโดยไม่มีคำอธิบาย และแถว "รวมทุกร้าน" ที่เขียน 100.0% ก็ขัดกับคอลัมน์ข้างบน
+ *
+ * วิธี: ปัดทุกแถวลงก่อน แล้วแจกเศษที่เหลือให้แถวที่ **เศษทศนิยมมากที่สุด** ทีละ 0.01
+ * (largest remainder) — ผลรวมจึงเท่ากับ 100.00 เสมอโดยไม่มีแถวไหนเพี้ยนเกิน 0.01
+ *
+ * ⚠️ ฐานต้องเป็นบวกเท่านั้น — กำไรรวมติดลบหรือเท่าทุน สัดส่วนไม่มีความหมาย คืน null ทุกแถว
+ * ⚠️ แถวที่ `days_count = 0` (ยังไม่เคยกรอก) ต้องได้ null ไม่ใช่ 0 — "ยังไม่รู้" ไม่ใช่ "ไม่มีส่วนแบ่ง"
+ *
+ * @param list<float|null> $profits กำไรของแต่ละแถว (null = แถวที่ยังไม่มีข้อมูล)
+ * @return list<float|null> สัดส่วน % เรียงตามลำดับเดิม
+ */
+function distribute_profit_share(array $profits, float $totalProfit): array
+{
+    if ($totalProfit <= 0) {
+        return array_map(static fn($profit): ?float => null, $profits);
+    }
+
+    $exact = [];
+    $shares = [];
+    foreach ($profits as $index => $profit) {
+        if ($profit === null) {
+            $shares[$index] = null;
+            continue;
+        }
+
+        $value = ((float)$profit / $totalProfit) * 100;
+        $exact[$index] = $value;
+        // ปัดลงก่อน แล้วค่อยแจกเศษ — ปัดปกติทำให้ผลรวมเกิน 100 ได้
+        $shares[$index] = floor($value * 100) / 100;
+    }
+
+    $assigned = array_sum(array_filter($shares, static fn($share): bool => $share !== null));
+    $leftoverSteps = (int)round((100 - $assigned) * 100);
+
+    if ($leftoverSteps > 0 && $exact !== []) {
+        // เศษที่เหลือไปให้แถวที่ถูกปัดทิ้งมากที่สุดก่อน
+        $remainders = [];
+        foreach ($exact as $index => $value) {
+            $remainders[$index] = $value - (floor($value * 100) / 100);
+        }
+        arsort($remainders);
+
+        foreach (array_keys($remainders) as $index) {
+            if ($leftoverSteps <= 0) {
+                break;
+            }
+
+            $shares[$index] = round((float)$shares[$index] + 0.01, 2);
+            $leftoverSteps--;
+        }
+    }
+
+    ksort($shares);
+
+    return array_values(array_map(
+        static fn($share): ?float => $share === null ? null : round((float)$share, 2),
+        $shares
+    ));
+}
+
 function compare_shop_rows_for_ranking(array $left, array $right): int
 {
     $leftDays = (int)($left['days_count'] ?? 0);
     $rightDays = (int)($right['days_count'] ?? 0);
 
-    return [$rightDays > 0, (float)($right['profit'] ?? 0), $rightDays]
-        <=> [$leftDays > 0, (float)($left['profit'] ?? 0), $leftDays]
+    /* ⚠️⚠️ ต้องปัดเป็นสตางค์ก่อนเทียบ — กำไรที่ "เท่ากันจริง" ในสายตาผู้ใช้อาจต่างกัน
+       ในสายตา float · วัดจริง: `0.30-0.20` = 0.09999999999999998 แต่ `0.20-0.10`
+       = 0.10000000000000001 · ทั้งคู่แสดงเป็น ฿0.10 เท่ากันบนจอ แต่ถูกจัดคนละอันดับ
+       (บทเรียนเดียวกับที่ทุกยอดรวมต้องผ่าน `money_total()` ก่อนใช้ต่อ) */
+    return [$rightDays > 0, money_total((float)($right['profit'] ?? 0)), $rightDays]
+        <=> [$leftDays > 0, money_total((float)($left['profit'] ?? 0)), $leftDays]
         ?: strcmp((string)($left['shop_name'] ?? ''), (string)($right['shop_name'] ?? ''));
 }
 

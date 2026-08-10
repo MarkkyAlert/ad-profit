@@ -194,7 +194,7 @@ class OverviewAnnualService
 
             $monthRevenue = (float)($monthTotals['total_revenue'] ?? 0);
             $monthAdCost = (float)($monthTotals['total_ad_cost'] ?? 0);
-            $monthProfit = $monthRevenue - $monthAdCost;
+            $monthProfit = money_total($monthRevenue - $monthAdCost);
 
             $monthRow = [
                 'month' => $month,
@@ -236,7 +236,7 @@ class OverviewAnnualService
         foreach ($shopTotalsById as $shopTotal) {
             $shopRevenue = (float)($shopTotal['total_revenue'] ?? 0);
             $shopAdCost = (float)($shopTotal['total_ad_cost'] ?? 0);
-            $shopProfit = $shopRevenue - $shopAdCost;
+            $shopProfit = money_total($shopRevenue - $shopAdCost);
 
             $shopsRows[] = [
                 'shop_id' => (int)($shopTotal['shop_id'] ?? 0),
@@ -248,9 +248,28 @@ class OverviewAnnualService
                 'profit_margin' => $shopRevenue > 0 ? round(($shopProfit / $shopRevenue) * 100, 1) : null,
                 // กันเทียบร้านที่กรอก 3 วันกับร้านที่กรอกทั้งปีตรง ๆ
                 'days_count' => (int)($shopTotal['days_count'] ?? 0),
-                // กำไรรวมติดลบ/เท่าทุน → สัดส่วนไม่มีความหมาย (เทียบกับฐานที่ไม่ใช่ "ของทั้งหมด")
-                'profit_share' => $profit > 0 ? round(($shopProfit / $profit) * 100, 2) : null,
+                // สัดส่วนถูกเติมทีหลังด้วย `distribute_profit_share()` เพื่อให้รวมได้ 100.00 พอดี
+                'profit_share' => null,
             ];
+        }
+
+        /* ⚠️ กติกาเดียวกับมุมเดือน — ปัดทีละร้านแล้วปล่อยไว้ไม่มีวันรวมได้ 100
+           (วัดจริง: 3 ร้านกำไรเท่ากันได้ 99.99) · ร้านที่ยังไม่เคยกรอกได้ null ไม่ใช่ 0 */
+        $annualShares = distribute_profit_share(
+            array_map(
+                /* ⚠️ ไม่กรองร้านที่ยังไม่เคยกรอกออกตรงนี้โดยตั้งใจ — ชั้นแสดงผลเป็นเจ้าของ
+                   กติกานั้นอยู่แล้ว (`overview.php` และชีตเทียบร้านของ xlsx เว้นทั้งแถว
+                   เมื่อ `days_count = 0`) · ร้านที่ยังไม่กรอกมีกำไร 0 จึงกินส่วนแบ่ง 0%
+                   ผลรวมของแถวที่แสดงจริงยังเป็น 100.00 พอดี
+                   ⚠️ เคยลองกรองที่ชั้นนี้แล้วพัง — service เติมคีย์ `days_count` ให้ทุกแถว
+                      เสมอ (ค่าปริยาย 0) การกรองจึงกลืนแถวที่มีข้อมูลจริงของผู้เรียกที่ stub มา */
+                static fn(array $row): ?float => (float)($row['profit'] ?? 0),
+                $shopsRows
+            ),
+            $profit
+        );
+        foreach ($shopsRows as $position => $row) {
+            $shopsRows[$position]['profit_share'] = $annualShares[$position] ?? null;
         }
 
         // ⚠️⚠️ ร้านที่ยังไม่มีข้อมูลต้องไปท้ายตารางเสมอ — กติกาเดียวกับมุมเดือน

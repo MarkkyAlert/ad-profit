@@ -141,9 +141,14 @@ class XlsxReportService
         // เว้น 1 บรรทัดก่อนแถวรวม ให้ Excel ตัดขอบตารางตรงนั้น (เหมือน CSV export)
         $totalsRowNumber = $rowNumber + 1;
         $sheet->setCellValue('A' . $totalsRowNumber, 'รวมทั้งปี');
-        $sheet->setCellValue('B' . $totalsRowNumber, (float)($totals['revenue'] ?? 0));
-        $sheet->setCellValue('C' . $totalsRowNumber, (float)($totals['ad_cost'] ?? 0));
-        $sheet->setCellValue('D' . $totalsRowNumber, (float)($totals['profit'] ?? 0));
+
+        /* ⚠️ ไม่มีแถวข้อมูลสักแถว → แถวรวมต้องเว้นว่าง ไม่ใช่ 0/0/0
+           (กติกาเดียวกับแถวรวมของตารางบนหน้าจอ ซึ่งเป็นขีดเมื่อไม่มีข้อมูล) */
+        if ($rowNumber > 2) {
+            $sheet->setCellValue('B' . $totalsRowNumber, (float)($totals['revenue'] ?? 0));
+            $sheet->setCellValue('C' . $totalsRowNumber, (float)($totals['ad_cost'] ?? 0));
+            $sheet->setCellValue('D' . $totalsRowNumber, (float)($totals['profit'] ?? 0));
+        }
         if (isset($totals['roas']) && $totals['roas'] !== null) {
             $sheet->setCellValue('E' . $totalsRowNumber, (float)$totals['roas']);
         }
@@ -251,6 +256,15 @@ class XlsxReportService
                 $sheet->setCellValue('E' . $rowNumber, (float)$month['roas']);
             }
 
+            /* ⚠️⚠️ คอลัมน์ "วันที่กรอก" คือ **หลักฐาน** ไม่ใช่ผลงาน — เขียน 0 ต่อไปโดยตั้งใจ
+               · "กรอกไป 0 วัน" เป็นความจริงที่ตรวจสอบได้ ไม่ใช่การเดาแทนข้อมูล
+                 ต่างจากช่องเงิน/ROAS/กำไรต่อวัน ที่ 0 อ่านว่า "ทำได้เท่านี้"
+               · มันคือคำอธิบายว่าทำไมช่องอื่นในแถวนั้นถึงว่าง
+               · ชีต "เทียบร้าน" และหน้าจอของมัน (`overview.php`) ก็เขียน "0 วัน" เหมือนกัน
+               ⚠️ หน้าจอของชีตนี้ (`annual.php`) เว้นเป็นขีดทั้งแถวรวมช่องนี้ด้วย —
+                  เป็นความต่างที่ **ตั้งใจและถูกล็อกไว้ทั้งสองฝั่ง** โดย
+                  `XlsxReportServiceUsabilityTest` (ฝั่งไฟล์) และ `AnnualMetricParityTest`
+                  (ตรึงว่าทั้งสองฝั่งยังเป็นแบบนี้อยู่) — ใครเปลี่ยนข้างเดียวจะแดงทันที */
             $sheet->setCellValue('F' . $rowNumber, (int)($month['days_count'] ?? 0));
 
             if (isset($month['profit_per_day']) && $month['profit_per_day'] !== null) {
@@ -357,12 +371,22 @@ class XlsxReportService
         $sheet->getRowDimension(2)->setRowHeight(16);
         $sheet->getRowDimension(3)->setRowHeight(6);
 
+        /* ⚠️⚠️ ร้านที่ยังไม่เคยกรอกอะไรเลย → เว้นเซลล์ว่าง ห้ามเขียน 0
+           หน้าจอซ่อนการ์ดทั้งหมดในสถานะนี้ (`annual.php` · `$showEmptyShopInvite`)
+           แต่ไฟล์เคยเขียน "กำไรทั้งปี 0 · รายได้ 0 · ค่าแอด 0" คู่กับ "อัตรากำไร –"
+           ในแถวเดียวกัน — สองกติกาในบรรทัดเดียว และไม่ตรงกับจอ
+           · คนที่ได้ไฟล์ต่อไปอ่านว่า "ทำมาทั้งปีได้ศูนย์" ไม่ใช่ "ยังไม่ได้เริ่ม"
+           ⚠️ เกณฑ์คือ "ทั้งปีไม่มีเดือนไหนมีข้อมูลเลย" ไม่ใช่ "กำไรเป็นศูนย์" —
+              ปีที่กรอกครบแต่เท่าทุนพอดีต้องยังเขียน 0 เพราะนั่นคือความจริง */
+        $hasAnyMonthWithData = (int)($summary['months_with_data'] ?? 0) > 0;
+        $money = static fn(float $value): ?float => $hasAnyMonthWithData ? $value : null;
+
         // ── การ์ดตัวเลขหลัก ────────────────────────────────────────
         $profit = (float)($summary['profit'] ?? 0);
         $cards = [
-            ['A', 'B', 'กำไรทั้งปี', $profit, self::MONEY_FORMAT],
-            ['C', 'D', 'รายได้', (float)($summary['total_revenue'] ?? 0), self::MONEY_FORMAT],
-            ['E', 'F', 'ค่าแอด', (float)($summary['total_ad_cost'] ?? 0), self::MONEY_FORMAT],
+            ['A', 'B', 'กำไรทั้งปี', $money($profit), self::MONEY_FORMAT],
+            ['C', 'D', 'รายได้', $money((float)($summary['total_revenue'] ?? 0)), self::MONEY_FORMAT],
+            ['E', 'F', 'ค่าแอด', $money((float)($summary['total_ad_cost'] ?? 0)), self::MONEY_FORMAT],
             ['G', 'H', 'อัตรากำไร', $summary['profit_margin'] ?? null, self::PERCENT_FORMAT],
         ];
 
@@ -951,9 +975,16 @@ class XlsxReportService
                 (string)($shop['shop_name'] ?? 'ร้านค้า'),
                 DataType::TYPE_STRING
             );
-            $sheet->setCellValue('B' . $rowNumber, (float)($shop['total_revenue'] ?? 0));
-            $sheet->setCellValue('C' . $rowNumber, (float)($shop['total_ad_cost'] ?? 0));
-            $sheet->setCellValue('D' . $rowNumber, $profit);
+            /* ⚠️⚠️ ร้านที่ยังไม่เคยกรอก (`days_count = 0`) ต้องเว้นว่างทั้งแถว ไม่ใช่ 0/0/0
+               หน้าจอแก้ไปแล้ว (`overview.php` แสดงขีดทั้งแถว) แต่ไฟล์ยังเขียนศูนย์
+               · ชีตนี้คือตารางที่ใช้ตัดสินว่า "ร้านไหนคุ้ม" — คนอ่านเทียบ "ร้าน C กำไร 0"
+                 กับ "ร้าน D ขาดทุน -5,000" แล้วสรุปว่า C ดีกว่า ทั้งที่ C แค่ยังไม่มีข้อมูล
+               · คอลัมน์ ROAS/อัตรากำไร/สัดส่วน เว้นว่างถูกอยู่แล้ว — เหลือสามช่องนี้ */
+            if ((int)($shop['days_count'] ?? 0) > 0) {
+                $sheet->setCellValue('B' . $rowNumber, (float)($shop['total_revenue'] ?? 0));
+                $sheet->setCellValue('C' . $rowNumber, (float)($shop['total_ad_cost'] ?? 0));
+                $sheet->setCellValue('D' . $rowNumber, $profit);
+            }
 
             if (isset($shop['roas']) && $shop['roas'] !== null) {
                 $sheet->setCellValue('E' . $rowNumber, (float)$shop['roas']);

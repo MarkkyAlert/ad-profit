@@ -170,7 +170,7 @@ class AnnualService
 
             $monthRevenue = (float)($totals['total_revenue'] ?? 0);
             $monthAdCost = (float)($totals['total_ad_cost'] ?? 0);
-            $monthProfit = $monthRevenue - $monthAdCost;
+            $monthProfit = money_total($monthRevenue - $monthAdCost);
 
             // เดือนเดียวกันของปีก่อน
             $previousMonthKey = sprintf('%04d-%02d', $year - 1, $month);

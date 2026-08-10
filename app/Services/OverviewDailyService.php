@@ -133,7 +133,7 @@ class OverviewDailyService
         foreach ($dailyTotals as $row) {
             $revenue = (float)($row['total_revenue'] ?? 0);
             $adCost = (float)($row['total_ad_cost'] ?? 0);
-            $profit = $revenue - $adCost;
+            $profit = money_total($revenue - $adCost);
             $shopsCount = (int)($row['shops_count'] ?? 0);
             $recordDate = (string)($row['record_date'] ?? '');
 
@@ -312,7 +312,7 @@ class OverviewDailyService
             $row = $totalsByShopId[(int)$shopId] ?? null;
             $revenue = (float)($row['total_revenue'] ?? 0);
             $adCost = (float)($row['total_ad_cost'] ?? 0);
-            $profit = $revenue - $adCost;
+            $profit = money_total($revenue - $adCost);
 
             $rows[] = [
                 'shop_id' => (int)$shopId,

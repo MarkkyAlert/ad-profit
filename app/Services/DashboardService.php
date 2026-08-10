@@ -324,7 +324,7 @@ class DashboardService
             $totalAdCost += $recordAdCost;
 
             // จัดอันดับด้วย "กำไร" (ติดลบได้เมื่อค่าแอดมากกว่ารายได้)
-            $recordProfit = $recordRevenue - $recordAdCost;
+            $recordProfit = money_total($recordRevenue - $recordAdCost);
 
             if ($bestDay === null || $recordProfit > (float)$bestDay['profit']) {
                 $bestDay = [
@@ -405,7 +405,7 @@ class DashboardService
 
         $selectedRevenue = $selected['revenue'];
         $selectedAdCost = $selected['ad_cost'];
-        $selectedProfit = $selectedRevenue - $selectedAdCost;
+        $selectedProfit = money_total($selectedRevenue - $selectedAdCost);
         // เก็บค่าดิบไว้คิด % ด้วย — ปัดก่อนแล้วค่อยหาผลต่างทำให้เปอร์เซ็นต์เพี้ยน
         // (ROAS 2.005 vs 2.004 เปลี่ยนจริง 0.05% แต่ถ้าปัดเป็น 2.01 vs 2.00 จะขึ้น 0.5%)
         $selectedRoasExact = $selectedAdCost > 0 ? $selectedRevenue / $selectedAdCost : null;
@@ -413,7 +413,7 @@ class DashboardService
 
         $previousRevenue = $previous['revenue'];
         $previousAdCost = $previous['ad_cost'];
-        $previousProfit = $previousRevenue - $previousAdCost;
+        $previousProfit = money_total($previousRevenue - $previousAdCost);
         $previousRoasExact = $previousAdCost > 0 ? $previousRevenue / $previousAdCost : null;
         $previousRoas = $previousRoasExact === null ? null : round($previousRoasExact, 2);
 
@@ -623,8 +623,9 @@ class DashboardService
 
         $daysRemaining = max(0, $daysRemaining);
 
-        $remainingRevenue = $targetRevenue !== null ? max(0.0, $targetRevenue - $actualRevenue) : null;
-        $remainingProfit = $targetProfit !== null ? max(0.0, $targetProfit - $actualProfit) : null;
+        // ⚠️ ปัดเป็นสตางค์ — ยอดที่เหลือถูกหารด้วยจำนวนวันแล้วแสดงเป็น "ต้องได้อีกวันละ ฿…"
+        $remainingRevenue = $targetRevenue !== null ? money_total(max(0.0, $targetRevenue - $actualRevenue)) : null;
+        $remainingProfit = $targetProfit !== null ? money_total(max(0.0, $targetProfit - $actualProfit)) : null;
 
         $perDay = static function (?float $remaining) use ($daysRemaining): ?float {
             if ($remaining === null || $daysRemaining <= 0) {

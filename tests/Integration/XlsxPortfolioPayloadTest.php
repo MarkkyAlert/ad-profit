@@ -129,7 +129,13 @@ final class XlsxPortfolioPayloadTest extends IntegrationTestCase
         $sheet = $this->renderSheet($data);
 
         $this->assertSame(2000.0, $sheet->getCell('D4')->getValue());
-        $this->assertSame(0.0, $sheet->getCell('D5')->getValue());
+
+        /* ⚠️⚠️ ร้าน B มีแต่แถวของเดือนหน้า → ในช่วงที่รายงานครอบคลุมมันยังไม่มีข้อมูลเลย
+           เซลล์จึงต้อง **เว้นว่าง** ไม่ใช่ 0 — กติกาเดียวกับหน้าจอ (`overview.php` แสดงขีด
+           ทั้งแถวเมื่อ `days_count = 0`) · เดิมยืนยันว่าเป็น 0.0 ซึ่งทำให้ไฟล์กับจอพูดคนละอย่าง
+           และทำให้ผู้รับไฟล์อ่านว่า "ร้าน B ทำได้ ฿0" แทน "ร้าน B ยังไม่มีข้อมูล"
+           ⚠️ เจตนาเดิมของเทสต์ (แถวเดือนอนาคตต้องไม่ถูกนับ) ยังพิสูจน์ครบด้วยยอดรวมด้านล่าง */
+        $this->assertNull($sheet->getCell('D5')->getValue(), 'ร้านที่ยังไม่มีข้อมูลในช่วงนี้ต้องเว้นว่าง ไม่ใช่ 0');
         $this->assertSame(2000.0, $this->summaryCell($sheet, 'กำไรรวมทุกร้าน'));
     }
 

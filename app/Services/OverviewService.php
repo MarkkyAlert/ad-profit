@@ -118,7 +118,7 @@ class OverviewService
             $totalRevenue = (float)($totals['total_revenue'] ?? 0);
             $totalAdCost = (float)($totals['total_ad_cost'] ?? 0);
 
-            $profit = $totalRevenue - $totalAdCost;
+            $profit = money_total($totalRevenue - $totalAdCost);
             $rows[] = [
                 'shop_id' => $shopId,
                 'shop_name' => (string)$shop['name'],
@@ -159,13 +159,27 @@ class OverviewService
      */
     private function attachProfitShare(array $rows, array $totals): array
     {
+        /* ⚠️ กติกา "สัดส่วนต้องรวมได้ 100.00 พอดี" อยู่ที่ `distribute_profit_share()`
+           ที่เดียว — ห้ามปัดทีละแถวเองตรงนี้ (เดิมทำแบบนั้นแล้ว 3 ร้านที่กำไรเท่ากัน
+           รวมได้ 99.99) · มุมรายปีใช้ helper ตัวเดียวกัน */
         $totalProfit = (float)($totals['profit'] ?? 0);
-        $shareAvailable = $totalProfit > 0;
 
-        foreach ($rows as $index => $row) {
-            $rows[$index]['profit_share'] = $shareAvailable
-                ? round(((float)($row['profit'] ?? 0) / $totalProfit) * 100, 2)
-                : null;
+        $shares = distribute_profit_share(
+            array_map(
+                /* ⚠️ ไม่กรองร้านที่ยังไม่เคยกรอกออกตรงนี้โดยตั้งใจ — ชั้นแสดงผลเป็นเจ้าของ
+                   กติกานั้นอยู่แล้ว (`overview.php` และชีตเทียบร้านของ xlsx เว้นทั้งแถว
+                   เมื่อ `days_count = 0`) · ร้านที่ยังไม่กรอกมีกำไร 0 จึงกินส่วนแบ่ง 0%
+                   ผลรวมของแถวที่แสดงจริงยังเป็น 100.00 พอดี
+                   ⚠️ เคยลองกรองที่ชั้นนี้แล้วพัง — service เติมคีย์ `days_count` ให้ทุกแถว
+                      เสมอ (ค่าปริยาย 0) การกรองจึงกลืนแถวที่มีข้อมูลจริงของผู้เรียกที่ stub มา */
+                static fn(array $row): ?float => (float)($row['profit'] ?? 0),
+                array_values($rows)
+            ),
+            $totalProfit
+        );
+
+        foreach (array_keys($rows) as $position => $index) {
+            $rows[$index]['profit_share'] = $shares[$position] ?? null;
         }
 
         return $rows;
