@@ -509,4 +509,40 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
             'ไม่ได้บอกสาเหตุจริงว่าปีนี้ยังไม่มีข้อมูล'
         );
     }
+
+    /**
+     * ⭐⭐⭐ **หน้ารวมร้านมุมรายปี** ก็ต้องบอกสาเหตุจริงของ % ที่หายไป
+     *
+     * ⚠️⚠️ เทสต์ตัวก่อนหน้าคุมเฉพาะ `annual.php` — พอแก้ `overview.php` ผิด
+     * (อ่านค่าจากสรุปก่อนที่สรุปจะถูกโหลด ค่าจึงเป็น "มีข้อมูล" เสมอ) **ตาข่ายทั้งชุดยังเขียว**
+     * · รูปแบบเดิมของโปรเจกต์นี้: กติกาถูกบังคับใช้ที่หนึ่งแต่ไปไม่ถึงอีกที่หนึ่ง
+     *   และตาข่ายก็ครอบแค่ที่เดียวเหมือนกัน
+     */
+    public function testTheOverviewYearAlsoNamesTheRealReasonForAMissingYoy(): void
+    {
+        $userId = $this->createUser('overviewreason@example.com', 'OverviewReasonPass123');
+        $shopA = $this->createShop($userId, 'ร้านที่หยุดไปทั้งปี');
+        $this->createShop($userId, 'ร้านที่สอง');
+
+        // ปีก่อนมีกำไรจริง (ไม่ใช่เท่าทุน) · ปีนี้ยังไม่มีใครกรอกเลย
+        $this->insert($shopA, '2025-06-10', 9000.00, 5000.00);
+
+        $session = $this->startSession($userId, $shopA);
+        $text = (string)preg_replace('/\s+/u', ' ', strip_tags((string)preg_replace(
+            '#<script.*?</script>#s',
+            ' ',
+            $this->get('/overview.php?view=year&year=2569', $session)['body']
+        )));
+
+        $this->assertStringNotContainsString(
+            'ปีก่อนเท่าทุนพอดี',
+            $text,
+            'บอกว่า "ปีก่อนเท่าทุนพอดี" ทั้งที่ปีก่อนมีกำไรจริง — สาเหตุจริงคือปีนี้ยังไม่มีข้อมูล'
+        );
+        $this->assertStringContainsString(
+            'ปีนี้ยังไม่มีข้อมูล',
+            $text,
+            'หน้ารวมร้านไม่ได้บอกสาเหตุจริงว่าปีนี้ยังไม่มีข้อมูล'
+        );
+    }
 }

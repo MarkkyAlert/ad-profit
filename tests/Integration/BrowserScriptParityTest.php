@@ -1173,4 +1173,42 @@ final class BrowserScriptParityTest extends ControllerTestCase
             'กิ่งล้มเหลวไม่ได้กันผลลัพธ์เก่า — ความล้มเหลวของวันก่อนหน้าจะล้างธงของวันใหม่'
         );
     }
+
+    /**
+     * ⭐⭐⭐ ตารางกรอกหลายวันต้อง **แก้ไม่ได้และบันทึกไม่ได้** ระหว่างโหลดเดือนใหม่
+     *
+     * ⚠️⚠️ คำตอบที่กลับมาเรียก `populateFromDays()` ซึ่งล้างทั้งตารางแล้วสร้างใหม่
+     * สิ่งที่ผู้ใช้พิมพ์ระหว่างรอจึงหายไปเฉย ๆ · และถ้ากดบันทึกระหว่างนั้น สิ่งที่ถูกส่ง
+     * คือข้อมูลของ **เดือนเดิม** ทั้งที่ช่องเลือกเดือนเปลี่ยนไปแล้ว
+     * · ด่าน "เตือนก่อนทับ" ที่มีอยู่ถามก่อน *เริ่ม* โหลด จึงไม่ครอบช่วงที่กำลังโหลด
+     *
+     * ⚠️ ต้องปลดล็อกทุกทางออก (สำเร็จ · payload ผิดพลาด · โยน error) ไม่งั้นตารางค้าง
+     * แก้ไม่ได้ตลอดอายุหน้า
+     */
+    public function testTheBulkTableIsLockedWhileAMonthIsLoading(): void
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+        $source = self::stripCommentsAndStrings(implode("\n", $blocks[1]));
+
+        $this->assertStringContainsString(
+            'setBulkPending(true)',
+            $source,
+            'ตารางไม่ถูกล็อกตอนเริ่มโหลดเดือนใหม่ — ผู้ใช้พิมพ์หรือกดบันทึกระหว่างนั้นได้'
+        );
+
+        $this->assertGreaterThanOrEqual(
+            3,
+            preg_match_all('/setBulkPending\(false\)/', $source),
+            'ปลดล็อกไม่ครบทุกทางออก (สำเร็จ · payload ผิดพลาด · โยน error) — ตารางจะค้าง'
+        );
+
+        // ตัวล็อกต้องแตะทั้งช่องกรอกและปุ่มบันทึก ไม่ใช่แค่ปุ่ม
+        $lockAt = mb_strpos($source, 'const setBulkPending');
+        $this->assertNotFalse($lockAt, 'หานิยามของตัวล็อกไม่เจอ');
+
+        $body = mb_substr($source, (int)$lockAt, 600);
+        $this->assertStringContainsString('disabled', $body, 'ตัวล็อกไม่ได้ปิดช่องกรอก');
+        $this->assertStringContainsString('tbody', $body, 'ตัวล็อกไม่ได้แตะแถวในตาราง');
+    }
 }

@@ -249,7 +249,7 @@ require __DIR__ . '/includes/header.php';
             </div>
 
             <button type="button" id="bulk-add-row" class="btn-ghost px-4 py-2 text-sm">+ เพิ่มแถว</button>
-            <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">✓ บันทึกทั้งหมด</button>
+            <button type="submit" id="bulk-submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">✓ บันทึกทั้งหมด</button>
         </div>
     </form>
     </div>
@@ -1088,6 +1088,26 @@ require __DIR__ . '/includes/header.php';
 
         let monthLoadRequestId = 0;   // กันคำตอบของเดือนเก่ามาทับเดือนที่เลือกทีหลัง
 
+        /* ⚠️⚠️⚠️ **ระหว่างโหลดเดือนใหม่ ตารางต้องแก้ไม่ได้และบันทึกไม่ได้**
+           · คำตอบที่กลับมาจะเรียก `populateFromDays()` ซึ่ง **ล้างทั้งตารางแล้วสร้างใหม่**
+             สิ่งที่ผู้ใช้พิมพ์ระหว่างรอจึงหายไปเฉย ๆ
+           · และถ้ากดบันทึกระหว่างนั้น สิ่งที่ถูกส่งคือข้อมูลของ **เดือนเดิม** ทั้งที่ช่องเลือก
+             เดือนเปลี่ยนไปแล้ว — ผู้ใช้เข้าใจว่ากำลังบันทึกเดือนใหม่
+           · ด่าน "เตือนก่อนทับ" ที่มีอยู่ถามก่อน *เริ่ม* โหลด จึงไม่ครอบช่วงที่กำลังโหลด
+           หลักเดียวกับฟอร์มวันเดียว (`setPending`) ต่างกันแค่ที่นี่ล็อกทั้งตาราง */
+        const bulkSubmitButton = document.getElementById('bulk-submit');
+        const setBulkPending = (isPending) => {
+            tbody.querySelectorAll('input').forEach((input) => {
+                input.disabled = isPending;
+            });
+
+            if (bulkSubmitButton) {
+                bulkSubmitButton.disabled = isPending;
+                bulkSubmitButton.classList.toggle('opacity-50', isPending);
+                bulkSubmitButton.classList.toggle('cursor-not-allowed', isPending);
+            }
+        };
+
         if (monthInput) {
             monthInput.addEventListener('change', async () => {
                 const selectedMonth = monthInput.value;
@@ -1110,6 +1130,7 @@ require __DIR__ . '/includes/header.php';
                    กลับไปเป็น B แล้ว **ลบสิ่งที่ผู้ใช้กำลังพิมพ์ในเดือน C ทิ้ง**
                    · ตัวจัดการวันทีละแถวมีด่านนี้อยู่แล้ว ตัวเลือกเดือนตกสำรวจ */
                 const monthRequestId = ++monthLoadRequestId;
+                setBulkPending(true);
 
                 try {
                     const response = await fetch(
@@ -1121,12 +1142,14 @@ require __DIR__ . '/includes/header.php';
                     const payload = await response.json();
 
                     // เลือกเดือนใหม่ระหว่างรอ → ทิ้งคำตอบเก่าทั้งใบ ห้ามแตะตารางเลย
+                    // (คำขอที่ใหม่กว่ายังค้างอยู่ จึงไม่ปลดล็อกตรงนี้)
                     if (monthRequestId !== monthLoadRequestId) {
                         return;
                     }
 
                     // ผิดพลาด → แจ้งข้อความ แต่ไม่ล้างตารางที่ผู้ใช้กรอกไว้
                     if (!payload || payload.success !== true) {
+                        setBulkPending(false);
                         showBulkNotice((payload && payload.error) ? payload.error : 'โหลดข้อมูลเดือนนี้ไม่สำเร็จ');
                         return;
                     }
@@ -1138,6 +1161,9 @@ require __DIR__ . '/includes/header.php';
                     const days = (payload.data && payload.data.days) ? payload.data.days : [];
 
                     populateFromDays(days);
+                    // ⚠️ ปลดล็อก **หลัง** สร้างแถวใหม่ — `populateFromDays()` ล้าง tbody
+                    // ช่องที่ถูกปิดไว้ก่อนหน้าหายไปพร้อมกัน ต้องปลดกับช่องชุดใหม่
+                    setBulkPending(false);
                     loadedMonth = resolvedMonth;
                     monthInput.value = resolvedMonth;
                     showThaiMonth(resolvedMonth);
@@ -1152,6 +1178,7 @@ require __DIR__ . '/includes/header.php';
                         return;
                     }
 
+                    setBulkPending(false);
                     showBulkNotice('โหลดข้อมูลเดือนนี้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
                 }
             });

@@ -102,9 +102,11 @@ $yearlyWorstMonth = null;
 $yearlyPrevYear = $selectedYear - 1;
 $yearlyPrevProfit = null;
 $yearlyPrevHasData = false;
+/* ⚠️⚠️ ค่าตั้งต้นเท่านั้น — **ห้ามอ่าน `$yearlySummary` ตรงนี้** เพราะมันยังเป็น
+   อาร์เรย์ว่าง (โหลดจริงอยู่ในกิ่ง `$view === 'year'` ด้านล่าง) · เขียนพลาดมาแล้ว:
+   บรรทัดที่อ่านเร็วเกินไปทำให้ค่านี้เป็น `true` เสมอ แล้วหน้าเว็บอธิบายสาเหตุผิด
+   โดยที่เทสต์ของหน้า annual ยังเขียวอยู่ */
 $yearlyCurrentHasData = true;
-// ⚠️ "ปีนี้ยังไม่มี record" เป็นสาเหตุที่ 3 ของ % ที่เป็น null — ห้ามให้หน้าเว็บเดาเอง
-$yearlyCurrentHasData = ($yearlySummary['current_year_has_data'] ?? true) === true;
 $yearlyPrevUnavailable = false;
 $yearlyYoyPercent = null;
 $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['text'];
@@ -245,6 +247,8 @@ if ($view === 'day') {
         ? (float)$yearlySummary['prev_year_profit']
         : null;
     $yearlyPrevHasData = ($yearlySummary['prev_year_has_data'] ?? false) === true;
+    // ⚠️ "ปีนี้ยังไม่มี record" เป็นสาเหตุที่ 3 ของ % ที่เป็น null — ห้ามให้หน้าเว็บเดาเอง
+    $yearlyCurrentHasData = ($yearlySummary['current_year_has_data'] ?? true) === true;
     $yearlyPrevUnavailable = ($yearlySummary['prev_year_unavailable'] ?? false) === true;
     $yearlyYoyChange = isset($yearlySummary['yoy_profit_change']) && $yearlySummary['yoy_profit_change'] !== null
         ? (float)$yearlySummary['yoy_profit_change']
