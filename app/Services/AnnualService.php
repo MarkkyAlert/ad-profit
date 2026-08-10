@@ -182,6 +182,14 @@ class AnnualService
             $monthDaysCount = (int)($totals['days_count'] ?? 0);
             $cumulativeProfit = money_total($cumulativeProfit + $monthProfit);
 
+            /* ⚠️⚠️ **เส้นปีก่อนคงเป็น 0.0 ไว้โดยตั้งใจ ห้ามเปลี่ยนเป็น null โดยไม่ถามเจ้าของระบบ**
+               · เส้นปีนี้ (`chart.profit`) เว้นช่องว่างให้เดือนที่ยังไม่กรอก เพราะมันคือ
+                 "ผลงานของคุณ" — เขียน 0 = โกหกว่าทำได้ศูนย์
+               · เส้นปีก่อนเป็น **เส้นอ้างอิงที่วาดไว้ข้างหลัง** ถ้าขาดตอนตรงเดือนที่อยาก
+                 เปรียบเทียบพอดี กราฟจะอ่านไม่ออก · `testShopWithoutHistoryHasFlatPrevLine`
+                 ล็อกไว้ว่าร้านที่ไม่มีประวัติต้องได้เส้นแบนที่ศูนย์ ไม่ใช่เส้นที่หายไป
+               · เคยลองเปลี่ยนเป็น null แล้วเทสต์ที่ล็อกเจตนานี้แดง 4 ตัว — เป็นการตัดสินใจ
+                 เรื่องหน้าตา ไม่ใช่เรื่องความถูกต้องของตัวเลข จึงต้องให้เจ้าของระบบชี้ขาด */
             $previousProfitSeries[] = $previousMonthProfit;
             $cumulativeSeries[] = $cumulativeProfit;
             $previousCumulativeSeries[] = $previousYearProfit;
@@ -323,11 +331,34 @@ class AnnualService
                         $todayObject->format('Y-m-d')
                     ),
                 ],
+                /* ⚠️⚠️⚠️ เดือนที่ยังไม่ได้กรอกเลยต้องส่ง **null** ไม่ใช่ 0 — Chart.js เว้นช่วงให้เอง
+                   · กติกานี้บังคับใช้กับกราฟของแดชบอร์ดและหน้ารวมร้านไปแล้ว
+                     (`DashboardService::buildSixMonthChart()` · `OverviewService::buildSixMonthTrend()`)
+                     แต่ **กราฟของหน้ารายปีตกสำรวจ** — รูปแบบเดิมของโปรเจกต์นี้อีกครั้ง
+                   · ส่ง 0 = เส้นดิ่งลงศูนย์ตั้งแต่เดือนที่ยังไม่ได้บันทึก ซึ่งอ่านว่า "ยอดหายไป"
+                     ขณะที่ตารางในหน้าเดียวกันแสดงขีดว่า "ยังไม่มีข้อมูล"
+                   ⚠️ เดือนที่กรอกแล้วเท่าทุนพอดีต้องยังเป็น 0.0 — ไม่ใช่ null
+                     (เกณฑ์คือจำนวนวันที่กรอก ไม่ใช่ยอดเงิน) */
                 'chart' => [
                     'months' => array_values(array_map(static fn(array $row): string => (string)$row['month_key'], $months)),
-                    'revenue' => array_values(array_map(static fn(array $row): float => (float)$row['total_revenue'], $months)),
-                    'ad_cost' => array_values(array_map(static fn(array $row): float => (float)$row['total_ad_cost'], $months)),
-                    'profit' => array_values(array_map(static fn(array $row): float => (float)$row['profit'], $months)),
+                    'revenue' => array_values(array_map(
+                        static fn(array $row): ?float => (int)($row['days_count'] ?? 0) > 0
+                            ? (float)$row['total_revenue']
+                            : null,
+                        $months
+                    )),
+                    'ad_cost' => array_values(array_map(
+                        static fn(array $row): ?float => (int)($row['days_count'] ?? 0) > 0
+                            ? (float)$row['total_ad_cost']
+                            : null,
+                        $months
+                    )),
+                    'profit' => array_values(array_map(
+                        static fn(array $row): ?float => (int)($row['days_count'] ?? 0) > 0
+                            ? (float)$row['profit']
+                            : null,
+                        $months
+                    )),
                     // กำไรปีก่อนเดือนเดียวกัน — index ตรงกับแกน x ปีนี้ (same-period ไม่เกิน lastMonth)
                     'prev_profit' => $previousProfitSeries,
                     'cumulative_profit' => $cumulativeSeries,

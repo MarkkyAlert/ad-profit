@@ -1022,10 +1022,21 @@ require __DIR__ . '/includes/header.php';
 
                 const rows = getRows();
                 const row = rows[rows.length - 1];
-                const setValue = (name, value) => {
+                /* ⚠️⚠️⚠️ `prefilled` = "ค่านี้ระบบเติมให้ ไม่ใช่ผู้ใช้พิมพ์เอง"
+                   ตัวจัดการ "เปลี่ยนวันที่" ล้างเฉพาะช่องที่ติดธงนี้ ถ้าปุ่มเติมทั้งเดือน
+                   ไม่ติดธง → ผู้ใช้แก้วันที่ของแถวไหนก็ตาม **ยอดกับโน้ตของวันเดิมจะค้างอยู่**
+                   แล้วด่าน "กรอกครบ 3 ช่องแล้วให้ออกทันที" ก็ทำงานพอดี เพราะการเติม
+                   ทั้งเดือนทำให้ครบทุกช่องเสมอ → เปลี่ยนวันแล้วไม่มีอะไรเกิดขึ้นเลย
+                   · กดบันทึก = ยอดของวันเก่าถูกเขียนลงวันใหม่ ทับข้อมูลที่มีอยู่โดยไม่มีอะไรเตือน
+                   · เป็นบั๊กเดียวกับที่ทางเลือกวันทีละแถวเคยเป็นและแก้ไปแล้ว —
+                     กติกาถูกบังคับใช้ที่หนึ่งแต่ไปไม่ถึงอีกที่หนึ่ง (รูปแบบเดิมของโปรเจกต์นี้) */
+                const setValue = (name, value, prefilled) => {
                     const input = row.querySelector('input[name="' + name + '"]');
                     if (input) {
                         input.value = value;
+                        if (prefilled) {
+                            input.dataset.prefilled = '1';
+                        }
                     }
                 };
 
@@ -1033,9 +1044,9 @@ require __DIR__ . '/includes/header.php';
 
                 // วันที่เคยบันทึกไว้ → เติมค่าเดิมมาให้แก้ · วันที่ยังไม่มี → เว้นว่าง
                 if (day.has_record) {
-                    setValue('revenue[]', day.revenue === null ? '' : String(day.revenue));
-                    setValue('ad_cost[]', day.ad_cost === null ? '' : String(day.ad_cost));
-                    setValue('note[]', day.note || '');
+                    setValue('revenue[]', day.revenue === null ? '' : String(day.revenue), true);
+                    setValue('ad_cost[]', day.ad_cost === null ? '' : String(day.ad_cost), true);
+                    setValue('note[]', day.note || '', true);
 
                     /* ⚠️⚠️ ต้องตั้งธง "ได้เห็นโน้ตเดิมของวันนี้แล้ว" ด้วย
                        ปุ่มเติมทั้งเดือนแสดงโน้ตเดิมให้ผู้ใช้เห็นเรียบร้อยแล้ว การล้างช่องโน้ต

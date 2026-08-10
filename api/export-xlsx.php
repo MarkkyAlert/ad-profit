@@ -100,9 +100,20 @@ if (($overviewResult['success'] ?? false) === true
 }
 
 // รายปีต้องมาท้ายสุด — setIndexByName ของมันดันตัวเองเป็น tab แรกทับของเฟส 2
+/* ⚠️⚠️ "ร้านนี้เคยกรอกอะไรไหม" ต้องถามด้วยวิธีเดียวกับหน้าจอ (`annual.php`)
+   ไม่ใช่ให้ไฟล์เดาเอาจาก "ปีที่เลือกมีข้อมูลไหม" ซึ่งเป็นคนละคำถาม
+   · ปีที่เลือกว่าง แต่ร้านมีข้อมูลปีอื่น → ทั้งจอและไฟล์ต้องตอบ ฿0
+   · ร้านที่ยังไม่เคยเริ่ม → ทั้งจอและไฟล์ต้องเงียบ */
+$lastRecordResult = $recordService->getDaysSinceLastRecord($userId, $shopId, $today);
+$annualSummary = (array)($annualResult['data']['summary'] ?? []);
+/* ⚠️ ใช้คีย์เดียวกับหน้าจอเป๊ะ ๆ (`has_records`) — และถ้าถามไม่สำเร็จ ให้ถือว่า "เคยกรอก"
+   เพื่อให้ไฟล์แสดงตัวเลขตามปกติ แทนที่จะเงียบไปเฉย ๆ เพราะอ่านข้อมูลไม่ได้ */
+$annualSummary['shop_has_ever_recorded'] = ($lastRecordResult['success'] ?? false) !== true
+    || (bool)($lastRecordResult['data']['has_records'] ?? false);
+
 $reportService->buildAnnualSheet(
     $spreadsheet,
-    (array)($annualResult['data']['summary'] ?? []),
+    $annualSummary,
     $selectedYear,
     $shopName
 );

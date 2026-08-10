@@ -872,4 +872,107 @@ final class BrowserScriptParityTest extends ControllerTestCase
             $this->assertSame('<<null>>', $parses[$index], "\"{$typed}\" ถูกเดาแทนที่จะปฏิเสธ");
         }
     }
+
+    /**
+     * ⭐⭐⭐ ทุกทางที่ **ระบบเติมค่าเดิม** ให้ตารางกรอกหลายวัน ต้องติดธง `data-prefilled`
+     *
+     * ⚠️⚠️ ธงนี้คือสิ่งเดียวที่แยก "ค่าที่ระบบเติม" ออกจาก "ค่าที่ผู้ใช้พิมพ์เอง"
+     * ตัวจัดการ "เปลี่ยนวันที่" ล้างเฉพาะช่องที่ติดธง — ทางเติมไหนไม่ติดธง ค่าของวันเก่า
+     * จะค้างอยู่บนแถวที่เปลี่ยนวันไปแล้ว แล้วถูกบันทึกลงวันใหม่โดยไม่มีอะไรเตือน
+     *
+     * ⚠️⚠️ **เกิดขึ้นจริง 2 รอบกับ 2 ทางเติมคนละทาง** — ทางเลือกวันทีละแถวแก้ไปแล้ว
+     * แต่ปุ่ม "เติมทั้งเดือน" ยังไม่ติดธง (รูปแบบเดิมของโปรเจกต์นี้: กติกาถูกบังคับใช้
+     * ที่หนึ่งแต่ไปไม่ถึงอีกที่หนึ่ง) · ทางนั้นร้ายกว่าเพราะเติมทีเดียวทั้ง 31 แถว
+     *
+     * ⚠️ JS ไม่มีตัวรันเทสต์และทางนี้ต้องมี DOM จริง — ตัวกวาดระดับซอร์สจึงเป็น
+     * ตาข่ายเดียวที่เป็นไปได้ · มันถามคำถามเดียว: บรรทัดที่เอาค่าจากเซิร์ฟเวอร์
+     * (`day.revenue` · `day.ad_cost` · `day.note`) ไปใส่ช่องกรอก อยู่ใกล้คำว่า
+     * `prefilled` ไหม
+     */
+    public function testEveryPathThatPrefillsTheBulkTableMarksTheFields(): void
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+
+        $raw = explode("\n", implode("\n", $blocks[1]));
+        $bare = explode("\n", self::stripCommentsAndStrings(implode("\n", $blocks[1])));
+
+        /* ⚠️⚠️ ตรวจ **สองร่างของบรรทัดเดียวกัน** — เหมือนตัวกวาดกำไรใน SharedHelperContractTest
+           · ร่างเดิม (มีสตริง) ใช้ตอบว่า "นี่คือตารางหลายวัน หรือฟอร์มวันเดียว" เพราะ
+             ตัวชี้ขาดเป็นสตริงทั้งคู่ (`name="revenue[]"` · `getElementById('revenue')`)
+           · ร่างที่ตัดคอมเมนต์แล้ว ใช้ตอบว่า "ติดธงหรือยัง" เพราะคอมเมนต์ที่อธิบายกติกา
+             มักเอ่ยคำว่า `prefilled` อยู่แล้ว — วัดจริงแล้วมันทำให้ตัวกวาดเขียวทั้งที่พัง */
+        $this->assertSame(count($raw), count($bare), 'ตัวตัดคอมเมนต์ทำจำนวนบรรทัดเพี้ยน');
+
+        $offenders = [];
+        $fillSiteCount = 0;
+
+        foreach ($raw as $number => $line) {
+            $code = trim($line);
+            if ($code === '' || str_starts_with($code, '//') || str_starts_with($code, '*')) {
+                continue;
+            }
+
+            // บรรทัดที่ "เอาค่าของวันจากเซิร์ฟเวอร์ไปใส่ช่องกรอก"
+            if (preg_match('/\bday\.(revenue|ad_cost|note)\b/', $code) !== 1) {
+                continue;
+            }
+
+            if (!str_contains($code, '.value') && !str_contains($code, 'setValue(')) {
+                continue;
+            }
+
+            /* ⚠️ กติกานี้ใช้กับ **ตารางกรอกหลายวัน** เท่านั้น — ฟอร์มกรอกวันเดียวเติมทับ
+               ทุกช่องเสมอโดยตั้งใจ (หนึ่งฟอร์ม = หนึ่งวัน) จึงไม่มีตรรกะ "ล้างเฉพาะที่ระบบเติม"
+               ⚠️ สองที่ใช้ชื่อตัวแปรเดียวกันเป๊ะ แยกจากชื่อไม่ได้ → ไล่ย้อนขึ้นไปดูว่า
+                  ตัวชี้ขาดตัวไหนใกล้กว่ากัน */
+            $bulkAt = -1;
+            $singleAt = -1;
+            for ($back = $number; $back >= 0; $back--) {
+                if ($bulkAt < 0 && str_contains($raw[$back], 'revenue[]')) {
+                    $bulkAt = $back;
+                }
+                if ($singleAt < 0 && str_contains($raw[$back], "getElementById('revenue')")) {
+                    $singleAt = $back;
+                }
+            }
+
+            if ($singleAt > $bulkAt) {
+                continue;
+            }
+
+            $fillSiteCount++;
+
+            /* ⚠️⚠️ ต้องตรวจ **ต่อช่อง** ไม่ใช่ "มีคำว่า prefilled อยู่แถวนั้นไหม" —
+               สามช่อง (ยอดขาย/ค่าแอด/โน้ต) เขียนติดกัน ถอดธงออกช่องเดียว คำว่า `prefilled`
+               ของอีกสองช่องก็ยังอยู่ในระยะที่มองเห็น → ตัวกวาดเขียวทั้งที่พัง (วัดจริงแล้ว)
+               · ธงติดได้ 2 แบบ: เขียนตรง ๆ (`revenueInput.dataset.prefilled`) หรือส่งเป็น
+                 อาร์กิวเมนต์ให้ตัวช่วยที่ติดธงให้ (`setValue(…, true)`) */
+            $passesFlagThrough = preg_match('/setValue\(.*,\s*true\s*\)/', $bare[$number] ?? '') === 1;
+
+            $flagged = $passesFlagThrough;
+            if (!$flagged && preg_match('/(\$?\w+)\.value\s*=/', $code, $target) === 1) {
+                $nearby = implode("\n", array_slice($bare, max(0, $number - 10), 21));
+                $flagged = str_contains($nearby, $target[1] . '.dataset.prefilled');
+            }
+
+            if (!$flagged) {
+                $offenders[] = 'บรรทัด ' . ($number + 1) . ': ' . $code;
+            }
+        }
+
+        $this->assertGreaterThanOrEqual(
+            6,
+            $fillSiteCount,
+            'เจอจุดเติมค่าเดิมของตารางหลายวันน้อยกว่าที่ควรมี — ตัวกวาดน่าจะอ่านผิดที่'
+        );
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "มีทางเติมค่าเดิมที่ไม่ได้ติดธง data-prefilled:\n  " . implode("\n  ", $offenders)
+            . "\n\n(ผู้ใช้แก้วันที่ของแถวนั้นแล้ว ยอดของวันเก่าจะค้างอยู่"
+            . ' แล้วถูกบันทึกลงวันใหม่ทับข้อมูลเดิมโดยไม่มีอะไรเตือน)'
+        );
+    }
 }

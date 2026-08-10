@@ -26,11 +26,24 @@ final class ReportingWritePathLineageTest extends ControllerTestCase
     private const AD_COST = 2345.89;
     private const PROFIT = 9999.78;
 
+    /* ⚠️⚠️ ต้องมีอีกหนึ่งแถวในเดือนเดียวกัน ไม่งั้น "ยอดรวมทั้งเดือน" เท่ากับ "กำไรของวันนั้น"
+       พอดี แล้วการตรวจแดชบอร์ดจะผ่านได้ด้วยตัวเลขจากการ์ดอื่นที่คำนวณคนละทาง
+       (วัดจริง: มิวเทชันบวก 1 ที่กำไรของแดชบอร์ด แล้วเทสต์ยังเขียว) */
+    private const EXTRA_REVENUE = 4321.12;
+    private const EXTRA_AD_COST = 1111.34;
+    private const MONTH_PROFIT = 13209.56;
+
     /** @return array{0:int,1:int,2:string} */
     private function signedInShop(string $email): array
     {
         $userId = $this->createUser($email, 'LineagePass123');
         $shopId = $this->createShop($userId, 'ร้านทดสอบเส้นทางเขียน');
+
+        // แถวประกอบฉากในเดือนเดียวกัน — ทำให้ยอดรวมเดือนต่างจากกำไรของวันที่กำลังทดสอบ
+        $this->pdo->prepare(
+            'INSERT INTO daily_records (shop_id, record_date, revenue, ad_cost, note, created_at, updated_at)
+             VALUES (?, \'2026-08-02\', ?, ?, \'\', NOW(), NOW())'
+        )->execute([$shopId, self::EXTRA_REVENUE, self::EXTRA_AD_COST]);
 
         return [$userId, $shopId, $this->startSession($userId, $shopId)];
     }
@@ -104,10 +117,23 @@ final class ReportingWritePathLineageTest extends ControllerTestCase
         $onScreen = $this->annualMonthProfitOnScreen($session, 'ส.ค.');
         $this->assertNotNull($onScreen, "{$path}: หน้ารายปีไม่แสดงเดือน ส.ค.");
         $this->assertEqualsWithDelta(
-            self::PROFIT,
+            self::MONTH_PROFIT,
             $onScreen,
             0.005,
             "{$path}: กำไรบนหน้ารายปีไม่ตรงกับที่เขียนเข้าไป"
+        );
+
+        /* ⚠️⚠️ docblock ของคลาสนี้อ้างว่าไล่ถึง "แดชบอร์ด · หน้ารายปี · ไฟล์ CSV"
+           แต่เวอร์ชันแรกตรวจแค่สองอย่างหลัง — คำอธิบายแรงกว่าสิ่งที่ทำจริง
+           ซึ่งเป็นความผิดพลาดแบบเดียวกับเทสต์ "รวมได้ 100 เป๊ะ" ที่ใส่ค่าคลาดเคลื่อนไว้ */
+        $dashboard = $this->get('/dashboard.php?range=month_this', $session);
+        $this->assertSame(200, $dashboard['status'], "{$path}: เปิดแดชบอร์ดไม่สำเร็จ");
+        $this->assertStringContainsString(
+            formatMoney(self::MONTH_PROFIT),
+            (string)preg_replace('/\s+/u', ' ', strip_tags(
+                (string)preg_replace('#<script.*?</script>#s', ' ', $dashboard['body'])
+            )),
+            "{$path}: กำไรไม่ปรากฏบนแดชบอร์ด"
         );
 
         $csv = $this->get('/api/export.php?month=2026-08', $session);
@@ -229,5 +255,37 @@ final class ReportingWritePathLineageTest extends ControllerTestCase
             $text,
             'เป้ารายได้ที่ตั้งผ่าน endpoint ไม่ปรากฏในหน้ารายปี'
         );
+    }
+
+    /**
+     * ⭐⭐ ทาง 4 — นำเข้าไฟล์ CSV
+     *
+     * ⚠️ ทางนี้มีตัวอ่านของตัวเอง (แปลงวันที่ · อ่านจำนวนเงิน · จับคู่หัวตาราง) แยกจาก
+     * อีกสามทางโดยสิ้นเชิง · เทสต์ที่มีอยู่ตรวจแค่ "นำเข้าสำเร็จกี่แถว" ไม่เคยไล่ต่อว่า
+     * ตัวเลขที่เข้าไปโผล่ในรายงานตรงกับไฟล์ต้นทางไหม
+     */
+    public function testTheCsvImportReachesEveryReport(): void
+    {
+        [, $shopId, $session] = $this->signedInShop('import@example.com');
+
+        $csv = "วันที่,ยอดขาย,ค่าแอด,โน้ต\n"
+            . '2026-08-05,' . self::REVENUE . ',' . self::AD_COST . ",ทางนำเข้าไฟล์\n";
+
+        $response = $this->postFile(
+            '/api/records.php',
+            [
+                'csrf_token' => $this->csrfTokenFor($session),
+                'action' => 'import_csv',
+                'shop_context_id' => $this->shopContextFrom($session),
+            ],
+            // ⚠️ ชื่อช่องไฟล์คือ `csv` ไม่ใช่ `csv_file` — ผิดแล้ว endpoint ตอบ 302 เหมือนสำเร็จ
+            'csv',
+            'records.csv',
+            $csv,
+            $session
+        );
+        $this->assertSame(302, $response['status']);
+
+        $this->assertReportsAgree($shopId, $session, 'นำเข้าไฟล์ CSV');
     }
 }

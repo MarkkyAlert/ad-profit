@@ -285,9 +285,13 @@ $chartLabels = array_map(
 
 $chartPayload = [
     'labels' => $chartLabels,
-    'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['revenue'] ?? []))),
-    'ad_cost' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['ad_cost'] ?? []))),
-    'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['profit'] ?? []))),
+    /* ⚠️⚠️ ต้องเป็น `?float` — `(float)null` = `0.0` ซึ่ง **ทับตัวแก้ที่ Service ทั้งหมด**
+       บั๊กเดียวกันนี้เคยเกิดที่ `overview.php` และ `dashboard.php` มาแล้ว: แก้ที่ Service
+       ให้ส่ง null แต่กราฟยังลากผ่านศูนย์เหมือนเดิม เพราะชั้นหน้าเว็บ cast กลับ */
+    'revenue' => array_values(array_map(static fn($value): ?float => $value === null ? null : (float)$value, (array)($chartRaw['revenue'] ?? []))),
+    'ad_cost' => array_values(array_map(static fn($value): ?float => $value === null ? null : (float)$value, (array)($chartRaw['ad_cost'] ?? []))),
+    'profit' => array_values(array_map(static fn($value): ?float => $value === null ? null : (float)$value, (array)($chartRaw['profit'] ?? []))),
+    // เส้นปีก่อนเป็นเส้นอ้างอิง ไม่มี null (ดูเหตุผลใน AnnualService)
     'prev_profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['prev_profit'] ?? []))),
     'cumulative_profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['cumulative_profit'] ?? []))),
     'prev_cumulative_profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['prev_cumulative_profit'] ?? []))),

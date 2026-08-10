@@ -299,7 +299,14 @@ class XlsxReportService
                 $sheet->setCellValue('G' . $rowNumber, (float)$month['profit_per_day']);
             }
 
-            if (isset($month['yoy_change_percent']) && $month['yoy_change_percent'] !== null) {
+            /* ⚠️⚠️ เดือนที่ปีนี้ยังไม่ได้กรอก **ห้ามเขียน −100%** — `change_percent(0, ปีก่อน)`
+               ให้ −100 ซึ่งอ่านว่า "ยอดหายไปหมด" ทั้งที่แค่ยังไม่ได้บันทึก
+               · หน้าจอเว้นเป็นขีดอยู่แล้ว (`annual.php` · `$rowHasData ? … : $blank`)
+               · ร้านที่เริ่มใช้ระบบกลางปีจะเห็นครึ่งปีแรกในไฟล์เป็น "ตก 100%" ทุกเดือน */
+            if ($monthHasData
+                && isset($month['yoy_change_percent'])
+                && $month['yoy_change_percent'] !== null
+            ) {
                 $sheet->setCellValue('H' . $rowNumber, (float)$month['yoy_change_percent']);
             }
 
@@ -422,7 +429,15 @@ class XlsxReportService
            · คนที่ได้ไฟล์ต่อไปอ่านว่า "ทำมาทั้งปีได้ศูนย์" ไม่ใช่ "ยังไม่ได้เริ่ม"
            ⚠️ เกณฑ์คือ "ทั้งปีไม่มีเดือนไหนมีข้อมูลเลย" ไม่ใช่ "กำไรเป็นศูนย์" —
               ปีที่กรอกครบแต่เท่าทุนพอดีต้องยังเขียน 0 เพราะนั่นคือความจริง */
-        $hasAnyMonthWithData = (int)($summary['months_with_data'] ?? 0) > 0;
+        /* ⚠️⚠️ เกณฑ์คือ "**ร้านนี้ไม่เคยกรอกอะไรเลย**" ไม่ใช่ "ปีที่เลือกไม่มีข้อมูล" —
+           หน้าจอแยกสองอย่างนี้ไว้แล้ว (`annual.php` · `$showEmptyShopInvite`)
+           · ร้านที่มีข้อมูลปี 2569 แล้วผู้ใช้เลือกดูปี 2568 → **ต้องเห็น ฿0** เพราะนั่นคือ
+             คำตอบของคำถามที่เขาถามด้วยการเลือกปีนั้น · ไฟล์เคยเขียนขีด = ไม่ตอบคำถามเลย
+           · ผู้เรียกที่ไม่ส่ง `shop_has_ever_recorded` มา ให้ถอยไปใช้เกณฑ์ของปีที่เลือก
+             (พฤติกรรมเดิม) เพื่อไม่ให้ชุดทดสอบเก่าเปลี่ยนความหมาย */
+        $hasAnyMonthWithData = array_key_exists('shop_has_ever_recorded', $summary)
+            ? (bool)$summary['shop_has_ever_recorded']
+            : (int)($summary['months_with_data'] ?? 0) > 0;
         $money = static fn(float $value): ?float => $hasAnyMonthWithData ? $value : null;
 
         // ── การ์ดตัวเลขหลัก ────────────────────────────────────────
@@ -1024,21 +1039,26 @@ class XlsxReportService
                · ชีตนี้คือตารางที่ใช้ตัดสินว่า "ร้านไหนคุ้ม" — คนอ่านเทียบ "ร้าน C กำไร 0"
                  กับ "ร้าน D ขาดทุน -5,000" แล้วสรุปว่า C ดีกว่า ทั้งที่ C แค่ยังไม่มีข้อมูล
                · คอลัมน์ ROAS/อัตรากำไร/สัดส่วน เว้นว่างถูกอยู่แล้ว — เหลือสามช่องนี้ */
-            if ((int)($shop['days_count'] ?? 0) > 0) {
+            $shopHasData = (int)($shop['days_count'] ?? 0) > 0;
+            if ($shopHasData) {
                 $sheet->setCellValue('B' . $rowNumber, (float)($shop['total_revenue'] ?? 0));
                 $sheet->setCellValue('C' . $rowNumber, (float)($shop['total_ad_cost'] ?? 0));
                 $sheet->setCellValue('D' . $rowNumber, $profit);
             }
 
-            if (isset($shop['roas']) && $shop['roas'] !== null) {
+            /* ⚠️⚠️ E/F/G ต้องอยู่ใต้ guard เดียวกับ B/C/D — ไม่งั้นแถวเดียวกันใช้กติกาสองแบบ
+               · วัดจริง: ร้านที่ไม่เคยกรอก ช่องเงินว่างแล้ว แต่ **สัดส่วนกำไรยังเขียน 0%**
+                 (กำไร 0 หารด้วยยอดรวมที่เป็นบวก = 0.0 ซึ่งไม่ใช่ null จึงลอดกิ่งเดิมมาได้)
+               · หน้าจอ (`overview.php`) เว้นขีดทั้งแถวอยู่แล้ว */
+            if ($shopHasData && isset($shop['roas']) && $shop['roas'] !== null) {
                 $sheet->setCellValue('E' . $rowNumber, (float)$shop['roas']);
             }
 
-            if (isset($shop['profit_margin']) && $shop['profit_margin'] !== null) {
+            if ($shopHasData && isset($shop['profit_margin']) && $shop['profit_margin'] !== null) {
                 $sheet->setCellValue('F' . $rowNumber, (float)$shop['profit_margin']);
             }
 
-            if ($share !== null) {
+            if ($shopHasData && $share !== null) {
                 $sheet->setCellValue('G' . $rowNumber, $share);
             }
 
