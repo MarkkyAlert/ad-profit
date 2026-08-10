@@ -995,4 +995,137 @@ final class SharedHelperContractTest extends TestCase
 
         return $out;
     }
+
+    /**
+     * ⭐⭐⭐ **ตัวกวาด** — กำไรที่คำนวณจากการลบ ต้องผ่าน `money_total()` ทุกจุด
+     *
+     * ⚠️⚠️ กฎเดิมในคู่มือเขียนไว้ว่า "ยอดรวมที่**บวก**ต้องปัดสตางค์" — จุดที่ตกสำรวจจึงเป็น
+     * `รายได้ − ค่าแอด` ซึ่งเป็นที่มาของกำไรทั้งระบบ · **เขียนกฎไว้แล้วไม่มีใครไล่ตรวจ
+     * ว่ามีที่อื่นละเมิดอยู่ไหม คือรูปแบบความผิดพลาดที่เกิดซ้ำที่สุดในโปรเจกต์นี้**
+     *
+     * วัดจริง: `0.30 − 0.20` กับ `0.20 − 0.10` แสดงเป็น ฿0.10 เท่ากันบนจอ แต่โปรแกรม
+     * มองว่าต่างกัน → วันเดียวกันโผล่เป็นทั้ง "วันกำไรดีสุด" และ "วันกำไรแย่สุด"
+     *
+     * ⚠️ ตัวกวาดต้องข้าม `->` (ลูกศรเรียกเมธอด) ไม่งั้นจะนับว่าเป็นเครื่องหมายลบ
+     * — เขียนรอบแรกแล้วได้ผลบวกลวง 2 บรรทัด
+     */
+    public function testEveryProfitSubtractionIsRoundedToSatang(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/app/Services/*.php'),
+            (array)glob($root . '/includes/*.php'),
+            (array)glob($root . '/*.php')
+        );
+
+        $offenders = [];
+        foreach ($files as $file) {
+            /* ⚠️⚠️ ต้องตัด **คอมเมนต์และสตริง** ก่อนเสมอ — บทเรียนที่โปรเจกต์นี้จดไว้แล้ว
+               และตัวกวาดตัวนี้เองก็เกือบพลาดซ้ำ: `'text-green-400'` มีขีดกลางอยู่ข้างใน
+               จึงถูกนับว่าเป็นเครื่องหมายลบ (วัดจริง — ได้ผลบวกลวงจาก dashboard.php) */
+            $source = $this->codeWithoutComments((string)file_get_contents((string)$file));
+
+            $lines = explode("\n", $source);
+            foreach ($lines as $number => $line) {
+                $code = trim($line);
+                if ($code === '') {
+                    continue;
+                }
+
+                /* ⚠️⚠️ ตรวจ **สองชั้นจากคนละร่าง** ของบรรทัดเดียวกัน:
+                   · "นี่คือการตั้งค่าให้กำไรหรือเปล่า" ดูจากบรรทัดเดิม — เพราะรูปแบบ
+                     `'profit' => …` ใช้ชื่อคีย์ที่เป็นสตริง ถ้าลบสตริงทิ้งก่อนจะมองไม่เห็นเลย
+                     (เขียนรอบแรกแบบนั้น แล้วมิวเทชันพิสูจน์ว่าตัวกวาด **จับไม่ได้**)
+                   · "มีเครื่องหมายลบไหม" ดูจากร่างที่ลบสตริงและลูกศรออกแล้ว — เพราะสตริง
+                     อย่าง `'text-green-400'` มีขีดกลางอยู่ข้างใน และ `->` ก็หน้าตาเหมือนลบ */
+                if (preg_match('/(\$[A-Za-z_]*[Pp]rofit[A-Za-z_]*|\x27profit\x27)\s*(=>|=[^=>])/', $code) !== 1) {
+                    continue;
+                }
+
+                $withoutText = (string)preg_replace('/([\x27"])(?:\\\\.|(?!\\1).)*\\1/s', 'TEXT', $code);
+                if (!str_contains(str_replace('->', '', $withoutText), '-')) {
+                    continue;
+                }
+
+                if (str_contains($code, 'money_total(') || str_contains($code, 'change_percent(')) {
+                    continue;
+                }
+
+                $offenders[] = basename((string)$file) . ':' . ($number + 1) . '  ' . $code;
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "กำไรที่คำนวณจากการลบ แต่ไม่ได้ปัดเป็นสตางค์:\n  " . implode("\n  ", $offenders)
+            . "\n\n(เศษทศนิยมของ PHP จะไปตัดสินว่าวันไหน/เดือนไหน/ร้านไหนดีกว่ากัน"
+            . ' ทั้งที่ตัวเลขบนจอเท่ากันเป๊ะ — ให้ห่อด้วย money_total())'
+        );
+    }
+
+    /**
+     * ⭐⭐⭐ **ตัวกวาด** — เทสต์ที่ชื่อบอกว่า "เป๊ะ" ห้ามยอมรับความคลาดเคลื่อน
+     *
+     * ⚠️⚠️ **เกิดขึ้นจริงและปล่อยบั๊กหลุดไปแล้ว** — เทสต์ชื่อ `...AddsUpToExactlyOneHundred()`
+     * ใช้ `assertEqualsWithDelta(100.0, $sum, 0.05)` จึงปล่อย **99.99** ผ่านมาตลอด
+     * ทั้งที่ทั้งชื่อเทสต์และกติกาบอกว่าต้องเป๊ะ · ซ้ำร้ายข้อมูลทดสอบยังเป็น 2 ร้าน
+     * ที่หารลงตัวพอดี ค่า delta จึงไม่เคยมีโอกาสทำงานเลยด้วยซ้ำ
+     *
+     * **เทสต์แบบนี้แย่กว่าไม่มีเทสต์** เพราะมันทำให้คนอ่านคิดว่าตรงนั้นถูกคุมไว้แล้ว
+     *
+     * ⚠️ ห้ามใช้กับทุกที่ — การเทียบทศนิยมด้วย delta ถูกต้องในหลายกรณี (เช่นค่าเฉลี่ย)
+     * ตัวกวาดนี้จับเฉพาะเทสต์ที่ **ชื่อประกาศว่าเป๊ะ** หรือ **เทียบกับ 100 ตรง ๆ**
+     * ซึ่งคือสัญญาที่ delta ทำให้เป็นเท็จ
+     */
+    public function testNoTestClaimsExactnessWhileAllowingATolerance(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/tests/Unit/*.php'),
+            (array)glob($root . '/tests/Integration/*.php')
+        );
+
+        $offenders = [];
+        foreach ($files as $file) {
+            /* ⚠️ ตัดคอมเมนต์ก่อน — docblock ของตัวกวาดตัวนี้เองยกตัวอย่างโค้ดที่ห้ามเขียน
+               ไว้เต็ม ๆ ถ้าไม่ตัด มันจะรายงานตัวเองเป็นผู้กระทำผิด (เกิดขึ้นจริงตอนเขียน) */
+            $code = $this->codeWithoutComments((string)file_get_contents((string)$file));
+            $chunks = preg_split('/(?=public function test)/', $code);
+            if (!is_array($chunks)) {
+                continue;
+            }
+
+            foreach ($chunks as $chunk) {
+                if (preg_match('/public function (test\w+)/', $chunk, $match) !== 1) {
+                    continue;
+                }
+
+                if (!str_contains($chunk, 'assertEqualsWithDelta')) {
+                    continue;
+                }
+
+                /* ⚠️ ชื่อต้องแคบพอ — คำว่า "exactly" ในภาษาอังกฤษมักขยายฉากทดสอบ
+                   ("เดือนที่กรอกครึ่งเดือนพอดี" · "ทำตามคำแนะนำเป๊ะ ๆ") ไม่ได้ประกาศว่า
+                   การเทียบต้องเป๊ะ · จับกว้างแล้วได้ผลบวกลวง 2 ตัวทันที (วัดแล้ว)
+                   ⚠️ ข้อจำกัดที่ยอมรับ: ชื่ออื่นที่ประกาศความเป๊ะแบบไม่ตรงรูปนี้ยังหลุดได้
+                      — ด่านหลักคือกฎ "ห้ามเทียบกับ 100 ด้วยค่าคลาดเคลื่อน" ข้างล่าง */
+                $nameClaimsExactness = preg_match('/ExactlyOneHundred|ExactlySame|ExactValue/i', $match[1]) === 1;
+                $comparesToOneHundred = preg_match('/assertEqualsWithDelta\(\s*100(\.0)?\s*,/', $chunk) === 1;
+
+                if ($nameClaimsExactness || $comparesToOneHundred) {
+                    $offenders[] = basename((string)$file) . '::' . $match[1] . '()';
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "เทสต์ที่ชื่อบอกว่า \"เป๊ะ\" (หรือเทียบกับ 100) แต่ยอมให้คลาดเคลื่อนได้:\n  "
+            . implode("\n  ", $offenders)
+            . "\n\n(ใช้ assertSame กับค่าที่ปัดแล้วแทน — ไม่งั้นเทสต์จะรายงานว่าผ่าน"
+            . ' ทั้งที่ผลรวมได้ 99.99 ซึ่งคือบั๊กที่มันควรจับ)'
+        );
+    }
 }

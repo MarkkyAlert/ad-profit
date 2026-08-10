@@ -96,7 +96,7 @@ $summary = (array)($annualData['summary'] ?? []);
 
 $totalRevenue = (float)($summary['total_revenue'] ?? 0);
 $totalAdCost = (float)($summary['total_ad_cost'] ?? 0);
-$totalProfit = (float)($summary['profit'] ?? ($totalRevenue - $totalAdCost));
+$totalProfit = money_total((float)($summary['profit'] ?? ($totalRevenue - $totalAdCost)));
 $totalRoas = isset($summary['roas']) && $summary['roas'] !== null ? (float)$summary['roas'] : null;
 $totalProfitMargin = isset($summary['profit_margin']) && $summary['profit_margin'] !== null
     ? (float)$summary['profit_margin']
@@ -543,7 +543,7 @@ require __DIR__ . '/includes/header.php';
                     <?php
                     $rowRevenue = (float)($row['total_revenue'] ?? 0);
                     $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                    $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                    $rowProfit = money_total((float)($row['profit'] ?? ($rowRevenue - $rowAdCost)));
                     $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                     $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                     $rowDaysCount = (int)($row['days_count'] ?? 0);

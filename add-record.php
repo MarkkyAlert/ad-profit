@@ -1222,7 +1222,7 @@ require __DIR__ . '/includes/header.php';
                         <?php
                         $revenue = (float)($record['revenue'] ?? 0);
                         $adCost = (float)($record['ad_cost'] ?? 0);
-                        $profit = $revenue - $adCost;
+                        $profit = money_total($revenue - $adCost);
                         $roas = $adCost > 0 ? round($revenue / $adCost, 2) : null;
                         $note = (string)($record['note'] ?? '');
                         ?>

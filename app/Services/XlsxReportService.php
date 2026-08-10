@@ -203,6 +203,34 @@ class XlsxReportService
         $cumulative = array_values((array)($chart['cumulative_profit'] ?? []));
         $prevCumulative = array_values((array)($chart['prev_cumulative_profit'] ?? []));
 
+        /* "ทั้งปีมีข้อมูลไหม" — ตัวตัดสินของเส้นสะสม (ดูเหตุผลตรงจุดที่ใช้)
+           ⚠️ นับจาก **จำนวนวันที่กรอก** ไม่ใช่จากยอดเงิน — ปีที่กรอกครบแต่เท่าทุนพอดี
+              ยังต้องเขียน 0 เพราะนั่นคือความจริง (กติกาเดียวกับทั้งระบบ) */
+        $yearHasAnyData = false;
+        $previousYearHasAnyData = false;
+        foreach ($months as $month) {
+            if ((int)($month['days_count'] ?? 0) > 0) {
+                $yearHasAnyData = true;
+            }
+            /* ⚠️ ต้องดู "จำนวนวันที่ปีก่อนกรอก" ไม่ใช่ดูว่ากำไรปีก่อนเป็น 0 ไหม —
+               0 เกิดได้ทั้งตอนไม่มีข้อมูลและตอนเท่าทุนพอดี · ผู้เรียกที่ไม่ส่งคีย์นี้มา
+               (ชุดทดสอบของกราฟ) ได้พฤติกรรมเดิม */
+            if (!array_key_exists('prev_year_days_count', $month)
+                || (int)$month['prev_year_days_count'] > 0
+            ) {
+                $previousYearHasAnyData = true;
+            }
+        }
+
+        /* ⚠️ ผู้เรียกที่ไม่ส่ง `days_count` มาเลย (ชุดทดสอบของกราฟ) ต้องได้พฤติกรรมเดิม
+           — เงื่อนไขเดียวกับ `$monthHasData` ข้างล่าง */
+        foreach ($months as $month) {
+            if (!array_key_exists('days_count', $month)) {
+                $yearHasAnyData = true;
+                break;
+            }
+        }
+
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('รายเดือน');
         $this->applyReportLook($sheet, self::TAB_COLORS['รายเดือน']);
@@ -275,16 +303,33 @@ class XlsxReportService
                 $sheet->setCellValue('H' . $rowNumber, (float)$month['yoy_change_percent']);
             }
 
-            // กำไรปีก่อนเดือนเดียวกัน + เส้นสะสม — คอลัมน์พวกนี้เป็นแหล่งข้อมูลของกราฟด้วย
-            $prevProfit = (float)($month['prev_year_profit'] ?? 0);
-            $sheet->setCellValue('I' . $rowNumber, $prevProfit);
+            /* กำไรปีก่อนเดือนเดียวกัน + เส้นสะสม — คอลัมน์พวกนี้เป็นแหล่งข้อมูลของกราฟด้วย
+               ⚠️⚠️ กติกา "ยังไม่เคยกรอก ≠ ทำได้ ฿0" ใช้กับสามคอลัมน์นี้ด้วย —
+                    เดิมเขียน 0 เสมอ ทั้งที่ B/C/D ข้าง ๆ เว้นว่างไปแล้ว
+                    → **แถวเดียวกันยังใช้กติกาสองแบบอยู่** และกราฟที่ลากจากคอลัมน์นี้
+                      จะดิ่งลงศูนย์ตั้งแต่เดือนที่ยังไม่ได้กรอก
+               ⚠️ ตัวตัดสินของ I คือ "**ปีก่อน**เดือนนั้นมีข้อมูลไหม" ไม่ใช่ "ปีนี้เดือนนั้น
+                  มีข้อมูลไหม" — คนละคำถามกัน · และต้องดู **จำนวนวันที่กรอก** ไม่ใช่ดูว่ากำไร
+                  เป็น 0 ไหม เพราะ 0 เกิดได้ทั้งตอนไม่มีข้อมูลและตอนเท่าทุนพอดี
+               ⚠️ ผู้เรียกที่ไม่ส่ง `prev_year_days_count` มา (ชุดทดสอบของกราฟ) ได้พฤติกรรมเดิม */
+            $prevMonthHasData = !array_key_exists('prev_year_days_count', $month)
+                || (int)$month['prev_year_days_count'] > 0;
 
+            if ($prevMonthHasData && ($month['prev_year_profit'] ?? null) !== null) {
+                $prevProfit = (float)$month['prev_year_profit'];
+                $sheet->setCellValue('I' . $rowNumber, $prevProfit);
+                $this->paintNegative($sheet, 'I' . $rowNumber, $prevProfit);
+            }
+
+            /* ⚠️ เส้นสะสมเว้นว่างเฉพาะเมื่อ **ทั้งปีไม่มีข้อมูลเลย** ไม่ใช่รายเดือน —
+               ยอดสะสมของเดือนที่ไม่ได้กรอกคือยอดเดิมที่สะสมมา ซึ่งเป็นความจริง ไม่ใช่ "ไม่รู้"
+               (ต่างจากคอลัมน์อื่นในแถวโดยตั้งใจ) */
             $index = $rowNumber - 2;
-            if (array_key_exists($index, $cumulative)) {
+            if ($yearHasAnyData && array_key_exists($index, $cumulative)) {
                 $sheet->setCellValue('J' . $rowNumber, (float)$cumulative[$index]);
                 $this->paintNegative($sheet, 'J' . $rowNumber, (float)$cumulative[$index]);
             }
-            if (array_key_exists($index, $prevCumulative)) {
+            if ($previousYearHasAnyData && array_key_exists($index, $prevCumulative)) {
                 $sheet->setCellValue('K' . $rowNumber, (float)$prevCumulative[$index]);
                 $this->paintNegative($sheet, 'K' . $rowNumber, (float)$prevCumulative[$index]);
             }
@@ -292,7 +337,6 @@ class XlsxReportService
             $this->paintNegative($sheet, 'D' . $rowNumber, $profit);
             $this->paintNegative($sheet, 'G' . $rowNumber, (float)($month['profit_per_day'] ?? 0));
             $this->paintNegative($sheet, 'H' . $rowNumber, (float)($month['yoy_change_percent'] ?? 0));
-            $this->paintNegative($sheet, 'I' . $rowNumber, $prevProfit);
 
             $rowNumber++;
         }
@@ -1032,9 +1076,13 @@ class XlsxReportService
             $totalProfit = money_total($totalRevenue - $totalAdCost);
 
             $sheet->setCellValueExplicit('A' . $totalRow, 'รวมทุกร้าน', DataType::TYPE_STRING);
-            $sheet->setCellValue('B' . $totalRow, $totalRevenue);
-            $sheet->setCellValue('C' . $totalRow, $totalAdCost);
-            $sheet->setCellValue('D' . $totalRow, $totalProfit);
+            /* ⚠️⚠️ ไม่มีร้านไหนกรอกเลยสักร้าน → แถวรวมต้องเว้นว่างเหมือนทุกแถวเหนือมัน
+               เดิมเขียน 0/0/0 ทั้งที่แถวร้านทุกแถวว่าง = ตารางเดียวกันใช้กติกาสองแบบ */
+            if ($totalDays > 0) {
+                $sheet->setCellValue('B' . $totalRow, $totalRevenue);
+                $sheet->setCellValue('C' . $totalRow, $totalAdCost);
+                $sheet->setCellValue('D' . $totalRow, $totalProfit);
+            }
             if ($totalAdCost > 0) {
                 $sheet->setCellValue('E' . $totalRow, round($totalRevenue / $totalAdCost, 2));
             }
@@ -1080,7 +1128,17 @@ class XlsxReportService
         }
 
         $this->emphasizeColumn($sheet, 'D', $headerRow + 1, $lastShopRow);
-        $this->writeComparisonSummary($sheet, $summary, $lastShopRow + 2);
+        /* ⚠️ ส่ง "มีร้านไหนกรอกแล้วบ้างไหม" เข้าไปด้วย — บล็อกสรุปต้องเงียบเหมือนตาราง
+           ข้างบนเมื่อยังไม่มีใครกรอกอะไรเลย */
+        $anyShopHasData = false;
+        foreach ($shops as $shop) {
+            if ((int)($shop['days_count'] ?? 0) > 0) {
+                $anyShopHasData = true;
+                break;
+            }
+        }
+
+        $this->writeComparisonSummary($sheet, $summary, $lastShopRow + 2, $anyShopHasData);
 
         $this->setColumnWidths($sheet, [
             'A' => 24, 'B' => 15, 'C' => 15, 'D' => 15,
@@ -1092,15 +1150,23 @@ class XlsxReportService
      * แถบสรุปใต้ตาราง — เดือนดี/แย่สุด + YoY รวมร้าน (same-period)
      *
      * @param array<string,mixed> $summary
+     * @param bool $anyShopHasData มีร้านไหนกรอกข้อมูลแล้วบ้างไหม (ผู้เรียกคำนวณมาให้)
      */
-    private function writeComparisonSummary(Worksheet $sheet, array $summary, int $startRow): void
-    {
+    private function writeComparisonSummary(
+        Worksheet $sheet,
+        array $summary,
+        int $startRow,
+        bool $anyShopHasData = true
+    ): void {
         $rowNumber = $startRow;
 
         $sheet->getStyle('A' . $rowNumber . ':A' . ($rowNumber + 3))->getFont()->setBold(true);
 
         $sheet->setCellValueExplicit('A' . $rowNumber, 'กำไรรวมทุกร้าน', DataType::TYPE_STRING);
-        $sheet->setCellValue('B' . $rowNumber, (float)($summary['profit'] ?? 0));
+        // ⚠️ กติกาเดียวกับแถวรวม — ไม่มีร้านไหนกรอกเลย = เว้นว่าง ไม่ใช่ ฿0
+        if ($anyShopHasData) {
+            $sheet->setCellValue('B' . $rowNumber, (float)($summary['profit'] ?? 0));
+        }
         $sheet->getStyle('B' . $rowNumber)->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
         if ((float)($summary['profit'] ?? 0) < 0) {
             $sheet->getStyle('B' . $rowNumber)->getFont()->getColor()->setARGB(self::NEGATIVE_FONT_ARGB);

@@ -160,7 +160,7 @@ require __DIR__ . '/includes/header.php';
                         $recordDate = (string)($record['record_date'] ?? '');
                         $revenue = (float)($record['revenue'] ?? 0);
                         $adCost = (float)($record['ad_cost'] ?? 0);
-                        $profit = (float)($record['profit'] ?? ($revenue - $adCost));
+                        $profit = money_total((float)($record['profit'] ?? ($revenue - $adCost)));
                         $roas = isset($record['roas']) ? (is_null($record['roas']) ? null : (float)$record['roas']) : null;
                         $comparePercent = isset($record['compare_revenue_percent'])
                             ? (is_null($record['compare_revenue_percent']) ? null : (float)$record['compare_revenue_percent'])

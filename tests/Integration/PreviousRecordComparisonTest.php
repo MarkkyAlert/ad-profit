@@ -124,10 +124,12 @@ final class PreviousRecordComparisonTest extends IntegrationTestCase
             $rows[0]['compare_revenue_percent'],
             'รายการแรกสุดของร้านไม่มีอะไรให้เทียบ ต้องเป็น null'
         );
-        $this->assertEqualsWithDelta(
+        /* ⚠️ ค่านี้ถูกปัดทศนิยม 1 ตำแหน่งมาแล้วจาก helper — เทียบเป๊ะได้ และควรเทียบเป๊ะ
+           การใส่ค่าคลาดเคลื่อนกับเป้าหมายกลม ๆ อย่าง 100 คือการซ่อนความคลาดเคลื่อนที่
+           ควรจะเห็น (บทเรียนจาก `testProfitSharesAddUpToExactlyOneHundredPercent`) */
+        $this->assertSame(
             100.0,
             (float)($rows[1]['compare_revenue_percent'] ?? 0),
-            0.05,
             'แถวที่สองต้องเทียบกับแถวแรกได้ตามปกติ'
         );
     }

@@ -153,7 +153,19 @@ final class OverviewParityTest extends IntegrationTestCase
         }
 
         $this->assertNotSame([], $shares, 'ไม่มีร้านไหนมีสัดส่วนกำไรเลย');
-        $this->assertEqualsWithDelta(100.0, array_sum($shares), 0.05, 'สัดส่วนกำไรรวมกันไม่ได้ 100%');
+        /* ⚠️⚠️ เดิมบรรทัดนี้เขียน `assertEqualsWithDelta(100.0, …, 0.05)` — จึงปล่อย **99.99**
+           ผ่านมาตลอด ทั้งที่ชื่อเทสต์บอกว่า "เป๊ะ" · เทสต์ที่อ่อนกว่าชื่อของตัวเอง
+           แย่กว่าไม่มีเทสต์ เพราะทำให้คนอ่านคิดว่าตรงนี้ถูกคุมไว้แล้ว
+           (`SharedHelperContractTest::testNoTestClaimsExactnessWhileAllowingATolerance()`
+            กวาดไม่ให้เกิดซ้ำ) */
+        $this->assertSame(
+            100.0,
+            round(array_sum($shares), 2),
+            'สัดส่วนกำไรรวมกันไม่ได้ 100.00 พอดี: [' . implode(', ', array_map(
+                static fn(float $share): string => (string)$share,
+                $shares
+            )) . ']'
+        );
     }
 
     /**

@@ -1541,7 +1541,8 @@ class RecordService
             $count = (int)$bucket['count'];
             $revenueTotal = (float)$bucket['revenue_total'];
             $adCostTotal = (float)$bucket['ad_cost_total'];
-            $profitTotal = $revenueTotal - $adCostTotal;
+            // ⭐ ปัดสตางค์ก่อนใช้ต่อ — ค่าเฉลี่ยต่อวันของแต่ละวันในสัปดาห์คิดจากตัวนี้
+            $profitTotal = money_total($revenueTotal - $adCostTotal);
 
             $weekdays[] = [
                 'weekday' => $weekday,

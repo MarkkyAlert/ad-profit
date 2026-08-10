@@ -199,6 +199,10 @@ class AnnualService
                 // ปรับฐานให้เทียบกันได้จริง — เดือนที่กรอกวันเดียวอาจแรงกว่าเดือนที่กรอกครบแต่ยอดรวมสูงกว่า
                 'profit_per_day' => $monthDaysCount > 0 ? round($monthProfit / $monthDaysCount, 2) : null,
                 'prev_year_profit' => $previousMonthProfit,
+                /* ⚠️ "ปีก่อนเดือนนี้มีข้อมูลไหม" — `prev_year_profit` เป็น 0.0 ได้ทั้งตอน
+                   ไม่มีข้อมูล และตอนเท่าทุนพอดี แยกสองกรณีนี้จากตัวเลขอย่างเดียวไม่ได้
+                   · ไฟล์ Excel ใช้คีย์นี้ตัดสินว่าจะเขียน 0 หรือเว้นว่าง */
+                'prev_year_days_count' => (int)($previousMonthTotals['days_count'] ?? 0),
                 'yoy_change_percent' => change_percent($monthProfit, $previousMonthProfit),
             ];
 

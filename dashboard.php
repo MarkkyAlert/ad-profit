@@ -86,7 +86,7 @@ $weekdayAvgProfit = isset($weekdayData['avg_profit']) && $weekdayData['avg_profi
 $weekdayHint = null;
 $weekdayHintClass = 'text-slate-400';
 if ($weekdayTrendReliable && $weekdayAvgProfit !== null) {
-    $weekdayProfitDiff = $weekdayTargetProfit - $weekdayAvgProfit;
+    $weekdayProfitDiff = money_total($weekdayTargetProfit - $weekdayAvgProfit);
     $weekdayTolerance = abs($weekdayAvgProfit) * 0.1;
 
     if ($weekdayProfitDiff > $weekdayTolerance) {

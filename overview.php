@@ -454,7 +454,7 @@ require __DIR__ . '/includes/header.php';
             <?php
             $dayTotalRevenue = (float)($dailySummary['total_revenue'] ?? 0);
             $dayTotalAdCost = (float)($dailySummary['total_ad_cost'] ?? 0);
-            $dayProfit = (float)($dailySummary['profit'] ?? ($dayTotalRevenue - $dayTotalAdCost));
+            $dayProfit = money_total((float)($dailySummary['profit'] ?? ($dayTotalRevenue - $dayTotalAdCost)));
             $dayRoas = isset($dailySummary['roas']) && $dailySummary['roas'] !== null ? (float)$dailySummary['roas'] : null;
             $dayProfitMargin = isset($dailySummary['profit_margin']) && $dailySummary['profit_margin'] !== null
                 ? (float)$dailySummary['profit_margin']
@@ -598,7 +598,7 @@ require __DIR__ . '/includes/header.php';
                                 $rowShopsExpected = (int)($row['shops_tracked'] ?? $dayTotalShops);
                                 $rowRevenue = (float)($row['total_revenue'] ?? 0);
                                 $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                                $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                                $rowProfit = money_total((float)($row['profit'] ?? ($rowRevenue - $rowAdCost)));
                                 $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                                 $rowDay = (int)substr($rowDate, 8, 2);
@@ -681,7 +681,7 @@ require __DIR__ . '/includes/header.php';
                                 <?php
                                 $rowRevenue = (float)($row['total_revenue'] ?? 0);
                                 $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                                $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                                $rowProfit = money_total((float)($row['profit'] ?? ($rowRevenue - $rowAdCost)));
                                 $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                                 ?>
@@ -794,7 +794,7 @@ require __DIR__ . '/includes/header.php';
             <?php
             $yearTotalRevenue = (float)($yearlySummary['total_revenue'] ?? 0);
             $yearTotalAdCost = (float)($yearlySummary['total_ad_cost'] ?? 0);
-            $yearProfit = (float)($yearlySummary['profit'] ?? ($yearTotalRevenue - $yearTotalAdCost));
+            $yearProfit = money_total((float)($yearlySummary['profit'] ?? ($yearTotalRevenue - $yearTotalAdCost)));
             $yearRoas = isset($yearlySummary['roas']) && $yearlySummary['roas'] !== null ? (float)$yearlySummary['roas'] : null;
             $yearProfitMargin = isset($yearlySummary['profit_margin']) && $yearlySummary['profit_margin'] !== null
                 ? (float)$yearlySummary['profit_margin']
@@ -928,7 +928,7 @@ require __DIR__ . '/includes/header.php';
                                 <?php
                                 $rowRevenue = (float)($row['total_revenue'] ?? 0);
                                 $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                                $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                                $rowProfit = money_total((float)($row['profit'] ?? ($rowRevenue - $rowAdCost)));
                                 $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                                 ?>
@@ -993,7 +993,7 @@ require __DIR__ . '/includes/header.php';
                                 <?php
                                 $rowRevenue = (float)($row['total_revenue'] ?? 0);
                                 $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                                $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                                $rowProfit = money_total((float)($row['profit'] ?? ($rowRevenue - $rowAdCost)));
                                 $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                                 $rowProfitShare = isset($row['profit_share']) && $row['profit_share'] !== null ? (float)$row['profit_share'] : null;
@@ -1133,7 +1133,7 @@ require __DIR__ . '/includes/header.php';
                             <?php
                             $rowRevenue = (float)($row['total_revenue'] ?? 0);
                             $rowAdCost = (float)($row['total_ad_cost'] ?? 0);
-                            $rowProfit = (float)($row['profit'] ?? ($rowRevenue - $rowAdCost));
+                            $rowProfit = money_total((float)($row['profit'] ?? ($rowRevenue - $rowAdCost)));
                             $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                             $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
                             $rowProfitShare = isset($row['profit_share']) && $row['profit_share'] !== null ? (float)$row['profit_share'] : null;
@@ -1189,7 +1189,7 @@ require __DIR__ . '/includes/header.php';
                         <?php
                         $totalRevenue = (float)($totals['total_revenue'] ?? 0);
                         $totalAdCost = (float)($totals['total_ad_cost'] ?? 0);
-                        $totalProfit = (float)($totals['profit'] ?? ($totalRevenue - $totalAdCost));
+                        $totalProfit = money_total((float)($totals['profit'] ?? ($totalRevenue - $totalAdCost)));
                         $totalRoas = isset($totals['roas']) && $totals['roas'] !== null ? (float)$totals['roas'] : null;
                         $totalProfitMargin = isset($totals['profit_margin']) && $totals['profit_margin'] !== null ? (float)$totals['profit_margin'] : null;
                         ?>

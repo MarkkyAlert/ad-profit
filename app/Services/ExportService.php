@@ -231,7 +231,8 @@ class ExportService
                 'record_date' => (string)($record['record_date'] ?? ''),
                 'revenue' => $revenue,
                 'ad_cost' => $adCost,
-                'profit' => $revenue - $adCost,
+                // ⭐ ปัดสตางค์ก่อนใส่ไฟล์ — เลขในไฟล์ต้องตรงกับที่หน้าจอแสดงทุกหลัก
+                'profit' => money_total($revenue - $adCost),
                 'roas' => $adCost > 0 ? round($revenue / $adCost, 2) : null,
                 'note' => (string)($record['note'] ?? ''),
             ];
