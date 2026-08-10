@@ -1120,4 +1120,57 @@ final class BrowserScriptParityTest extends ControllerTestCase
             'ต้องตรวจเลขคำขอทั้งกิ่งที่ได้คำตอบและกิ่งที่ล้มเหลว'
         );
     }
+
+    /**
+     * ⭐⭐⭐ ค่าที่ผู้ใช้ **วางเอง** ต้องปลดธง `prefilled` ทันที
+     *
+     * ⚠️⚠️ การกำหนด `.value` ด้วยโค้ด **ไม่ทำให้ event `input` ทำงาน** ธงจึงไม่หลุด
+     * เหมือนตอนผู้ใช้พิมพ์เอง · แล้วตัววางยิง `change` ต่อท้าย → ตัวจัดการเห็นว่าเป็น
+     * "ค่าที่ระบบเติม" แล้ว **ล้างยอดที่เพิ่งวางทิ้ง** · ผู้ใช้วางทับแถวที่มีข้อมูลอยู่แล้ว
+     * จะเห็นยอดหายไปเงียบ ๆ
+     */
+    public function testPastedValuesClearThePrefilledFlag(): void
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+        $bare = explode("\n", self::stripCommentsAndStrings(implode("\n", $blocks[1])));
+
+        $pasteAt = null;
+        foreach ($bare as $number => $line) {
+            if (str_contains($line, 'normalizeCell(columnIndex, cell)') && str_contains($line, '.value')) {
+                $pasteAt = $number;
+            }
+        }
+
+        $this->assertNotNull($pasteAt, 'หาจุดที่ตัววางเขียนค่าลงช่องไม่เจอ');
+
+        /* ⚠️ หน้าต่างต้องกว้างพอ — คอมเมนต์ที่อธิบายกติกาถูกแทนที่ด้วยบรรทัดว่างตอนตัด
+           จึงกินระยะไปหลายบรรทัดระหว่างจุดเขียนค่ากับจุดปลดธง */
+        $nearby = implode("\n", array_slice($bare, $pasteAt, 14));
+        $this->assertMatchesRegularExpression(
+            '/delete\s+\w+\.dataset\.prefilled|dataset\.prefilled\s*=\s*/',
+            $nearby,
+            'ตัววางไม่ได้ปลดธง prefilled — ค่าที่ผู้ใช้วางจะถูกล้างทิ้งเหมือนเป็นข้อมูลเก่า'
+        );
+    }
+
+    /**
+     * ⭐⭐ กิ่งล้มเหลวของตัวจัดการวันทีละแถว ต้องกันผลลัพธ์เก่าเหมือนกิ่งสำเร็จ
+     *
+     * ⚠️ เลือกวัน B (โหลดล้ม) แล้วเลือกวัน C (โหลดสำเร็จ) — ถ้าความล้มเหลวของ B
+     * มาถึงทีหลัง มันจะล้างธง `note_checked` ของวัน C ทิ้ง แล้วเซิร์ฟเวอร์ปฏิเสธทั้งชุด
+     * ทั้งที่ผู้ใช้เห็นโน้ตเดิมของวัน C แล้วและตั้งใจล้างจริง ๆ
+     */
+    public function testTheRowHandlerAlsoGuardsItsFailureBranch(): void
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+        $source = self::stripCommentsAndStrings(implode("\n", $blocks[1]));
+
+        $this->assertGreaterThanOrEqual(
+            2,
+            preg_match_all('/bulkRowRequestIds\.get\(row\)\s*!==\s*requestId/', $source),
+            'กิ่งล้มเหลวไม่ได้กันผลลัพธ์เก่า — ความล้มเหลวของวันก่อนหน้าจะล้างธงของวันใหม่'
+        );
+    }
 }

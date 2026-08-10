@@ -12,6 +12,10 @@ use ShopRepository;
 /**
  * unit test ของรายงานวิเคราะห์ในมุมเดือน — จัดอันดับด้วยกำไร + สัดส่วนกำไร + momentum
  */
+/* ⚠️⚠️ **ข้อมูลตั้งต้นต้องเป็นไปได้จริง** — แถวที่มียอดขายแต่ `days_count = 0`
+   เกิดขึ้นไม่ได้ในระบบจริง (มียอด = ต้องมีวันที่กรอก) · เดิมชุดทดสอบไม่ใส่ `days_count`
+   มาเลย ทำให้ทุกแถวถูกมองว่า "ยังไม่มีข้อมูล" หลังจากเพิ่มกติกา
+   "เดือนที่ไม่มี record ห้ามรายงาน −100%" */
 final class OverviewServiceAnalysisTest extends TestCase
 {
     private const MONTH = '2026-06';
@@ -58,9 +62,9 @@ final class OverviewServiceAnalysisTest extends TestCase
             ],
             [
                 // ร้าน 1 รายได้สูงสุด (9000) แต่กำไรแค่ 500
-                ['shop_id' => 1, 'total_revenue' => 9000, 'total_ad_cost' => 8500],
+                ['shop_id' => 1, 'total_revenue' => 9000, 'total_ad_cost' => 8500, 'days_count' => 5],
                 // ร้าน 2 รายได้น้อยกว่า แต่กำไร 2800
-                ['shop_id' => 2, 'total_revenue' => 3000, 'total_ad_cost' => 200],
+                ['shop_id' => 2, 'total_revenue' => 3000, 'total_ad_cost' => 200, 'days_count' => 5],
             ]
         ));
 
@@ -78,8 +82,8 @@ final class OverviewServiceAnalysisTest extends TestCase
                 ['id' => 2, 'name' => 'ร้าน B'],
             ],
             [
-                ['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 250],  // profit 750
-                ['shop_id' => 2, 'total_revenue' => 500, 'total_ad_cost' => 250],   // profit 250
+                ['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 250, 'days_count' => 5],  // profit 750
+                ['shop_id' => 2, 'total_revenue' => 500, 'total_ad_cost' => 250, 'days_count' => 5],   // profit 250
             ]
         ));
 
@@ -97,8 +101,8 @@ final class OverviewServiceAnalysisTest extends TestCase
                 ['id' => 2, 'name' => 'ขาดทุน'],
             ],
             [
-                ['shop_id' => 1, 'total_revenue' => 1200, 'total_ad_cost' => 200],  // +1000
-                ['shop_id' => 2, 'total_revenue' => 100, 'total_ad_cost' => 300],   // -200
+                ['shop_id' => 1, 'total_revenue' => 1200, 'total_ad_cost' => 200, 'days_count' => 5],  // +1000
+                ['shop_id' => 2, 'total_revenue' => 100, 'total_ad_cost' => 300, 'days_count' => 5],   // -200
             ]
         ));
 
@@ -115,8 +119,8 @@ final class OverviewServiceAnalysisTest extends TestCase
                 ['id' => 2, 'name' => 'ร้าน B'],
             ],
             [
-                ['shop_id' => 1, 'total_revenue' => 100, 'total_ad_cost' => 500],   // -400
-                ['shop_id' => 2, 'total_revenue' => 100, 'total_ad_cost' => 300],   // -200
+                ['shop_id' => 1, 'total_revenue' => 100, 'total_ad_cost' => 500, 'days_count' => 5],   // -400
+                ['shop_id' => 2, 'total_revenue' => 100, 'total_ad_cost' => 300, 'days_count' => 5],   // -200
             ]
         ));
 
@@ -130,8 +134,8 @@ final class OverviewServiceAnalysisTest extends TestCase
     {
         $rows = $this->rowsOf($this->makeService(
             [['id' => 1, 'name' => 'ร้าน A']],
-            [['shop_id' => 1, 'total_revenue' => 1500, 'total_ad_cost' => 300]],   // profit 1200
-            [['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 200]]    // prev profit 800
+            [['shop_id' => 1, 'total_revenue' => 1500, 'total_ad_cost' => 300, 'days_count' => 5]],   // profit 1200
+            [['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 200, 'days_count' => 5]]    // prev profit 800
         ));
 
         $this->assertSame(800.0, $rows[0]['prev_profit']);
@@ -143,7 +147,7 @@ final class OverviewServiceAnalysisTest extends TestCase
     {
         $rows = $this->rowsOf($this->makeService(
             [['id' => 1, 'name' => 'ร้านใหม่']],
-            [['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 200]],
+            [['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 200, 'days_count' => 5]],
             []   // ไม่มีข้อมูลเดือนก่อน
         ));
 
@@ -157,8 +161,8 @@ final class OverviewServiceAnalysisTest extends TestCase
         // เดือนก่อนขาดทุน -500 · เดือนนี้ขาดทุนน้อยลง -200 → ต้องเป็น "ดีขึ้น" (+60%)
         $rows = $this->rowsOf($this->makeService(
             [['id' => 1, 'name' => 'ร้าน A']],
-            [['shop_id' => 1, 'total_revenue' => 100, 'total_ad_cost' => 300]],    // -200
-            [['shop_id' => 1, 'total_revenue' => 100, 'total_ad_cost' => 600]]     // -500
+            [['shop_id' => 1, 'total_revenue' => 100, 'total_ad_cost' => 300, 'days_count' => 5]],    // -200
+            [['shop_id' => 1, 'total_revenue' => 100, 'total_ad_cost' => 600, 'days_count' => 5]]     // -500
         ));
 
         $this->assertSame(-500.0, $rows[0]['prev_profit']);
@@ -170,8 +174,8 @@ final class OverviewServiceAnalysisTest extends TestCase
     {
         $rows = $this->rowsOf($this->makeService(
             [['id' => 1, 'name' => 'ร้าน A']],
-            [['shop_id' => 1, 'total_revenue' => 600, 'total_ad_cost' => 200]],    // 400
-            [['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 200]]    // prev 800
+            [['shop_id' => 1, 'total_revenue' => 600, 'total_ad_cost' => 200, 'days_count' => 5]],    // 400
+            [['shop_id' => 1, 'total_revenue' => 1000, 'total_ad_cost' => 200, 'days_count' => 5]]    // prev 800
         ));
 
         $this->assertSame(-400.0, $rows[0]['profit_change']);

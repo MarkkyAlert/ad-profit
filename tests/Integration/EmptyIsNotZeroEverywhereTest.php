@@ -406,4 +406,107 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
             'ปีที่กรอกจริงแล้วเท่าทุน ต้องยังรายงานว่าตก 100% — นั่นคือความจริง'
         );
     }
+
+    /**
+     * ⭐⭐⭐ หน้ารวมร้านมุมเดือน: ร้านที่เดือนนี้ยังไม่มี record ห้ามขึ้น ↓100%
+     *
+     * ⚠️⚠️ หน้าเว็บ *รู้อยู่แล้ว* ว่าแถวนั้นไม่มีข้อมูล (เว้นช่องเงินเป็นขีด) แต่ยังพิมพ์
+     * ป้าย ↓100.0% ต่อ — **แถวเดียวพูดสองอย่าง** · กติกาถูกลงให้มุมรายปีไปแล้ว
+     * แต่มุมเดือนตกสำรวจ (รูปแบบเดิมของโปรเจกต์นี้)
+     */
+    public function testAShopWithNoRecordsThisMonthNeverShowsAHundredPercentDrop(): void
+    {
+        $userId = $this->createUser('monthdrop@example.com', 'MonthDropPass123');
+        $shopA = $this->createShop($userId, 'ร้านที่หยุดกรอก');
+        $shopB = $this->createShop($userId, 'ร้านที่ยังกรอกอยู่');
+
+        // เดือนก่อนร้าน A มีกำไร · เดือนนี้ไม่กรอกเลย
+        $this->insert($shopA, '2026-07-10', 9000.00, 5000.00);
+        $this->insert($shopB, '2026-08-10', 3000.00, 1000.00);
+
+        $session = $this->startSession($userId, $shopA);
+        $text = (string)preg_replace('/\s+/u', ' ', strip_tags((string)preg_replace(
+            '#<script.*?</script>#s',
+            ' ',
+            $this->get('/overview.php?month=2026-08', $session)['body']
+        )));
+
+        $this->assertStringNotContainsString(
+            '100.0%',
+            $text,
+            'ร้านที่เดือนนี้ยังไม่มี record ถูกรายงานว่า "ตก 100%" ทั้งที่แค่ยังไม่ได้กรอก'
+        );
+    }
+
+    /**
+     * ⭐⭐ payload ดิบของ API รายปี ต้องไม่พก −100% ของเดือนที่ยังไม่มี record
+     *
+     * ⚠️ หน้าจอและไฟล์เว้นขีดให้แล้ว แต่ `api/annual-data.php` ส่งค่าที่ Service คำนวณ
+     * ออกไปตรง ๆ — ใครอ่าน API จะได้ตัวเลขที่หน้าเว็บตั้งใจไม่แสดง
+     * · กติกาต้องอยู่ที่ Service ไม่ใช่ให้ผู้แสดงผลแต่ละคนกันเอง
+     */
+    public function testTheAnnualApiNeverShipsAHundredPercentDropForUnfilledMonths(): void
+    {
+        $userId = $this->createUser('apidrop@example.com', 'ApiDropPass123');
+        $shopId = $this->createShop($userId, 'ร้านที่เริ่มกลางปี');
+
+        $this->insert($shopId, '2025-01-10', 20000.00, 5000.00);
+        $this->insert($shopId, '2026-03-10', 15000.00, 4000.00);
+
+        $session = $this->startSession($userId, $shopId);
+        $response = $this->getJson('/api/annual-data.php?year=2569', $session);
+        $this->assertSame(200, $response['status'], 'เรียก API รายปีไม่สำเร็จ');
+
+        $payload = json_decode($response['body'], true);
+        $this->assertIsArray($payload);
+
+        foreach ((array)($payload['data']['months'] ?? []) as $month) {
+            if ((int)($month['days_count'] ?? 0) > 0) {
+                continue;
+            }
+
+            /* ⚠️⚠️ ห้ามเขียน `?? 'ไม่มีคีย์'` แล้ว assertNull — `??` ถือว่า null คือ "ไม่มีค่า"
+               จึงคืนตัวสำรองแทน null ที่กำลังจะตรวจพอดี (พลาดซ้ำมาแล้วหลายรอบ) */
+            $this->assertArrayHasKey('yoy_change_percent', $month);
+            $this->assertNull(
+                $month['yoy_change_percent'],
+                'เดือนที่ยังไม่มี record ยังส่ง % เทียบปีก่อนออกไปกับ API'
+            );
+        }
+    }
+
+    /**
+     * ⭐⭐ "ปีนี้ยังไม่มีข้อมูล" ต้องไม่ถูกอธิบายว่า "ปีก่อนเท่าทุนพอดี"
+     *
+     * ⚠️⚠️ % ที่เป็น null มีได้ **3 สาเหตุ** — ปีก่อนไม่มีข้อมูล · ปีก่อนเท่าทุนพอดี ·
+     * **ปีนี้ยังไม่มี record** · พอเพิ่มสาเหตุที่ 3 เข้ามาโดยไม่บอกหน้าเว็บ
+     * มันจึงพิมพ์คำอธิบายของสาเหตุที่ 2 ทั้งที่ปีก่อนมีกำไรจริง
+     * · หลักเดียวกับ `extremes_not_comparable_text()` — ห้ามเดาสาเหตุแทนข้อมูล
+     */
+    public function testTheReasonForAMissingYoyIsTheRealOne(): void
+    {
+        $userId = $this->createUser('yoyreason@example.com', 'YoyReasonPass123');
+        $shopId = $this->createShop($userId, 'ร้านที่หยุดไปทั้งปี');
+
+        // ปีก่อนมีกำไรจริง ๆ (ไม่ใช่เท่าทุน) · ปีนี้ยังไม่กรอกเลย
+        $this->insert($shopId, '2025-06-10', 9000.00, 5000.00);
+
+        $session = $this->startSession($userId, $shopId);
+        $text = (string)preg_replace('/\s+/u', ' ', strip_tags((string)preg_replace(
+            '#<script.*?</script>#s',
+            ' ',
+            $this->get('/annual.php?year=2569', $session)['body']
+        )));
+
+        $this->assertStringNotContainsString(
+            'ปีก่อนเท่าทุนพอดี',
+            $text,
+            'บอกว่า "ปีก่อนเท่าทุนพอดี" ทั้งที่ปีก่อนมีกำไรจริง — สาเหตุจริงคือปีนี้ยังไม่มีข้อมูล'
+        );
+        $this->assertStringContainsString(
+            'ปีนี้ยังไม่มีข้อมูล',
+            $text,
+            'ไม่ได้บอกสาเหตุจริงว่าปีนี้ยังไม่มีข้อมูล'
+        );
+    }
 }

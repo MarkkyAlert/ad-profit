@@ -316,17 +316,25 @@ require __DIR__ . '/includes/header.php';
         JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
     ) ?>;
 
-    // cache ข้อมูลรายเดือน ใช้ร่วมกันระหว่างฟอร์มเดี่ยวกับตารางกรอกหลายวัน
-    // (ทั้งสองต้องเติมค่าเดิมของวันที่ผู้ใช้พิมพ์ ไม่งั้นการบันทึกทับจะลบโน้ตเดิมทิ้ง)
-    const monthDataCache = new Map();   // 'YYYY-MM' → Map(วันที่ → ข้อมูล)
+    /* ร้านที่หน้านี้ถูกเรนเดอร์ให้ — ส่งไปกับทุกคำขอ เพื่อให้เซิร์ฟเวอร์ปฏิเสธถ้าอีกแท็บ
+       สลับร้านไปแล้ว (ไม่งั้นหน้านี้จะได้ข้อมูลของอีกร้านมาเติมในฟอร์มของร้านนี้) */
+    const PAGE_SHOP_ID = <?= json_encode((string)$shopId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+    /* cache ข้อมูลรายเดือน ใช้ร่วมกันระหว่างฟอร์มเดี่ยวกับตารางกรอกหลายวัน
+       (ทั้งสองต้องเติมค่าเดิมของวันที่ผู้ใช้พิมพ์ ไม่งั้นการบันทึกทับจะลบโน้ตเดิมทิ้ง)
+       ⚠️⚠️ **คีย์ต้องมีร้านด้วย** — เดิมใช้แค่ 'YYYY-MM' ข้อมูลของอีกร้านที่หลุดเข้ามา
+       จะค้างอยู่ใน cache แล้วถูกใช้ต่อทั้งอายุหน้า */
+    const monthDataCache = new Map();   // 'shopId|YYYY-MM' → Map(วันที่ → ข้อมูล)
 
     const loadMonthData = async (month) => {
-        if (monthDataCache.has(month)) {
-            return monthDataCache.get(month);
+        const cacheKey = PAGE_SHOP_ID + '|' + month;
+        if (monthDataCache.has(cacheKey)) {
+            return monthDataCache.get(cacheKey);
         }
 
         const response = await fetch(
-            MONTH_GRID_URL + '?month=' + encodeURIComponent(month),
+            MONTH_GRID_URL + '?month=' + encodeURIComponent(month)
+                + '&shop_context_id=' + encodeURIComponent(PAGE_SHOP_ID),
             { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }
         );
         const payload = await response.json();
@@ -346,7 +354,7 @@ require __DIR__ . '/includes/header.php';
             ? payload.data.future_days_with_records
             : [];
         futureDays.forEach((day) => { byDate.set(day.date, day); });
-        monthDataCache.set(month, byDate);
+        monthDataCache.set(cacheKey, byDate);
 
         return byDate;
     };
@@ -751,6 +759,14 @@ require __DIR__ . '/includes/header.php';
                 refresh();
                 showBulkNotice('วันที่ ' + value + ' มีข้อมูลอยู่แล้ว — ระบบเติมค่าเดิมไว้ให้ กดบันทึกจะเป็นการแก้ไขทับ');
             } catch (error) {
+                /* ⚠️⚠️ กิ่งล้มเหลวก็ต้องกันผลลัพธ์เก่าเหมือนกิ่งสำเร็จ —
+                   เลือกวัน B (ล้ม) แล้วเลือกวัน C (สำเร็จ) ถ้าความล้มเหลวของ B มาทีหลัง
+                   มันจะล้างธง `note_checked` ของวัน C ทิ้ง → เซิร์ฟเวอร์ปฏิเสธทั้งชุด
+                   ทั้งที่ผู้ใช้เห็นโน้ตเดิมของวัน C แล้วและตั้งใจล้างจริง ๆ */
+                if (bulkRowRequestIds.get(row) !== requestId || input.value !== value) {
+                    return;
+                }
+
                 // ⚠️ ธงต้องเป็นว่างไว้ — เซิร์ฟเวอร์จะได้ปฏิเสธแทนที่จะลบโน้ตเดิมทิ้งเงียบ ๆ
                 const failedFlag = row.querySelector('input[name="note_checked[]"]');
                 if (failedFlag) { failedFlag.value = ''; }
@@ -870,6 +886,14 @@ require __DIR__ . '/includes/header.php';
                     }
 
                     input.value = normalizeCell(columnIndex, cell);
+
+                    /* ⚠️⚠️⚠️ **ค่าที่ผู้ใช้วางเองต้องปลดธง `prefilled` ทันที**
+                       ธงนั้นแปลว่า "ระบบเติมให้" ซึ่งตัวจัดการเปลี่ยนวันที่จะล้างทิ้งได้
+                       · การกำหนด `.value` ด้วยโค้ด **ไม่ทำให้ event `input` ทำงาน** ธงจึงไม่หลุด
+                         เหมือนตอนผู้ใช้พิมพ์เอง · แล้วโค้ดยิง `change` ต่อท้ายการวาง
+                         → ตัวจัดการเห็นว่าเป็น "ค่าที่ระบบเติม" แล้วล้างค่าที่เพิ่งวางทิ้ง
+                       · อาการ: วางทับแถวที่มีข้อมูลอยู่แล้ว ยอดที่วางหายไปเงียบ ๆ */
+                    delete input.dataset.prefilled;
 
                     // ⚠️⚠️ ช่องจำนวนเงินเป็น `<input type="number">` ซึ่ง **ทิ้งค่าที่ไม่ใช่
                     // ตัวเลขเงียบ ๆ** — กติกาของ `cleanAmountCell()` คือ "อ่านไม่ออกให้คืน
@@ -1089,7 +1113,8 @@ require __DIR__ . '/includes/header.php';
 
                 try {
                     const response = await fetch(
-                        MONTH_GRID_URL + '?month=' + encodeURIComponent(selectedMonth),
+                        MONTH_GRID_URL + '?month=' + encodeURIComponent(selectedMonth)
+                            + '&shop_context_id=' + encodeURIComponent(PAGE_SHOP_ID),
                         { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }
                     );
 

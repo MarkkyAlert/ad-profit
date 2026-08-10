@@ -255,7 +255,16 @@ class OverviewService
             // ถูกป้ายว่า **"ใหม่"** พร้อม tooltip "ไม่มีข้อมูลเดือนก่อน" ซึ่งไม่จริงทั้งคู่
             // (`sumProfitByShopId` คืนแผนที่ที่ *ไม่มีคีย์* เมื่อไม่มีแถวเลย จึงแยกได้)
             $rows[$index]['prev_has_data'] = array_key_exists($shopId, $previousProfitByShopId);
-            $rows[$index]['profit_change_percent'] = change_percent($profit, $previousProfit);
+            /* ⚠️⚠️⚠️ **ร้านที่เดือนนี้ยังไม่มี record เลย = เทียบไม่ได้ ไม่ใช่ "ตก 100%"**
+               · `change_percent(0, เดือนก่อน)` ให้ −100 ซึ่งอ่านว่า "ยอดหายไปหมด"
+                 ทั้งที่ความจริงคือ "เดือนนี้ยังไม่ได้เริ่มบันทึก"
+               · หน้าเว็บรู้อยู่แล้วว่าแถวนี้ไม่มีข้อมูล (`days_count = 0`) และเว้นช่องเงิน
+                 เป็นขีด แต่ยังพิมพ์ป้าย ↓100.0% ต่อ — แถวเดียวพูดสองอย่าง
+               ⚠️ เกณฑ์คือ "มี record ไหม" ไม่ใช่ "กำไรเป็นศูนย์ไหม" — ร้านที่กรอกจริง
+                  แล้วเท่าทุนพอดี ยังต้องได้ −100% ตามปกติ */
+            $rows[$index]['profit_change_percent'] = (int)($row['days_count'] ?? 0) > 0
+                ? change_percent($profit, $previousProfit)
+                : null;
         }
 
         return $rows;

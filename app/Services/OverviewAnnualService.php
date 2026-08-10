@@ -323,6 +323,8 @@ class OverviewAnnualService
                     'yoy_profit_change_percent' => ($previousYearProfit !== null && $monthsWithRecord !== [])
                         ? change_percent($profit, $previousYearProfit)
                         : null,
+                    // ⚠️ เหตุผลของ null — ดูคำอธิบายเต็มใน `AnnualService`
+                    'current_year_has_data' => $monthsWithRecord !== [],
                 ],
                 'chart' => [
                     'months' => array_values(array_map(static fn(array $row): string => (string)($row['month_key'] ?? ''), $months)),

@@ -102,6 +102,9 @@ $yearlyWorstMonth = null;
 $yearlyPrevYear = $selectedYear - 1;
 $yearlyPrevProfit = null;
 $yearlyPrevHasData = false;
+$yearlyCurrentHasData = true;
+// ⚠️ "ปีนี้ยังไม่มี record" เป็นสาเหตุที่ 3 ของ % ที่เป็น null — ห้ามให้หน้าเว็บเดาเอง
+$yearlyCurrentHasData = ($yearlySummary['current_year_has_data'] ?? true) === true;
 $yearlyPrevUnavailable = false;
 $yearlyYoyPercent = null;
 $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['text'];
@@ -858,7 +861,12 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                                 <?php if ($yearlyPrevUnavailable): ?>
                                     โหลดข้อมูลปีก่อนไม่สำเร็จ — เทียบให้ไม่ได้ตอนนี้
                                 <?php else: ?>
-                                    <?= $yearlyPrevHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                                    <?php // ⚠️ สาเหตุที่ 3: ปีนี้ยังไม่มี record — ไม่ใช่ "ปีก่อนเท่าทุน" ?>
+                                    <?php if (!$yearlyCurrentHasData): ?>
+                                        ปีนี้ยังไม่มีข้อมูล — เทียบกับปีก่อนไม่ได้
+                                    <?php else: ?>
+                                        <?= $yearlyPrevHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </span>
                         <?php else: ?>

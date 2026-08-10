@@ -402,6 +402,10 @@ final class SharedHelperContractTest extends TestCase
                `0.01` แล้วรายงาน **+1.0%** (วัดจริง) · แถวสองแถวนี้กันไม่ให้กลับไปทำแบบนั้น */
             'ROAS ขยับนิดเดียว (ไม่ใช่จำนวนเงิน)' => [1.006, 1.000, 0.6],
             'ROAS ขยับน้อยกว่าครึ่งหน่วย' => [1.0004, 1.0000, 0.0],
+            /* ⚠️⚠️ **การปัดชั้นแรกต้องไม่เปลี่ยนค่าจริง** — ยอดระดับสิบล้าน (ซึ่งคอลัมน์
+               DECIMAL(12,2) รองรับ) ทำให้ % จริงเป็น 0.049999999950 ซึ่งควรแสดง 0.0%
+               ถ้าปัดชั้นแรกหยาบไป (10 ตำแหน่ง) มันจะถูกดันขึ้นเป็น 0.05 แล้วแสดง 0.1% */
+            'ยอดใหญ่ที่ใกล้เกณฑ์แต่ยังไม่ถึง' => [20010000.02, 20000000.02, 0.0],
         ];
     }
 
@@ -1153,6 +1157,95 @@ final class SharedHelperContractTest extends TestCase
             . implode("\n  ", $offenders)
             . "\n\n(ใช้ assertSame กับค่าที่ปัดแล้วแทน — ไม่งั้นเทสต์จะรายงานว่าผ่าน"
             . ' ทั้งที่ผลรวมได้ 99.99 ซึ่งคือบั๊กที่มันควรจับ)'
+        );
+    }
+
+    /**
+     * ⭐⭐ **ตัวกวาด** — ห้ามเขียน `$x['key'] ?? 'อะไรก็ตาม'` แล้ว `assertNull()`
+     *
+     * ⚠️⚠️ `??` ถือว่า `null` คือ "ไม่มีค่า" จึงคืน **ตัวสำรอง** แทน `null` ที่กำลังจะตรวจพอดี
+     * → เทสต์แดงทั้งที่โค้ดถูก · เขียนพลาดมาแล้วหลายรอบในโปรเจกต์นี้
+     * · วิธีที่ถูก: `assertArrayHasKey()` ก่อน แล้วค่อย `assertNull()` กับค่าตรง ๆ
+     */
+    public function testNobodyChecksForNullThroughACoalescingFallback(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/tests/Unit/*.php'),
+            (array)glob($root . '/tests/Integration/*.php')
+        );
+
+        $offenders = [];
+        foreach ($files as $file) {
+            $code = $this->codeWithoutComments((string)file_get_contents((string)$file));
+
+            /* รูปแบบ: assertNull( … ?? … ) — ไม่ว่าจะขึ้นบรรทัดใหม่หรือไม่
+               ⚠️ `?? null` ไม่นับผิด เพราะให้ผลเหมือนไม่มี `??` */
+            if (preg_match_all('/assertNull\(\s*[^;]*?\?\?\s*(?!null)/s', $code, $matches) < 1) {
+                continue;
+            }
+
+            $offenders[] = basename((string)$file);
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'ตรวจ null ผ่าน `??` ใน: ' . implode(', ', $offenders)
+            . ' — `??` จะคืนตัวสำรองแทน null ที่กำลังจะตรวจ ทำให้เทสต์แดงทั้งที่โค้ดถูก'
+            . ' (ใช้ assertArrayHasKey ก่อน แล้วค่อย assertNull)'
+        );
+    }
+
+    /**
+     * ⭐⭐ `format_share_percent()` — สัดส่วนกำไรต้องแสดง **สองตำแหน่ง**
+     *
+     * ⚠️⚠️ คอลัมน์นี้เป็นคอลัมน์เดียวที่ "ผลรวมมีความหมาย" · ค่าที่คำนวณไว้รวมกันได้
+     * 100.00 พอดี แต่ถ้าแสดงตำแหน่งเดียว 3 ร้านเท่ากันจะกลายเป็น **33.3 × 3 = 99.9%**
+     * บนหน้าจอ — คนอ่านบวกตามที่เห็นแล้วไม่ครบ · ไฟล์ Excel ใช้สองตำแหน่งอยู่แล้ว
+     *
+     * @return array<string,array{0:?float,1:string}>
+     */
+    public static function shareDisplayProvider(): array
+    {
+        return [
+            'สามร้านเท่ากัน — ตัวที่ได้เศษ' => [33.34, '33.34%'],
+            'สามร้านเท่ากัน — อีกสองตัว' => [33.33, '33.33%'],
+            'เล็กมากแต่ไม่ใช่ศูนย์' => [0.01, '0.01%'],
+            'เล็กจนสองตำแหน่งยังไม่พอ' => [0.001, '<0.01%'],
+            'ศูนย์จริง' => [0.0, '0.00%'],
+            'ไม่มีค่า' => [null, '–'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('shareDisplayProvider')]
+    public function testProfitShareIsShownWithTwoDecimals(?float $value, string $expected): void
+    {
+        $this->assertSame($expected, format_share_percent($value));
+    }
+
+    /**
+     * ⭐⭐⭐ สามร้านที่กำไรเท่ากัน — ตัวเลขที่ **ผู้ใช้เห็น** ต้องบวกได้ 100.00
+     *
+     * ⚠️ เทสต์ที่ตรวจแค่ค่าดิบผ่านมาแล้ว (`distribute_profit_share()` ถูกต้อง)
+     * แต่สิ่งที่ผู้ใช้บวกคือ **ข้อความบนจอ** ไม่ใช่ค่าในหน่วยความจำ
+     */
+    public function testWhatTheUserSeesAlsoAddsUpToOneHundred(): void
+    {
+        $shares = distribute_profit_share([1000.0, 1000.0, 1000.0], 3000.0);
+
+        $shown = array_map(
+            static fn(?float $share): float => (float)str_replace('%', '', format_share_percent($share)),
+            $shares
+        );
+
+        $this->assertSame(
+            100.0,
+            round(array_sum($shown), 2),
+            'ตัวเลขที่ผู้ใช้เห็นบวกกันแล้วไม่ได้ 100.00: [' . implode(', ', array_map(
+                static fn(?float $share): string => format_share_percent($share),
+                $shares
+            )) . ']'
         );
     }
 }

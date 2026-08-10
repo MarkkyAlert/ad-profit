@@ -269,6 +269,8 @@ $yoyPercent = isset($summary['yoy_profit_change_percent']) && $summary['yoy_prof
 $prevYearHasData = ($summary['prev_year_has_data'] ?? false) === true;
 // อ่านข้อมูลปีก่อนไม่สำเร็จ — ต้องบอกตามจริง ไม่ใช่บอกว่า "ไม่มีข้อมูล" พร้อม ฿0
 $prevYearUnavailable = ($summary['prev_year_unavailable'] ?? false) === true;
+// ⚠️ "ปีนี้ยังไม่มี record" เป็นสาเหตุที่ 3 ของ % ที่เป็น null — ห้ามให้หน้าเว็บเดาเอง
+$currentYearHasData = ($summary['current_year_has_data'] ?? true) === true;
 
 // แสดง % การเปลี่ยนแปลง — helper กลาง (null ต้องไม่กลายเป็น 0%)
 $formatYoyPercent = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['text'];
@@ -413,7 +415,12 @@ require __DIR__ . '/includes/header.php';
                 <?php if ($prevYearUnavailable): ?>
                     โหลดข้อมูลปีก่อนไม่สำเร็จ — เทียบให้ไม่ได้ตอนนี้
                 <?php else: ?>
-                    <?= $prevYearHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                    <?php // ⚠️ สาเหตุที่ 3: ปีนี้ยังไม่มี record — ไม่ใช่ "ปีก่อนเท่าทุน" ?>
+                    <?php if (!$currentYearHasData): ?>
+                        ปีนี้ยังไม่มีข้อมูล — เทียบกับปีก่อนไม่ได้
+                    <?php else: ?>
+                        <?= $prevYearHasData ? 'ปีก่อนเท่าทุนพอดี เทียบเป็น % ไม่ได้' : 'ไม่มีข้อมูลปีก่อน' ?>
+                    <?php endif; ?>
                 <?php endif; ?>
             </span>
         <?php else: ?>

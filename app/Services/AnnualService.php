@@ -211,7 +211,14 @@ class AnnualService
                    ไม่มีข้อมูล และตอนเท่าทุนพอดี แยกสองกรณีนี้จากตัวเลขอย่างเดียวไม่ได้
                    · ไฟล์ Excel ใช้คีย์นี้ตัดสินว่าจะเขียน 0 หรือเว้นว่าง */
                 'prev_year_days_count' => (int)($previousMonthTotals['days_count'] ?? 0),
-                'yoy_change_percent' => change_percent($monthProfit, $previousMonthProfit),
+                /* ⚠️⚠️ เดือนที่ปีนี้ยังไม่มี record = เทียบปีก่อนไม่ได้ ไม่ใช่ "ตก 100%"
+                   · หน้าจอและไฟล์ Excel เว้นเป็นขีดอยู่แล้ว แต่ **payload ดิบที่ส่งออกทาง
+                     `api/annual-data.php` ยังพก −100% ติดไปด้วย** — ใครอ่าน API ตรง ๆ
+                     จะได้ตัวเลขที่หน้าเว็บตั้งใจไม่แสดง
+                   · กติกาต้องอยู่ที่ Service ไม่ใช่ให้ผู้แสดงผลแต่ละคนกันเอง */
+                'yoy_change_percent' => $monthDaysCount > 0
+                    ? change_percent($monthProfit, $previousMonthProfit)
+                    : null,
             ];
 
             // จัดอันดับด้วย "กำไร" และเลือกเฉพาะเดือนที่มีข้อมูลจริง
@@ -331,6 +338,12 @@ class AnnualService
                     'yoy_profit_change_percent' => $monthsWithData > 0
                         ? change_percent($profit, $previousYearProfit)
                         : null,
+                    /* ⚠️⚠️ **null มีได้ 3 สาเหตุ ห้ามให้หน้าเว็บเดา** —
+                       (1) ปีก่อนไม่มีข้อมูล (2) ปีก่อนเท่าทุนพอดี (3) **ปีนี้ยังไม่มี record**
+                       · เดิมมีแค่คีย์แยกสาเหตุ (1) กับ (2) พอเพิ่มสาเหตุ (3) เข้ามา
+                         หน้าเว็บจึงพิมพ์ "ปีก่อนเท่าทุนพอดี" ทั้งที่ปีก่อนมีกำไรจริง
+                       · หลักเดียวกับ `extremes_not_comparable_text()` — ห้ามเดาสาเหตุแทนข้อมูล */
+                    'current_year_has_data' => $monthsWithData > 0,
                     'projection' => $this->calculateYearEndProjection(
                         $months,
                         $cumulativeProfit,
