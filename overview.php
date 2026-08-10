@@ -264,9 +264,11 @@ if ($view === 'day') {
 
     $yearChartPayload = [
         'labels' => $chartLabels,
-        'revenue' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['revenue'] ?? []))),
-        'ad_cost' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['ad_cost'] ?? []))),
-        'profit' => array_values(array_map(static fn($value): float => (float)$value, (array)($chartRaw['profit'] ?? []))),
+        /* ⚠️⚠️ ต้องเป็น `?float` — `(float)null` = `0.0` ซึ่งทับตัวแก้ที่ Service ทั้งหมด
+           (บั๊กเดียวกันเคยเกิดที่กราฟแดชบอร์ด · มุมเดือน · หน้ารายปี มาแล้วทุกที่) */
+        'revenue' => array_values(array_map(static fn($value): ?float => $value === null ? null : (float)$value, (array)($chartRaw['revenue'] ?? []))),
+        'ad_cost' => array_values(array_map(static fn($value): ?float => $value === null ? null : (float)$value, (array)($chartRaw['ad_cost'] ?? []))),
+        'profit' => array_values(array_map(static fn($value): ?float => $value === null ? null : (float)$value, (array)($chartRaw['profit'] ?? []))),
     ];
 } else {
     $overviewService = new OverviewService($recordRepository, $shopRepository);
@@ -931,12 +933,16 @@ require __DIR__ . '/includes/header.php';
                                 $rowProfit = money_total((float)($row['profit'] ?? ($rowRevenue - $rowAdCost)));
                                 $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                                /* ⚠️⚠️ เดือนที่ยังไม่มีร้านไหนกรอกเลย ต้องเป็นขีดทั้งแถว ไม่ใช่ ฿0
+                                   (กติกาเดียวกับตารางรายเดือนของหน้ารายปี) */
+                                $rowHasRecord = (bool)($row['has_record'] ?? true);
+                                $rowBlank = no_value_text();
                                 ?>
-                                <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
-                                    <td class="px-3 py-2 text-slate-300 font-medium"><?= e($monthLabel($row)) ?></td>
-                                    <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
-                                    <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
-                                    <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                                <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap<?= $rowHasRecord ? '' : ' row-no-data text-slate-400' ?>">
+                                    <td class="px-3 py-2 text-slate-300 font-medium" data-empty-note="ยังไม่มีข้อมูล"><?= e($monthLabel($row)) ?></td>
+                                    <td class="px-3 py-2 font-medium <?= $rowHasRecord ? 'text-orange-400' : 'text-slate-400' ?>"><?= e($rowHasRecord ? formatMoney($rowRevenue) : $rowBlank) ?></td>
+                                    <td class="px-3 py-2 font-medium <?= $rowHasRecord ? 'text-cyan-400' : 'text-slate-400' ?>"><?= e($rowHasRecord ? formatMoney($rowAdCost) : $rowBlank) ?></td>
+                                    <td class="px-3 py-2 font-bold <?= !$rowHasRecord ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?>"><?= e($rowHasRecord ? formatMoney($rowProfit) : $rowBlank) ?></td>
                                     <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
                                 </tr>
@@ -1013,7 +1019,11 @@ require __DIR__ . '/includes/header.php';
                                     <td class="px-3 py-2 font-medium <?= !$rowHasData || $rowProfitShare === null ? 'text-slate-400' : ($rowProfitShare < 0 ? 'text-red-400' : 'text-slate-300') ?>">
                                         <?= e(format_share_percent($rowHasData ? $rowProfitShare : null)) ?>
                                     </td>
-                                    <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount > 0 ? $rowDaysCount . ' วัน' : no_value_text()) ?></td>
+                                    <?php /* ⚠️⚠️ ช่องนี้เขียน "0 วัน" ไม่ใช่ขีด — ให้ตรงกับ **แท็บรายเดือนของหน้าเดียวกัน**
+                                             และตรงกับชีต "เทียบร้าน" ซึ่งเป็นสำเนาของตารางนี้
+                                             · มันคือ *หลักฐาน* ว่าทำไมช่องอื่นทั้งแถวถึงว่าง ไม่ใช่ *ผลงาน*
+                                             · เดิมแท็บนี้เขียนขีด → จอกับไฟล์บอกฐาน "จากกี่วัน" ไม่ตรงกัน */ ?>
+                                    <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount . ' วัน') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -1026,7 +1036,7 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($yearRoas)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($yearProfitMargin)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e($yearlyShareTotal === null ? no_value_text() : formatPercent($yearlyShareTotal)) ?></td>
-                                <td class="px-3 py-3 text-slate-300"><?= e($yearlyDaysTotal > 0 ? 'สูงสุด ' . $yearlyDaysTotal . ' วัน' : no_value_text()) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e('สูงสุด ' . $yearlyDaysTotal . ' วัน') ?></td>
                             </tr>
                         </tfoot>
                     </table>

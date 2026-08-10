@@ -126,7 +126,9 @@ final class ReportingWritePathLineageTest extends ControllerTestCase
         /* ⚠️⚠️ docblock ของคลาสนี้อ้างว่าไล่ถึง "แดชบอร์ด · หน้ารายปี · ไฟล์ CSV"
            แต่เวอร์ชันแรกตรวจแค่สองอย่างหลัง — คำอธิบายแรงกว่าสิ่งที่ทำจริง
            ซึ่งเป็นความผิดพลาดแบบเดียวกับเทสต์ "รวมได้ 100 เป๊ะ" ที่ใส่ค่าคลาดเคลื่อนไว้ */
-        $dashboard = $this->get('/dashboard.php?range=month_this', $session);
+        /* ⚠️⚠️ ต้องระบุเดือนตรง ๆ ไม่ใช่ `range=month_this` — ข้อมูลทดสอบปักไว้ที่ ส.ค. 2569
+           ถ้าใช้ "เดือนนี้" เทสต์จะพังเองเมื่อเวลาผ่านไปถึงเดือนถัดไป โดยไม่มีใครแก้อะไรผิด */
+        $dashboard = $this->get('/dashboard.php?range=month_pick&month=2026-08', $session);
         $this->assertSame(200, $dashboard['status'], "{$path}: เปิดแดชบอร์ดไม่สำเร็จ");
         $this->assertStringContainsString(
             formatMoney(self::MONTH_PROFIT),
@@ -143,6 +145,44 @@ final class ReportingWritePathLineageTest extends ControllerTestCase
             $csv['body'],
             "{$path}: กำไรไม่ปรากฏในไฟล์ CSV"
         );
+
+        /* ⚠️ ปลายทางต้องครบทุกที่ที่ผู้ใช้เปิดดูได้ ไม่ใช่แค่ที่นึกออก —
+           ไฟล์ Excel เป็นปลายทางที่ยาวที่สุด (ผ่าน AnnualService → XlsxReportService)
+           และเป็นทางที่กติกาตกสำรวจบ่อยที่สุดในโปรเจกต์นี้ */
+        $workbook = $this->get('/api/export-xlsx.php?year=2569', $session);
+        $this->assertSame(200, $workbook['status'], "{$path}: ดาวน์โหลดไฟล์ Excel ไม่สำเร็จ");
+        $this->assertGreaterThan(
+            5000,
+            strlen($workbook['body']),
+            "{$path}: ไฟล์ Excel เล็กผิดปกติ — น่าจะสร้างไม่สำเร็จ"
+        );
+
+        $path2 = tempnam(sys_get_temp_dir(), 'lineage') . '.xlsx';
+        file_put_contents($path2, $workbook['body']);
+
+        try {
+            $book = \PhpOffice\PhpSpreadsheet\IOFactory::load($path2);
+            $monthly = $book->getSheetByName('รายเดือน');
+            $this->assertNotNull($monthly, "{$path}: ไม่พบชีตรายเดือน");
+
+            $augustProfit = null;
+            foreach ($monthly->getRowIterator(2) as $row) {
+                $index = $row->getRowIndex();
+                if (trim((string)$monthly->getCell('A' . $index)->getValue()) === 'ส.ค.') {
+                    $augustProfit = $monthly->getCell('D' . $index)->getValue();
+                }
+            }
+
+            $this->assertNotNull($augustProfit, "{$path}: ไฟล์ Excel ไม่มีแถวเดือน ส.ค.");
+            $this->assertEqualsWithDelta(
+                self::MONTH_PROFIT,
+                (float)$augustProfit,
+                0.005,
+                "{$path}: กำไรในไฟล์ Excel ไม่ตรงกับที่เขียนเข้าไป"
+            );
+        } finally {
+            @unlink($path2);
+        }
     }
 
     /** ⭐ ทาง 1 — ฟอร์มกรอกวันเดียว */
@@ -254,6 +294,19 @@ final class ReportingWritePathLineageTest extends ControllerTestCase
             '500,000',
             $text,
             'เป้ารายได้ที่ตั้งผ่าน endpoint ไม่ปรากฏในหน้ารายปี'
+        );
+
+        /* ⚠️ ต้องตรวจ **เป้ากำไร** ด้วย — เดิมตรวจแต่เป้ารายได้ ถ้าวันหนึ่ง endpoint
+           เขียนคีย์ผิดเฉพาะช่องกำไร จะไม่มีอะไรจับได้เลย */
+        $this->assertSame(
+            '200000.00',
+            (string)($stored['target_profit'] ?? ''),
+            'เป้ากำไรที่ตั้งผ่าน endpoint ไม่ถูกบันทึก'
+        );
+        $this->assertStringContainsString(
+            '200,000',
+            $text,
+            'เป้ากำไรที่ตั้งผ่าน endpoint ไม่ปรากฏในหน้ารายปี'
         );
     }
 

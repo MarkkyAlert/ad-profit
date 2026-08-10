@@ -975,4 +975,83 @@ final class BrowserScriptParityTest extends ControllerTestCase
             . ' แล้วถูกบันทึกลงวันใหม่ทับข้อมูลเดิมโดยไม่มีอะไรเตือน)'
         );
     }
+
+    /**
+     * ⭐⭐⭐ เปลี่ยนวันที่ในฟอร์มวันเดียว → ค่าของวันเก่าต้องหายทันที ไม่ใช่รอโหลดเสร็จ
+     *
+     * ⚠️⚠️ **ช่องว่างที่วัดจริงแล้วเขียนข้อมูลผิดวันได้**: ระหว่างรอ `loadMonthData()`
+     * ช่องยอด/โน้ตยังถือค่าของวันเก่าอยู่ ถ้าผู้ใช้กดบันทึกในจังหวะนั้น (พิมพ์เสร็จ
+     * เปลี่ยนวัน แล้วกดทันที — ท่าที่เกิดได้จริงเพราะเน็ตช้าหรือฐานข้อมูลตอบช้า)
+     * ยอดของวันเก่าจะถูกเขียนลงวันใหม่ ทับข้อมูลที่มีอยู่โดยไม่มีอะไรเตือน
+     *
+     * ⚠️ ทดสอบด้วย DOM จริงไม่ได้ (ไม่มีตัวรัน JS ที่มี DOM) — ตัวกวาดระดับซอร์สจึงยืนยัน
+     * **สองอย่างที่ปิดช่องนี้**: ล้างช่องก่อน `await` และปิดปุ่มบันทึกจนกว่าจะรู้ข้อมูลจริง
+     */
+    public function testChangingTheDateClearsTheSingleDayFormBeforeItWaits(): void
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+        $source = self::stripCommentsAndStrings(implode("\n", $blocks[1]));
+
+        /* ตัดเอาเฉพาะตัวจัดการ "เปลี่ยนวันที่" ของฟอร์มวันเดียว
+           ⚠️⚠️ ห้ามยึดจาก `dateInput.addEventListener(` — มันมีสองที่ ตัวแรกคือคำเตือน
+              วันอนาคตซึ่งไม่ได้รออะไร · ยึดผิดแล้วช่วง "ก่อนรอโหลด" จะกินนิยามของ
+              `applyDay()` เข้ามาด้วย ซึ่งมีการเขียนค่าลงช่องอยู่แล้ว → **ตัวกวาดเขียว
+              แม้ถอดการล้างช่องออกทั้งหมด** (มิวเทชันจับได้)
+           · `pendingRequestId` มีเฉพาะในตัวจัดการของฟอร์มวันเดียว จึงเป็นหมุดที่แม่นกว่า */
+        $start = mb_strpos($source, '++pendingRequestId');
+        $this->assertNotFalse($start, 'หาตัวจัดการเปลี่ยนวันที่ของฟอร์มวันเดียวไม่เจอ');
+
+        $handler = mb_substr($source, (int)$start);
+        $awaitAt = mb_strpos($handler, 'await loadMonthData');
+        $this->assertNotFalse($awaitAt, 'ตัวจัดการนี้ไม่ได้รอโหลดข้อมูลเดือน — ตัวกวาดอ่านผิดที่');
+
+        $beforeAwait = mb_substr($handler, 0, (int)$awaitAt);
+
+        foreach (['revenueInput', 'adCostInput', 'noteInput'] as $field) {
+            $this->assertMatchesRegularExpression(
+                '/' . $field . '\.value\s*=\s*\S/',
+                $beforeAwait,
+                "ช่อง {$field} ไม่ถูกล้างก่อนเริ่มรอโหลด — ค่าของวันเก่าจะค้างอยู่บนวันใหม่"
+            );
+        }
+
+        $this->assertStringContainsString(
+            'setPending(true)',
+            $beforeAwait,
+            'ปุ่มบันทึกไม่ถูกปิดระหว่างรอโหลด — กดบันทึกตอนนั้นได้ทั้งที่ยังไม่รู้ข้อมูลของวันใหม่'
+        );
+
+        // และต้องปลดล็อกคืนทั้งกิ่งสำเร็จและกิ่งล้มเหลว ไม่งั้นปุ่มค้างปิดตลอดอายุหน้า
+        $this->assertSame(
+            2,
+            preg_match_all('/setPending\(false\)/', $handler),
+            'ต้องปลดล็อกปุ่มทั้งตอนโหลดสำเร็จและตอนโหลดล้มเหลว'
+        );
+    }
+
+    /**
+     * ⭐⭐ ตัวช่วย `setValue()` ที่รับธงมา **ต้องติดธงจริง**
+     *
+     * ⚠️ ตัวกวาด `testEveryPathThatPrefillsTheBulkTableMarksTheFields()` ยอมรับรูปแบบ
+     * `setValue(…, true)` ว่า "ติดธงแล้ว" — ถ้าตัวช่วยไม่ได้ทำตามที่รับปากไว้
+     * ตัวกวาดตัวนั้นจะเขียวโดยไม่ได้คุ้มครองอะไรเลย
+     */
+    public function testTheBulkFillHelperActuallySetsTheFlagItPromises(): void
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+        $source = self::stripCommentsAndStrings(implode("\n", $blocks[1]));
+
+        $start = mb_strpos($source, 'const setValue = (');
+        $this->assertNotFalse($start, 'หาตัวช่วย setValue ของตารางหลายวันไม่เจอ');
+
+        $helper = mb_substr($source, (int)$start, 500);
+
+        $this->assertStringContainsString(
+            'dataset.prefilled',
+            $helper,
+            'setValue() รับธงมาแต่ไม่ได้ติดธงให้ช่อง — ตัวกวาดที่เชื่อมันจะเขียวโดยเปล่าประโยชน์'
+        );
+    }
 }

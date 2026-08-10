@@ -204,6 +204,10 @@ class OverviewAnnualService
                 'profit' => $monthProfit,
                 'roas' => $monthAdCost > 0 ? round($monthRevenue / $monthAdCost, 2) : null,
                 'profit_margin' => $monthRevenue > 0 ? round(($monthProfit / $monthRevenue) * 100, 1) : null,
+                /* ⚠️⚠️ "เดือนนี้มีร้านไหนกรอกไหม" — แถวเดือนถูกสร้างขึ้นมาครบทุกเดือนด้วยศูนย์
+                   ตั้งแต่ต้น ตัวเลขจึงแยก "ไม่มีใครกรอก" ออกจาก "กรอกแล้วเท่าทุน" ไม่ได้เลย
+                   · หน้าเว็บและกราฟใช้คีย์นี้ตัดสินว่าจะพิมพ์ ฿0 หรือเว้นขีด */
+                'has_record' => isset($monthsWithRecord[$monthKey]),
             ];
 
             // จัดอันดับด้วยกำไร และเลือกเฉพาะเดือนที่มีข้อมูลจริง
@@ -315,9 +319,30 @@ class OverviewAnnualService
                 ],
                 'chart' => [
                     'months' => array_values(array_map(static fn(array $row): string => (string)($row['month_key'] ?? ''), $months)),
-                    'revenue' => array_values(array_map(static fn(array $row): float => (float)($row['total_revenue'] ?? 0), $months)),
-                    'ad_cost' => array_values(array_map(static fn(array $row): float => (float)($row['total_ad_cost'] ?? 0), $months)),
-                    'profit' => array_values(array_map(static fn(array $row): float => (float)($row['profit'] ?? 0), $months)),
+                    /* ⚠️⚠️⚠️ เดือนที่ยังไม่มีร้านไหนกรอกเลยต้องส่ง **null** ไม่ใช่ 0
+                       กติกานี้ลงให้กราฟของแดชบอร์ด · หน้ารวมร้านมุมเดือน · หน้ารายปีไปแล้ว
+                       — **มุมรายปีของหน้ารวมร้านเป็นที่สุดท้ายที่ตกสำรวจ**
+                       · ส่ง 0 = กราฟดิ่งลงศูนย์ตั้งแต่เดือนที่ยังไม่ถึง อ่านว่า "ยอดตก"
+                       ⚠️ เดือนที่กรอกแล้วเท่าทุนพอดีต้องยังเป็น 0.0 (เกณฑ์คือมี record ไหม
+                          ไม่ใช่ยอดเงินเป็นเท่าไหร่) */
+                    'revenue' => array_values(array_map(
+                        static fn(array $row): ?float => ($row['has_record'] ?? true)
+                            ? (float)($row['total_revenue'] ?? 0)
+                            : null,
+                        $months
+                    )),
+                    'ad_cost' => array_values(array_map(
+                        static fn(array $row): ?float => ($row['has_record'] ?? true)
+                            ? (float)($row['total_ad_cost'] ?? 0)
+                            : null,
+                        $months
+                    )),
+                    'profit' => array_values(array_map(
+                        static fn(array $row): ?float => ($row['has_record'] ?? true)
+                            ? (float)($row['profit'] ?? 0)
+                            : null,
+                        $months
+                    )),
                 ],
                 'shops' => $shopsRows,
             ],

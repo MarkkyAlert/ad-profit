@@ -1207,10 +1207,14 @@ class RecordService
             $profit = money_total($revenue - $adCost);
             $roas = $adCost > 0 ? round($revenue / $adCost, 2) : null;
 
-            $compareRevenuePercent = null;
-            if ($previousRevenue !== null && $previousRevenue > 0) {
-                $compareRevenuePercent = round((($revenue - $previousRevenue) / $previousRevenue) * 100, 1);
-            }
+            /* ⚠️⚠️ ต้องเรียก `change_percent()` ไม่ใช่เขียนสูตรซ้ำ — สำเนาที่นี่เคยทำให้
+               คอลัมน์ "เทียบครั้งก่อน" ปัดคนละแบบกับป้าย % ทุกที่ในระบบ (ผลต่างที่ตกตรง
+               ครึ่งหน่วยพอดีรายงานว่า "ไม่เปลี่ยน" ทั้งที่โตขึ้น 0.1%)
+               · ยอดขายไม่มีทางติดลบ เงื่อนไข `> 0` เดิมจึงให้ผลเท่ากับด่าน "ฐาน ≈ 0"
+                 ที่อยู่ใน helper อยู่แล้ว */
+            $compareRevenuePercent = $previousRevenue === null
+                ? null
+                : change_percent($revenue, $previousRevenue);
 
             $mappedRecords[] = [
                 'id' => (int)($record['id'] ?? 0),

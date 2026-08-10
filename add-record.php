@@ -142,7 +142,7 @@ require __DIR__ . '/includes/header.php';
                 <?php // ⚠️ ห้ามเขียน "วันนี้" ตายตัว — ผู้ใช้เปลี่ยนวันที่ได้ แล้วป้ายจะพูดถึงวันผิด ?>
                 ✎ วันที่เลือกไว้มีข้อมูลอยู่แล้ว — ระบบเติมค่าเดิมไว้ให้ กดบันทึกจะเป็นการแก้ไขทับ
             </p>
-            <button type="submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">
+            <button type="submit" id="single-day-submit" class="btn-orange px-6 py-2.5 text-base shadow-sm">
                 ✓ บันทึกข้อมูล
             </button>
         </div>
@@ -1309,6 +1309,26 @@ require __DIR__ . '/includes/header.php';
             hint.classList.add('hidden');
         };
 
+        const submitButton = document.getElementById('single-day-submit');
+
+        /* ⚠️⚠️⚠️ ระหว่างรอโหลดข้อมูลของวันใหม่ ช่องยอด/โน้ตยัง **ถือค่าของวันเก่า** อยู่
+           ถ้าผู้ใช้กดบันทึกในจังหวะนั้น ยอดของวันเก่าจะถูกเขียนลงวันใหม่ทันที
+           · วันใหม่ยังว่าง → เกิดแถวใหม่ที่มียอดของวันอื่น
+           · วันใหม่มีข้อมูลอยู่แล้ว → ถูกทับ แล้วตัวเลขผิดไหลไปทุกรายงานและไฟล์ที่ดาวน์โหลด
+           · เป็นบั๊กคลาสเดียวกับ `data-prefilled` ของตารางหลายวัน ต่างกันแค่ที่นี่แข่งกับ
+             **เวลา** ไม่ใช่แข่งกับธง
+           วิธีแก้: ล้างช่องทันทีที่เปลี่ยนวัน (ทั้งสองกิ่งด้านล่างก็เขียนทับอยู่แล้ว
+           แค่ทำให้เร็วขึ้น) แล้วปิดปุ่มบันทึกจนกว่าจะรู้ข้อมูลจริงของวันนั้น */
+        const setPending = (isPending) => {
+            if (!submitButton) {
+                return;
+            }
+
+            submitButton.disabled = isPending;
+            submitButton.classList.toggle('opacity-50', isPending);
+            submitButton.classList.toggle('cursor-not-allowed', isPending);
+        };
+
         dateInput.addEventListener('change', async () => {
             const value = dateInput.value;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value === lastAppliedDate) {
@@ -1316,6 +1336,14 @@ require __DIR__ . '/includes/header.php';
             }
 
             const requestId = ++pendingRequestId;
+
+            // ค่าของวันเก่าต้องหายไปทันที ไม่ใช่รอจนโหลดเสร็จ
+            revenueInput.value = '';
+            adCostInput.value = '';
+            noteInput.value = '';
+            hint.textContent = 'กำลังโหลดข้อมูลเดิมของวันที่ ' + value + ' …';
+            hint.classList.remove('hidden');
+            setPending(true);
 
             try {
                 const byDate = await loadMonthData(value.slice(0, 7));
@@ -1342,6 +1370,7 @@ require __DIR__ . '/includes/header.php';
                 }
 
                 lastAppliedDate = value;
+                setPending(false);
             } catch (error) {
                 if (requestId !== pendingRequestId) {
                     return;
@@ -1353,6 +1382,8 @@ require __DIR__ . '/includes/header.php';
                 lastAppliedDate = value;
                 hint.textContent = '⚠️ โหลดข้อมูลเดิมของวันที่ ' + value + ' ไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก';
                 hint.classList.remove('hidden');
+                // โหลดไม่สำเร็จก็ต้องกดบันทึกได้ — ช่องถูกล้างแล้ว ผู้ใช้กรอกเองได้ตามปกติ
+                setPending(false);
             }
         });
     })();

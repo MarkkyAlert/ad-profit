@@ -235,4 +235,104 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
             'หน้าเว็บ cast null กลับเป็น 0 — ตัวแก้ที่ Service ถูกทับทั้งหมด'
         );
     }
+
+    /**
+     * ⭐⭐⭐ มุมรายปีของหน้ารวมร้าน — เดือนที่ยังไม่มีร้านไหนกรอกต้องเป็นช่องว่าง
+     *
+     * ⚠️⚠️ **ที่สุดท้ายที่ตกสำรวจ** — กติกา "กราฟต้องส่ง null" ลงให้แดชบอร์ด · มุมเดือน ·
+     * หน้ารายปี ไปแล้วทั้งหมด แต่มุมรายปีของหน้ารวมร้านสร้างแถวเดือนขึ้นมาครบทุกเดือน
+     * ด้วยศูนย์ตั้งแต่ต้น ตัวเลขจึงแยก "ไม่มีใครกรอก" ออกจาก "กรอกแล้วเท่าทุน" ไม่ได้เลย
+     *
+     * ⚠️ ต้องตรวจถึง JSON ที่ฝังอยู่ในหน้าเว็บจริง — ชั้นหน้าเว็บเคย cast null กลับเป็น 0
+     * ทับตัวแก้ที่ Service มาแล้วทุกหน้า
+     */
+    public function testTheYearlyOverviewChartLeavesGapsForMonthsNobodyFilled(): void
+    {
+        $userId = $this->createUser('yearchart@example.com', 'YearChartPass123');
+        $shopA = $this->createShop($userId, 'ร้านหนึ่ง');
+        $shopB = $this->createShop($userId, 'ร้านสอง');
+
+        // ม.ค. มีข้อมูล · ก.พ. กรอกแล้วเท่าทุนพอดี · มี.ค. ไม่มีใครกรอกเลย
+        $this->insert($shopA, '2026-01-10', 5000.50, 2000.25);
+        $this->insert($shopB, '2026-02-10', 3000.00, 3000.00);
+
+        $session = $this->startSession($userId, $shopA);
+        $body = $this->get('/overview.php?view=year&year=2569', $session)['body'];
+
+        // ⚠️ ตัวแปรฝั่ง PHP ชื่อ `$yearChartPayload` แต่ตอนฝังลงหน้าใช้ชื่อ `chartPayload`
+        $this->assertSame(
+            1,
+            preg_match('/const chartPayload = (\{.*?\});/s', $body, $matches),
+            'อ่านข้อมูลกราฟของมุมรายปีจากหน้าเว็บไม่ได้'
+        );
+
+        $payload = json_decode($matches[1], true);
+        $this->assertIsArray($payload);
+        $profits = (array)($payload['profit'] ?? []);
+
+        $this->assertArrayHasKey(1, $profits, 'กราฟไม่มีช่องของเดือน ก.พ.');
+        $this->assertNotNull($profits[1], 'เดือนที่กรอกแล้วเท่าทุนพอดีต้องเป็น 0 ไม่ใช่ช่องว่าง');
+        $this->assertSame(0.0, (float)$profits[1], 'เดือนเท่าทุนต้องเป็นศูนย์');
+
+        $this->assertArrayHasKey(2, $profits, 'กราฟไม่มีช่องของเดือน มี.ค.');
+        $this->assertNull($profits[2], 'เดือนที่ยังไม่มีใครกรอกต้องเป็นช่องว่าง ไม่ใช่ ฿0');
+
+        /* ⚠️ ตารางใต้กราฟต้องพูดตรงกัน — กราฟเว้นช่องแต่ตารางพิมพ์ ฿0 คือหน้าเดียวกัน
+           บอกสองอย่าง ซึ่งเป็นอาการเดิมของบั๊กคลาสนี้ */
+        $tableText = (string)preg_replace('/\s+/u', ' ', strip_tags((string)preg_replace(
+            '#<script.*?</script>#s',
+            ' ',
+            $body
+        )));
+        $this->assertStringContainsString(
+            'ยังไม่มีข้อมูล',
+            $tableText,
+            'ตารางรายเดือนไม่ได้ทำเครื่องหมายเดือนที่ยังไม่มีใครกรอก'
+        );
+    }
+
+    /**
+     * ⭐⭐ คอลัมน์ "วันที่กรอก" ของมุมรายปี ต้องตรงกับชีต "เทียบร้าน" ที่เป็นสำเนาของมัน
+     *
+     * ⚠️ จอเคยเขียนขีดขณะที่ไฟล์เขียน `0` — ไม่ทำให้ยอดเงินผิด แต่ฐาน "จากกี่วัน"
+     * ต่างกันระหว่างสองที่ที่ควรเป็นสำเนากัน · และแท็บรายเดือนของหน้าเดียวกัน
+     * ก็เขียน "0 วัน" อยู่แล้ว — จอจึงขัดกับตัวเองด้วย
+     */
+    public function testTheYearlyOverviewCountsDaysTheSameWayAsTheWorkbook(): void
+    {
+        $userId = $this->createUser('daysparity@example.com', 'DaysParityPass123');
+        $activeShop = $this->createShop($userId, 'ร้านที่กรอกแล้ว');
+        $this->createShop($userId, 'ร้านที่ไม่เคยกรอก');
+        $this->insert($activeShop, '2026-08-01', 9000.75, 4000.25);
+
+        $session = $this->startSession($userId, $activeShop);
+
+        $text = (string)preg_replace('/\s+/u', ' ', strip_tags((string)preg_replace(
+            '#<script.*?</script>#s',
+            ' ',
+            $this->get('/overview.php?view=year&year=2569', $session)['body']
+        )));
+
+        $this->assertStringContainsString(
+            '0 วัน',
+            $text,
+            'ร้านที่ไม่เคยกรอกต้องเขียน "0 วัน" บนจอ เหมือนที่ไฟล์เขียน 0'
+        );
+
+        $portfolio = $this->workbook($session, 2569)['เทียบร้าน'] ?? $this->fail('ไม่พบชีตเทียบร้าน');
+        $emptyRow = null;
+        foreach ($portfolio->getRowIterator() as $row) {
+            $index = $row->getRowIndex();
+            if (trim((string)$portfolio->getCell('A' . $index)->getValue()) === 'ร้านที่ไม่เคยกรอก') {
+                $emptyRow = $index;
+            }
+        }
+
+        $this->assertNotNull($emptyRow);
+        $this->assertSame(
+            0,
+            $portfolio->getCell('H' . $emptyRow)->getValue(),
+            'ไฟล์ต้องเขียน 0 — ถ้าเปลี่ยนข้างนี้ต้องเปลี่ยนหน้าจอด้วย'
+        );
+    }
 }
