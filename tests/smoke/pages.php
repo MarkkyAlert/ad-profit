@@ -131,11 +131,30 @@ $pages = [
     '/index.php', '/dashboard.php', '/add-record.php', '/history.php',
     '/annual.php', '/overview.php', '/shops.php', '/profile.php',
     // ช่วง/เดือน/ปีแบบต่าง ๆ — เส้นทางที่คำนวณต่างกันคนละกิ่ง
-    '/dashboard.php?range=week_this', '/dashboard.php?range=month_last',
+    '/dashboard.php?range=week_this', '/dashboard.php?range=week_last',
+    '/dashboard.php?range=month_this', '/dashboard.php?range=month_last',
+    '/dashboard.php?range=month_pick&month=' . date('Y-m'),
     '/dashboard.php?range=custom&start_date=' . date('Y-m-01') . '&end_date=' . date('Y-m-d'),
     '/history.php?month=' . date('Y-m'),
     '/annual.php?year=' . (int)(date('Y') + 543),
-    '/overview.php?view=day', '/overview.php?view=year',
+    /* ⚠️ ต้องครบทั้ง 3 มุมมอง — เดิมขาด `view=month` ซึ่งเป็นมุมที่เปิดเป็นค่าปริยาย
+       และมีตารางเทียบร้านของตัวเองคนละชุดกับอีกสองมุม */
+    '/overview.php?view=day', '/overview.php?view=month', '/overview.php?view=year',
+    // หน้าที่เปิดจากลิงก์ในอีเมล (เปิดได้ทั้งตอนล็อกอินและไม่ล็อกอิน)
+    '/verify-email.php',
+    /* ค่าพารามิเตอร์ที่อ่านไม่ออก ต้องไม่ทำให้หน้าพัง */
+    '/overview.php?view=zzz', '/dashboard.php?range=zzz', '/annual.php?year=abc',
+];
+
+/* ⚠️⚠️ หน้าที่ต้องเปิดได้ **ตอนยังไม่ล็อกอิน** — เดิมไม่เคยถูกกวาดเลย
+   ทั้งที่เป็นหน้าที่ผู้ใช้มาถึงตอนเข้าระบบไม่ได้ ซึ่งเป็นจังหวะที่พังแล้วเจ็บที่สุด
+   · ต้องยิงด้วย cookie คนละใบ ไม่งั้นจะถูกพากลับไปแดชบอร์ดแล้วไม่ได้ตรวจหน้าจริง
+   · `error.php` ตอบ 404 โดยตั้งใจ (เป็นหน้าแจ้งข้อผิดพลาด) และต้องขึ้นได้เอง
+     โดยไม่พึ่ง `bootstrap.php` — คือต้องรอดแม้ตอนที่ฐานข้อมูลล่ม */
+$guestPages = [
+    '/login.php' => 200,
+    '/forgot-password.php' => 200,
+    '/error.php' => 404,
 ];
 
 $jsonEndpoints = [
@@ -159,6 +178,31 @@ foreach ($pages as $path) {
     }
 }
 echo "  ✓ เปิดหน้าเว็บ " . count($pages) . " หน้า\n";
+
+$guestJar = tempnam(sys_get_temp_dir(), 'smoke-guest');
+foreach ($guestPages as $path => $expectedStatus) {
+    $handle = curl_init($baseUrl . $path);
+    curl_setopt_array($handle, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_COOKIEJAR => $guestJar,
+        CURLOPT_COOKIEFILE => $guestJar,
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $body = (string)curl_exec($handle);
+    $status = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+    $checked++;
+
+    if ($status !== $expectedStatus) {
+        $failures[] = "{$path} (ยังไม่ล็อกอิน) → HTTP {$status} (ควรเป็น {$expectedStatus})";
+        continue;
+    }
+
+    foreach (problemsIn($body) as $problem) {
+        $failures[] = "{$path} (ยังไม่ล็อกอิน) → {$problem}";
+    }
+}
+@unlink($guestJar);
+echo "  ✓ เปิดหน้าที่ยังไม่ล็อกอิน " . count($guestPages) . " หน้า\n";
 
 foreach ($jsonEndpoints as $path) {
     $response = request($baseUrl . $path);
