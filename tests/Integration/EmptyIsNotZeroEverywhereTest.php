@@ -335,4 +335,75 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
             'ไฟล์ต้องเขียน 0 — ถ้าเปลี่ยนข้างนี้ต้องเปลี่ยนหน้าจอด้วย'
         );
     }
+
+    /**
+     * ⭐⭐⭐ ปีที่ยังไม่มีใครกรอก **ห้ามรายงานว่า "ตก 100%"** — และห้ามพิมพ์ ฿0 บนจอ
+     *
+     * ⚠️⚠️ วัดจริง: ปีก่อนกำไร ฿4,000 · ปีนี้ยังไม่มีใครกรอก → หน้าเดียวกันขึ้น
+     * "ปี … ยังไม่มีข้อมูลยอดขายของทุกร้าน" คู่กับ "กำไรรวม ↓ 100.0% (-฿4,000)"
+     * และการ์ดสามใบที่เขียน ฿0 ขณะที่ไฟล์ Excel เว้นว่างไปแล้ว
+     *
+     * ⚠️⚠️ ต้องมี **ทางตรงข้าม** ด้วย (เทสต์ถัดไป) — ปีที่กรอกแล้วและเท่าทุนจริง
+     * ยังต้องได้ −100% ตามปกติ ไม่งั้นการ "แก้" จะกลบข้อมูลจริงไปด้วย
+     */
+    public function testAYearNobodyFilledNeverReportsAHundredPercentDrop(): void
+    {
+        $userId = $this->createUser('yoyempty@example.com', 'YoyEmptyPass123');
+        $shopA = $this->createShop($userId, 'ร้านหนึ่ง');
+        $this->createShop($userId, 'ร้านสอง');
+
+        // ปีก่อนมีกำไร · ปีนี้ยังไม่มีใครกรอกเลย
+        $this->insert($shopA, '2025-06-10', 9000.00, 5000.00);
+
+        $session = $this->startSession($userId, $shopA);
+        $text = (string)preg_replace('/\s+/u', ' ', strip_tags((string)preg_replace(
+            '#<script.*?</script>#s',
+            ' ',
+            $this->get('/overview.php?view=year&year=2569', $session)['body']
+        )));
+
+        $this->assertStringContainsString('ยังไม่มีข้อมูล', $text, 'หน้าไม่ได้บอกว่าปีนี้ยังไม่มีข้อมูล');
+        $this->assertStringNotContainsString(
+            '100.0%',
+            $text,
+            'ปีที่ยังไม่มีใครกรอก ถูกรายงานว่า "ตก 100%" ทั้งที่แค่ยังไม่ได้เริ่มบันทึก'
+        );
+        $this->assertStringNotContainsString(
+            '฿0',
+            $text,
+            'ปีที่ยังไม่มีใครกรอก แต่การ์ด/แถวรวมยังพิมพ์ ฿0 — ขัดกับข้อความบนจอเดียวกัน'
+        );
+    }
+
+    /**
+     * ⭐⭐ ทางตรงข้าม: กรอกจริงแล้วเท่าทุนพอดี → **ยังต้องได้ −100%**
+     *
+     * ⚠️ ถ้าขาดเทสต์ตัวนี้ การ "แก้" ให้เงียบทุกครั้งที่กำไรเป็นศูนย์จะผ่านหน้าตาเฉย
+     * แล้วปีที่ทำงานจริงจนเท่าทุนจะกลายเป็น "ไม่มีข้อมูล"
+     */
+    public function testAYearThatWasFilledAndBrokeEvenStillReportsTheDrop(): void
+    {
+        $userId = $this->createUser('yoyeven@example.com', 'YoyEvenPass123');
+        $shopA = $this->createShop($userId, 'ร้านหนึ่ง');
+        $this->createShop($userId, 'ร้านสอง');
+
+        $this->insert($shopA, '2025-06-10', 9000.00, 5000.00);
+        // ปีนี้กรอกจริง แต่เท่าทุนพอดี
+        $this->insert($shopA, '2026-06-10', 5000.00, 5000.00);
+
+        $session = $this->startSession($userId, $shopA);
+
+        $service = new \OverviewAnnualService(
+            new RecordRepository($this->pdo),
+            new ShopRepository($this->pdo)
+        );
+        $summary = (array)($service->buildYearlyOverview($userId, 2026, '2026-08-20')['data']['summary'] ?? []);
+
+        $this->assertArrayHasKey('yoy_profit_change_percent', $summary);
+        $this->assertSame(
+            -100.0,
+            $summary['yoy_profit_change_percent'],
+            'ปีที่กรอกจริงแล้วเท่าทุน ต้องยังรายงานว่าตก 100% — นั่นคือความจริง'
+        );
+    }
 }

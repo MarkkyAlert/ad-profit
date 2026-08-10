@@ -803,6 +803,17 @@ require __DIR__ . '/includes/header.php';
                 : ($yearTotalRevenue > 0 ? round(($yearProfit / $yearTotalRevenue) * 100, 1) : null);
             ?>
 
+<?php
+/* ⚠️⚠️⚠️ ปีที่ยังไม่มีร้านไหนกรอกเลย — การ์ดและแถวรวมต้องเงียบ ไม่ใช่พิมพ์ ฿0
+   · เดิมหน้าเดียวกันขึ้นแถบ "ปี … ยังไม่มีข้อมูลยอดขายของทุกร้าน" คู่กับการ์ด
+     "ยอดขายรวมทั้งปี ฿0 · ค่าแอดรวมทั้งปี ฿0 · กำไรรวม ฿0" — ข้อความกับตัวเลขขัดกันเอง
+   · และไฟล์ Excel เว้นว่างไปแล้ว จอกับไฟล์จึงตอบคนละอย่างจากข้อมูลชุดเดียวกัน
+   ⚠️ ต่างจากหน้ารายปีของร้านเดียว ซึ่งตอบ ฿0 ให้ปีที่เลือกที่ไม่มีข้อมูล —
+      คนละตาราง คนละสำเนา แต่ละอันต้องตรงกับคู่ของมันเอง (ที่นี่คู่คือชีต "เทียบร้าน") */
+$yearMoney = static fn(float $value): string => $hasYearlyData ? formatMoney($value) : no_value_text();
+$yearRatio = static fn(?float $value): string => $hasYearlyData ? formatRoas($value) : no_value_text();
+$yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercent($value) : no_value_text();
+?>
             <?php if (!$hasYearlyData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
                     ปี <?= e((string)($selectedYear + 543)) ?> ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
@@ -812,23 +823,23 @@ require __DIR__ . '/includes/header.php';
             <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <article class="stat-card s-revenue">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวมทั้งปี</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e(formatMoney($yearTotalRevenue)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e($yearMoney($yearTotalRevenue)) ?></p>
                 </article>
                 <article class="stat-card s-adcost">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ค่าแอดรวมทั้งปี</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold text-cyan-400"><?= e(formatMoney($yearTotalAdCost)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-cyan-400"><?= e($yearMoney($yearTotalAdCost)) ?></p>
                 </article>
                 <article class="stat-card s-profit">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">กำไรรวมทั้งปี</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($yearProfit)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e($yearMoney($yearProfit)) ?></p>
                 </article>
                 <article class="stat-card s-roas">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ROAS เฉลี่ยทั้งปี</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold text-violet-400"><?= e(formatRoas($yearRoas)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-violet-400"><?= e($yearRatio($yearRoas)) ?></p>
                 </article>
                 <article class="stat-card s-neutral">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">อัตรากำไรทั้งปี</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold text-slate-100"><?= e(formatPercent($yearProfitMargin)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-slate-100"><?= e($yearPercent($yearProfitMargin)) ?></p>
                 </article>
             </section>
 
@@ -951,11 +962,11 @@ require __DIR__ . '/includes/header.php';
                         <tfoot>
                             <tr class="border-t border-white/10 bg-white/[0.03] font-semibold whitespace-nowrap">
                                 <td class="px-3 py-3 text-slate-200">รวมทั้งปี</td>
-                                <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($yearTotalRevenue)) ?></td>
-                                <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($yearTotalAdCost)) ?></td>
-                                <td class="px-3 py-3 <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($yearProfit)) ?></td>
-                                <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($yearRoas)) ?></td>
-                                <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($yearProfitMargin)) ?></td>
+                                <td class="px-3 py-3 text-orange-400"><?= e($yearMoney($yearTotalRevenue)) ?></td>
+                                <td class="px-3 py-3 text-cyan-400"><?= e($yearMoney($yearTotalAdCost)) ?></td>
+                                <td class="px-3 py-3 <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e($yearMoney($yearProfit)) ?></td>
+                                <td class="px-3 py-3 text-violet-400"><?= e($yearRatio($yearRoas)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e($yearPercent($yearProfitMargin)) ?></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -1030,11 +1041,11 @@ require __DIR__ . '/includes/header.php';
                         <tfoot>
                             <tr class="border-t border-white/10 bg-white/[0.03] font-semibold whitespace-nowrap">
                                 <td class="px-3 py-3 text-slate-200" colspan="2">รวมทุกร้าน</td>
-                                <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($yearTotalRevenue)) ?></td>
-                                <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($yearTotalAdCost)) ?></td>
-                                <td class="px-3 py-3 <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($yearProfit)) ?></td>
-                                <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($yearRoas)) ?></td>
-                                <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($yearProfitMargin)) ?></td>
+                                <td class="px-3 py-3 text-orange-400"><?= e($yearMoney($yearTotalRevenue)) ?></td>
+                                <td class="px-3 py-3 text-cyan-400"><?= e($yearMoney($yearTotalAdCost)) ?></td>
+                                <td class="px-3 py-3 <?= $yearProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e($yearMoney($yearProfit)) ?></td>
+                                <td class="px-3 py-3 text-violet-400"><?= e($yearRatio($yearRoas)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e($yearPercent($yearProfitMargin)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e($yearlyShareTotal === null ? no_value_text() : formatPercent($yearlyShareTotal)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e('สูงสุด ' . $yearlyDaysTotal . ' วัน') ?></td>
                             </tr>

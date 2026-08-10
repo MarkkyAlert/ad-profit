@@ -1054,4 +1054,70 @@ final class BrowserScriptParityTest extends ControllerTestCase
             'setValue() รับธงมาแต่ไม่ได้ติดธงให้ช่อง — ตัวกวาดที่เชื่อมันจะเขียวโดยเปล่าประโยชน์'
         );
     }
+
+    /**
+     * ⭐⭐⭐ เปลี่ยนวัน A → B → A ระหว่างโหลด — คำตอบของ B ต้องไม่ตกลงบนวัน A
+     *
+     * ⚠️⚠️ **ลำดับที่พังจริง**: อยู่ที่วัน A → เปลี่ยนเป็น B (เริ่มโหลด) → เปลี่ยนกลับเป็น A
+     * ก่อนที่ B จะตอบ · กิ่ง "วันเดิม ไม่ต้องทำอะไร" ออกทันทีโดยไม่เพิ่มเลขคำขอ
+     * คำตอบของ B จึงผ่านด่านกันผลลัพธ์เก่าไปได้ → **ช่องวันที่แสดง A แต่ยอดเป็นของ B**
+     * และปุ่มบันทึกเปิดอยู่ · กดบันทึก = ยอดของ B ถูกเขียนลงวัน A
+     *
+     * ⚠️ ตัวกวาดนี้ยืนยัน **กติกาในโค้ด** ไม่ใช่รันลำดับจริง (ไม่มี DOM ให้รัน):
+     * กิ่งลัดต้องพ่วงเงื่อนไข "ไม่มีคำขอค้างอยู่" เสมอ
+     */
+    public function testReturningToTheSameDateWhileLoadingStillCancelsTheOldRequest(): void
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+        $source = self::stripCommentsAndStrings(implode("\n", $blocks[1]));
+
+        $this->assertStringContainsString(
+            'pendingDate',
+            $source,
+            'ไม่มีตัวจำว่ามีคำขอค้างอยู่ — กิ่ง "วันเดิม" จะออกทันทีแล้วปล่อยคำตอบเก่าเข้ามา'
+        );
+
+        /* กิ่งลัดต้องเป็น "วันเดิม **และ** ไม่มีคำขอค้าง" ไม่ใช่ "วันเดิม" เฉย ๆ */
+        $this->assertMatchesRegularExpression(
+            '/value\s*===\s*lastAppliedDate\s*&&\s*pendingDate\s*===\s*null/',
+            $source,
+            'กิ่ง "วันเดิมไม่ต้องทำอะไร" ยังออกทันทีแม้มีคำขอค้างอยู่ — คำตอบของวันก่อนหน้า'
+            . ' จะตกลงบนวันที่แสดงอยู่'
+        );
+
+        /* และต้องล้างสถานะค้างทั้งกิ่งสำเร็จและกิ่งล้มเหลว ไม่งั้นกิ่งลัดตายถาวร
+           ⚠️ นับ ≥ 2 เพราะบรรทัดประกาศตัวแปร (`let pendingDate = null`) ก็เข้าเงื่อนไขด้วย */
+        $this->assertGreaterThanOrEqual(
+            3,
+            preg_match_all('/pendingDate\s*=\s*null/', $source),
+            'ต้องล้างสถานะ "มีคำขอค้าง" ทั้งตอนโหลดสำเร็จและตอนโหลดล้มเหลว'
+        );
+    }
+
+    /**
+     * ⭐⭐ ตัวเลือกเดือนของตารางหลายวันต้องกันคำตอบเก่ามาทับ
+     *
+     * ⚠️ เลือกเดือน B แล้วเปลี่ยนเป็น C เร็ว ๆ ถ้าคำตอบของ B กลับมาทีหลัง มันจะเติมตาราง
+     * ด้วยข้อมูลเดือน B ดึงช่องเลือกกลับไปเป็น B และ **ลบสิ่งที่ผู้ใช้กำลังพิมพ์ในเดือน C ทิ้ง**
+     * · ตัวจัดการวันทีละแถวมีด่านนี้อยู่แล้ว ตัวเลือกเดือนตกสำรวจ
+     */
+    public function testTheBulkMonthPickerIgnoresStaleResponses(): void
+    {
+        $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
+        preg_match_all('#<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script>#s', $page, $blocks);
+        $source = self::stripCommentsAndStrings(implode("\n", $blocks[1]));
+
+        $this->assertStringContainsString(
+            '++monthLoadRequestId',
+            $source,
+            'ตัวเลือกเดือนไม่ได้จองเลขคำขอ — คำตอบเก่าจะทับตารางที่ผู้ใช้กำลังพิมพ์'
+        );
+
+        $this->assertGreaterThanOrEqual(
+            2,
+            preg_match_all('/monthRequestId\s*!==\s*monthLoadRequestId/', $source),
+            'ต้องตรวจเลขคำขอทั้งกิ่งที่ได้คำตอบและกิ่งที่ล้มเหลว'
+        );
+    }
 }

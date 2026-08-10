@@ -63,6 +63,12 @@ class XlsxReportService
     private const CHART_CUMULATIVE_ARGB = '2E75B6';
 
     private const PERCENT_FORMAT = '0.0"%"';
+    /* ⚠️⚠️ สัดส่วนกำไรต้องแสดง **สองตำแหน่ง** ต่างจาก % อื่น ๆ
+       · ตัวเลขที่คำนวณไว้รวมกันได้ 100.00 พอดี (`distribute_profit_share()` แจกเศษให้)
+         แต่ถ้าแสดงตำแหน่งเดียว 3 ร้านเท่ากันจะกลายเป็น 33.3 × 3 = **99.9%** บนหน้าจอ Excel
+         ทั้งที่ค่าจริงในเซลล์ถูกต้อง — คนอ่านบวกตามที่เห็นแล้วไม่ครบ
+       · ร้านที่สัดส่วนเล็กมาก (0.01%) ก็ถูกแสดงเป็น 0.0% ขณะที่หน้าจอเขียน `<0.1%` */
+    private const SHARE_FORMAT = '0.00"%"';
     /**
      * ทุกช่องเงินในไฟล์ใช้รูปแบบเดียวกัน — ตรงถึงสตางค์
      *
@@ -1140,8 +1146,10 @@ class XlsxReportService
                 ->getNumberFormat()->setFormatCode(self::MONEY_FORMAT);
             $sheet->getStyle('E' . ($headerRow + 1) . ':E' . $lastShopRow)
                 ->getNumberFormat()->setFormatCode(self::RATIO_FORMAT);
-            $sheet->getStyle('F' . ($headerRow + 1) . ':G' . $lastShopRow)
+            $sheet->getStyle('F' . ($headerRow + 1) . ':F' . $lastShopRow)
                 ->getNumberFormat()->setFormatCode(self::PERCENT_FORMAT);
+            $sheet->getStyle('G' . ($headerRow + 1) . ':G' . $lastShopRow)
+                ->getNumberFormat()->setFormatCode(self::SHARE_FORMAT);
             // ⚠️ ตัวกรองต้องไม่คลุมแถวรวม ไม่งั้นกรองแล้วแถวรวมหายหรือถูกจัดเรียงปนไปด้วย
             $sheet->setAutoFilter('A' . $headerRow . ':H' . ($totalRow !== null ? $totalRow - 1 : $lastShopRow));
             $this->styleTableBody($sheet, $headerRange, 'A' . ($headerRow + 1) . ':H' . $lastShopRow);

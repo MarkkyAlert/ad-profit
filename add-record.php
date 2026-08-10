@@ -1062,6 +1062,8 @@ require __DIR__ . '/includes/header.php';
             refresh();
         };
 
+        let monthLoadRequestId = 0;   // กันคำตอบของเดือนเก่ามาทับเดือนที่เลือกทีหลัง
+
         if (monthInput) {
             monthInput.addEventListener('change', async () => {
                 const selectedMonth = monthInput.value;
@@ -1079,6 +1081,12 @@ require __DIR__ . '/includes/header.php';
 
                 showBulkNotice('กำลังโหลดข้อมูลเดือนนี้...');
 
+                /* ⚠️⚠️ กันคำตอบเก่ามาทับคำตอบใหม่ — เลือกเดือน B แล้วเปลี่ยนเป็น C เร็ว ๆ
+                   ถ้าคำตอบของ B กลับมาทีหลัง มันจะเรียก `populateFromDays(B)` ดึงช่องเลือก
+                   กลับไปเป็น B แล้ว **ลบสิ่งที่ผู้ใช้กำลังพิมพ์ในเดือน C ทิ้ง**
+                   · ตัวจัดการวันทีละแถวมีด่านนี้อยู่แล้ว ตัวเลือกเดือนตกสำรวจ */
+                const monthRequestId = ++monthLoadRequestId;
+
                 try {
                     const response = await fetch(
                         MONTH_GRID_URL + '?month=' + encodeURIComponent(selectedMonth),
@@ -1086,6 +1094,11 @@ require __DIR__ . '/includes/header.php';
                     );
 
                     const payload = await response.json();
+
+                    // เลือกเดือนใหม่ระหว่างรอ → ทิ้งคำตอบเก่าทั้งใบ ห้ามแตะตารางเลย
+                    if (monthRequestId !== monthLoadRequestId) {
+                        return;
+                    }
 
                     // ผิดพลาด → แจ้งข้อความ แต่ไม่ล้างตารางที่ผู้ใช้กรอกไว้
                     if (!payload || payload.success !== true) {
@@ -1110,6 +1123,10 @@ require __DIR__ . '/includes/header.php';
                         showBulkNotice(days.length === 0 ? 'เดือนนี้ยังไม่ถึงกำหนดกรอก' : '');
                     }
                 } catch (error) {
+                    if (monthRequestId !== monthLoadRequestId) {
+                        return;
+                    }
+
                     showBulkNotice('โหลดข้อมูลเดือนนี้ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
                 }
             });
@@ -1290,6 +1307,7 @@ require __DIR__ . '/includes/header.php';
         let lastAppliedDate = dateInput.value; // ค่าที่เซิร์ฟเวอร์เติมมาให้ตอนโหลดหน้า
         const HINT_DEFAULT_TEXT = hint.textContent;
         let pendingRequestId = 0;              // กันผลลัพธ์เก่ามาทับผลลัพธ์ใหม่
+        let pendingDate = null;                // วันที่ของคำขอที่ยังค้างอยู่ (null = ไม่มี)
 
         const applyDay = (day) => {
             if (day && (day.revenue !== null || day.ad_cost !== null || day.note)) {
@@ -1331,10 +1349,22 @@ require __DIR__ . '/includes/header.php';
 
         dateInput.addEventListener('change', async () => {
             const value = dateInput.value;
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value === lastAppliedDate) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
                 return;
             }
 
+            /* ⚠️⚠️⚠️ **ห้ามออกทันทีเพียงเพราะวันที่กลับมาเท่าเดิม ถ้ายังมีคำขอค้างอยู่**
+               ลำดับที่พัง: อยู่ที่วัน A → เปลี่ยนเป็น B (เริ่มโหลด) → เปลี่ยนกลับเป็น A
+               · กิ่งนี้เคยเห็นว่า `A === lastAppliedDate` แล้วออกเลย จึงไม่ได้เพิ่มเลขคำขอ
+               · คำตอบของ B กลับมาทีหลัง เลขคำขอยังตรง จึงผ่านด่านกันผลลัพธ์เก่าไปได้
+               · ผลลัพธ์: **ช่องวันที่แสดง A แต่ยอด/โน้ตเป็นของ B** และปุ่มบันทึกเปิดอยู่
+                 (วัดจริงด้วยการรันสคริปต์: date=2026-08-01 คู่กับ revenue ของอีกวัน)
+               → มีคำขอค้าง = ต้องเดินต่อเสมอ เพื่อยกเลิกของเก่าแล้วโหลดวันที่แสดงจริง */
+            if (value === lastAppliedDate && pendingDate === null) {
+                return;
+            }
+
+            pendingDate = value;
             const requestId = ++pendingRequestId;
 
             // ค่าของวันเก่าต้องหายไปทันที ไม่ใช่รอจนโหลดเสร็จ
@@ -1370,6 +1400,7 @@ require __DIR__ . '/includes/header.php';
                 }
 
                 lastAppliedDate = value;
+                pendingDate = null;
                 setPending(false);
             } catch (error) {
                 if (requestId !== pendingRequestId) {
@@ -1382,6 +1413,7 @@ require __DIR__ . '/includes/header.php';
                 lastAppliedDate = value;
                 hint.textContent = '⚠️ โหลดข้อมูลเดิมของวันที่ ' + value + ' ไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก';
                 hint.classList.remove('hidden');
+                pendingDate = null;
                 // โหลดไม่สำเร็จก็ต้องกดบันทึกได้ — ช่องถูกล้างแล้ว ผู้ใช้กรอกเองได้ตามปกติ
                 setPending(false);
             }

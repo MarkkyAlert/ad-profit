@@ -313,7 +313,14 @@ class OverviewAnnualService
                     'prev_year_has_data' => $previousTotals !== [],
                     'prev_year_unavailable' => $previousYearReadFailed,
                     'yoy_profit_change' => $previousYearProfit !== null ? $profit - $previousYearProfit : null,
-                    'yoy_profit_change_percent' => $previousYearProfit !== null
+                    /* ⚠️⚠️⚠️ **ปีนี้ไม่มี record เลย = เทียบไม่ได้ ไม่ใช่ "ตก 100%"**
+                       · `change_percent(0, ปีก่อน)` ให้ −100 ซึ่งอ่านว่า "ยอดหายไปหมด"
+                         ทั้งที่ความจริงคือ "ยังไม่ได้เริ่มบันทึก"
+                       · วัดจริง: ปีก่อนกำไร ฿4,000 ปีนี้ยังไม่กรอก → หน้าจอขึ้น
+                         "กำไรรวม ↓ 100.0% (-฿4,000)" คู่กับแถบ "ปีนี้ยังไม่มีข้อมูล" บนจอเดียวกัน
+                       ⚠️ **ปีที่กรอกแล้วและเท่าทุนจริง ยังต้องได้ −100% ตามปกติ** —
+                          เกณฑ์คือ "มี record ไหม" ไม่ใช่ "กำไรเป็นศูนย์ไหม" */
+                    'yoy_profit_change_percent' => ($previousYearProfit !== null && $monthsWithRecord !== [])
                         ? change_percent($profit, $previousYearProfit)
                         : null,
                 ],

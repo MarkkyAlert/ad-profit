@@ -167,7 +167,11 @@ final class XlsxReportServiceComparisonTest extends TestCase
 
         $this->assertSame('"฿"#,##0.00', $sheet->getStyle('D4')->getNumberFormat()->getFormatCode());
         $this->assertSame('0.00', $sheet->getStyle('E4')->getNumberFormat()->getFormatCode());
-        $this->assertSame('0.0"%"', $sheet->getStyle('G4')->getNumberFormat()->getFormatCode());
+        $this->assertSame('0.0"%"', $sheet->getStyle('F4')->getNumberFormat()->getFormatCode());
+        /* ⚠️⚠️ คอลัมน์ G (สัดส่วนกำไร) ใช้ **สองตำแหน่ง** ต่างจาก % อื่นโดยตั้งใจ
+           ค่าที่คำนวณไว้รวมกันได้ 100.00 พอดี แต่ถ้าแสดงตำแหน่งเดียว 3 ร้านเท่ากัน
+           จะกลายเป็น 33.3 × 3 = 99.9% บนหน้าจอ Excel ทั้งที่ค่าจริงถูกต้อง */
+        $this->assertSame('0.00"%"', $sheet->getStyle('G4')->getNumberFormat()->getFormatCode());
     }
 
     public function testSummaryShowsBestWorstMonthAndYoy(): void
