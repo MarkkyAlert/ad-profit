@@ -874,6 +874,50 @@ function distribute_profit_share(array $profits, float $totalProfit): array
 
     ksort($shares);
 
+    /* ⚠️⚠️⚠️ **ร้านที่มีกำไรจริงต้องไม่ลงเอยที่ 0.00%**
+       · การปัดลงเป็นทศนิยม 2 ตำแหน่งทำให้สัดส่วนที่เล็กกว่า 0.005% กลายเป็น 0.00 เป๊ะ
+         และถ้าเศษของมันแพ้แถวอื่นตอนแจก มันจะค้างที่ 0.00 ตลอด
+       · วัดจริง: ร้านเล็กกำไร ฿0.20 คู่กับร้านใหญ่ ฿408,000 → หน้าจอพิมพ์ "0.00%"
+         ผู้ใช้อ่านว่า "ร้านนี้ไม่ทำกำไรเลย" ทั้งที่คอลัมน์กำไรข้าง ๆ บอกว่ามี
+         (นี่คือปัญหาเดิมที่ `format_share_percent()` ถูกเขียนมาเพื่อกัน — ด่านนั้นเช็ก
+          `!== 0.0` จึงไม่มีวันทำงานเมื่อค่าถูกปัดจนเป็นศูนย์เป๊ะมาแล้ว)
+       · ⚠️ ค่าติดลบเล็ก ๆ ไม่มีปัญหานี้ เพราะ `floor()` ดันมันไปที่ −0.01 อยู่แล้ว
+       วิธีแก้: ยกร้านที่ "กำไรจริงแต่สัดส่วนปัดเป็น 0" ขึ้นเป็น 0.01 แล้วหักคืนจากแถว
+       ที่สัดส่วนใหญ่ที่สุด — **ผลรวมยังเป็น 100.00 เป๊ะ** ตามสัญญาเดิม */
+    $adjustment = 0.0;
+    foreach ($shares as $index => $share) {
+        if ($share === null || $share !== 0.0) {
+            continue;
+        }
+
+        $exactValue = $exact[$index] ?? 0.0;
+        if ($exactValue === 0.0) {
+            continue;   // ศูนย์จริง ๆ — ต้องเป็น 0.00% ตามความจริง
+        }
+
+        $lifted = $exactValue > 0 ? 0.01 : -0.01;
+        $shares[$index] = $lifted;
+        $adjustment += $lifted;
+    }
+
+    if ($adjustment !== 0.0) {
+        // หักคืนจากแถวที่สัดส่วนใหญ่ที่สุด — ผลรวมยังเป็น 100.00 เป๊ะ
+        $largestIndex = null;
+        foreach ($shares as $index => $share) {
+            if ($share === null || $share === 0.01 || $share === -0.01) {
+                continue;
+            }
+
+            if ($largestIndex === null || $share > $shares[$largestIndex]) {
+                $largestIndex = $index;
+            }
+        }
+
+        if ($largestIndex !== null) {
+            $shares[$largestIndex] = round((float)$shares[$largestIndex] - $adjustment, 2);
+        }
+    }
+
     return array_values(array_map(
         static fn($share): ?float => $share === null ? null : round((float)$share, 2),
         $shares

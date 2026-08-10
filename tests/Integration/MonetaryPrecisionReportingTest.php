@@ -8,6 +8,7 @@ use AnnualService;
 use DashboardService;
 use GoalRepository;
 use OverviewAnnualService;
+use OverviewDailyService;
 use OverviewService;
 use RecordRepository;
 use ShopRepository;
@@ -214,5 +215,135 @@ final class MonetaryPrecisionReportingTest extends IntegrationTestCase
         )), 2);
 
         $this->assertSame(100.0, $total, 'สัดส่วนกำไรของมุมรายปีรวมกันไม่ได้ 100.00 พอดี');
+    }
+
+    /**
+     * ⭐⭐⭐ ร้านที่ขาดทุน **อัตรากำไรต้องติดลบ ห้าม clamp ให้เป็น 0**
+     *
+     * ⚠️⚠️ **ช่องว่างที่วัดเจอจริง**: ใส่ `max(0.0, …)` ครอบสูตรอัตรากำไร แล้วรันเทสต์
+     * 244 ตัวที่เกี่ยวข้อง — **เขียวทั้งหมด** · สูตรตอนนี้ถูก แต่ไม่มีอะไรกันไว้เลย
+     * ถ้าวันหนึ่งมีคนคิดว่า "อัตรากำไรติดลบดูแปลก" แล้ว clamp ทิ้ง ร้านที่ขาดทุนจะแสดง
+     * 0.0% เหมือนร้านที่เท่าทุนพอดี — **สองสภาพที่ต่างกันสิ้นเชิงกลายเป็นเลขเดียวกัน**
+     *
+     * ⚠️ ตรวจทุก service ที่คำนวณอัตรากำไร ไม่ใช่ตัวเดียว — สูตรนี้เขียนซ้ำอยู่ 13 จุด
+     */
+    public function testALossMakingShopReportsANegativeMargin(): void
+    {
+        $userId = $this->createUser('lossmargin@example.com', 'LossMarginPass123');
+        $shopId = $this->createShop($userId, 'ร้านที่ขาดทุน');
+        $otherShop = $this->createShop($userId, 'ร้านประกอบฉาก');
+
+        // รายได้ 1,000 · ค่าแอด 3,000 → กำไร −2,000 → อัตรากำไร −200%
+        $this->insert($shopId, '2026-08-05', 1000.0, 3000.0);
+        $this->insert($otherShop, '2026-08-05', 5000.0, 1000.0);
+
+        $margins = [];
+
+        $margins['แดชบอร์ด'] = (new DashboardService(
+            new RecordRepository($this->pdo),
+            new ShopRepository($this->pdo),
+            new GoalRepository($this->pdo)
+        ))->buildDashboard($userId, $shopId, 'month_this', null, null, null, self::TODAY)
+            ['data']['statistics']['profit_margin'] ?? null;
+
+        $margins['หน้ารายปี'] = (new AnnualService(
+            new RecordRepository($this->pdo),
+            new ShopRepository($this->pdo),
+            new GoalRepository($this->pdo)
+        ))->buildYearlySummary($userId, $shopId, 2026, self::TODAY)
+            ['data']['summary']['profit_margin'] ?? null;
+
+        $overviewRows = (array)((new OverviewService(
+            new RecordRepository($this->pdo),
+            new ShopRepository($this->pdo)
+        ))->buildOverview($userId, '2026-08', self::TODAY)['data']['comparison']['rows'] ?? []);
+        foreach ($overviewRows as $row) {
+            if ((int)($row['shop_id'] ?? 0) === $shopId) {
+                $margins['หน้ารวมร้าน'] = $row['profit_margin'] ?? null;
+            }
+        }
+
+        $yearlyShops = (array)((new OverviewAnnualService(
+            new RecordRepository($this->pdo),
+            new ShopRepository($this->pdo)
+        ))->buildYearlyOverview($userId, 2026, self::TODAY)['data']['shops'] ?? []);
+        foreach ($yearlyShops as $shop) {
+            if ((string)($shop['shop_name'] ?? '') === 'ร้านที่ขาดทุน') {
+                $margins['หน้ารวมร้าน (ปี)'] = $shop['profit_margin'] ?? null;
+            }
+        }
+
+        $this->assertCount(4, $margins, 'อ่านอัตรากำไรมาไม่ครบทุกหน้า — ตัวกวาดจะไม่ได้ตรวจอะไร');
+
+        foreach ($margins as $where => $margin) {
+            $this->assertNotNull($margin, "\"{$where}\" ไม่คืนอัตรากำไรมาเลย");
+            $this->assertLessThan(
+                0.0,
+                (float)$margin,
+                "\"{$where}\" รายงานอัตรากำไรของร้านที่ขาดทุนว่าไม่ติดลบ ({$margin}%) — "
+                . 'ร้านที่ขาดทุนกับร้านที่เท่าทุนพอดีจะกลายเป็นเลขเดียวกัน'
+            );
+        }
+    }
+
+    /**
+     * ⭐⭐ "กำไรเฉลี่ยต่อวัน" นับวันคนละแบบสองหน้า **โดยตั้งใจ** — เทสต์นี้ตรึงไว้ทั้งคู่
+     *
+     * | หน้า | ตัวหาร |
+     * |---|---|
+     * | แดชบอร์ด (ร้านเดียว) | `days_count` = วันที่ **ร้านนี้** กรอก |
+     * | หน้ารวมร้าน แท็บรายวัน | `complete_days_count` = วันที่ **ทุกร้าน** กรอกครบ |
+     *
+     * ⚠️ ทำไมถึงต่างกัน: หน้ารวมร้านเทียบข้ามร้าน ถ้านับวันที่บางร้านยังไม่กรอกเข้ามาด้วย
+     * ค่าเฉลี่ยจะถูกลากลงด้วย "ช่องว่างของข้อมูล" ไม่ใช่ผลงานจริง · ส่วนแดชบอร์ดดูร้านเดียว
+     * จึงไม่มีปัญหานั้น
+     *
+     * ⚠️⚠️ **สิ่งที่เทสต์นี้กัน** คือการที่วันหนึ่งมีคนเปลี่ยนข้างใดข้างหนึ่งให้ "เหมือนกัน"
+     * โดยไม่รู้ว่าอีกข้างจงใจต่าง — จะแดงทันที และมาอ่านเหตุผลตรงนี้ได้
+     * · ถ้าเจ้าของระบบอยากให้สองหน้าใช้นิยามเดียวกัน ต้องตัดสินก่อนว่ายึดแบบไหน
+     */
+    public function testTheTwoAveragePerDayDefinitionsStayDeliberatelyDifferent(): void
+    {
+        $userId = $this->createUser('avgdays@example.com', 'AvgDaysPass123');
+        $shopA = $this->createShop($userId, 'ร้านที่กรอกครบ');
+        $shopB = $this->createShop($userId, 'ร้านที่กรอกไม่ครบ');
+
+        // 3 วัน: วันที่ 1 ทั้งสองร้านกรอก · วันที่ 2–3 เฉพาะร้าน A
+        $this->insert($shopA, '2026-08-01', 3000.0, 1000.0);
+        $this->insert($shopB, '2026-08-01', 2000.0, 1000.0);
+        $this->insert($shopA, '2026-08-02', 3000.0, 1000.0);
+        $this->insert($shopA, '2026-08-03', 3000.0, 1000.0);
+
+        // ── แดชบอร์ดของร้าน A: หารด้วย 3 วัน (วันที่ร้านนี้กรอก)
+        $statistics = (array)((new DashboardService(
+            new RecordRepository($this->pdo),
+            new ShopRepository($this->pdo),
+            new GoalRepository($this->pdo)
+        ))->buildDashboard($userId, $shopA, 'month_this', null, null, null, self::TODAY)
+            ['data']['statistics'] ?? []);
+
+        $this->assertSame(3, (int)($statistics['days_count'] ?? 0), 'แดชบอร์ดนับวันของร้านนี้');
+        $this->assertSame(
+            2000.0,
+            (float)($statistics['avg_profit_per_day'] ?? 0),
+            'แดชบอร์ดต้องหารด้วยวันที่ร้านนี้กรอก (6,000 ÷ 3)'
+        );
+
+        // ── หน้ารวมร้านแท็บรายวัน: หารด้วย 1 วัน (วันที่ทุกร้านกรอกครบ)
+        $daily = (array)((new OverviewDailyService(
+            new RecordRepository($this->pdo),
+            new ShopRepository($this->pdo)
+        ))->buildDailyOverview($userId, '2026-08', self::TODAY)['data']['summary'] ?? []);
+
+        $this->assertSame(
+            1,
+            (int)($daily['complete_days_count'] ?? 0),
+            'หน้ารวมร้านนับเฉพาะวันที่ทุกร้านกรอกครบ'
+        );
+        $this->assertSame(
+            3000.0,
+            (float)($daily['avg_profit_per_day'] ?? 0),
+            'หน้ารวมร้านต้องหารด้วยวันที่กรอกครบ (3,000 ÷ 1) ไม่ใช่ทุกวันที่มีข้อมูล'
+        );
     }
 }

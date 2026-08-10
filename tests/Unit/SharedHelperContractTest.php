@@ -1248,4 +1248,55 @@ final class SharedHelperContractTest extends TestCase
             )) . ']'
         );
     }
+
+    /**
+     * ⭐⭐⭐ ร้านที่มีกำไร (หรือขาดทุน) จริง **ห้ามลงเอยที่ 0.00%**
+     *
+     * ⚠️⚠️ การปัดลงเป็น 2 ตำแหน่งทำให้สัดส่วนที่เล็กกว่า 0.005% กลายเป็น 0.00 เป๊ะ
+     * และถ้าเศษของมันแพ้แถวอื่นตอนแจก มันจะค้างที่ 0.00 ตลอด
+     * · วัดจริง: ร้านเล็กกำไร ฿0.20 คู่กับร้านใหญ่ ฿408,000 → หน้าจอพิมพ์ **"0.00%"**
+     *   ผู้ใช้อ่านว่า "ร้านนี้ไม่ทำกำไรเลย" ทั้งที่คอลัมน์กำไรข้าง ๆ บอกว่ามี
+     * · ด่าน `<0.01%` ใน `format_share_percent()` เช็ก `!== 0.0` จึงไม่มีวันทำงาน
+     *   เมื่อค่าถูกปัดจนเป็นศูนย์เป๊ะมาก่อนแล้ว
+     *
+     * ⚠️⚠️ **เทสต์เดิมผ่านเพราะข้อมูลอ่อนไป** — `testATinyShareIsNotReportedAsZero()`
+     * ใช้อัตราส่วน 10,000:1 ซึ่งเศษของร้านเล็กยังชนะการแจก · ที่ 2,000,000:1 มันแพ้
+     *
+     * ⚠️ **ศูนย์จริง ๆ (เท่าทุนพอดี) ต้องยังเป็น 0.00%** — ไม่งั้นการ "แก้" จะกลบความจริง
+     *
+     * @return array<string,array{0:list<float>,1:float,2:int,3:string}>
+     */
+    public static function tinyShareProvider(): array
+    {
+        return [
+            'กำไรเล็กมากคู่ร้านใหญ่มาก' => [[0.2, 408000.0], 408000.2, 0, '0.01%'],
+            'ขาดทุนเล็กมากคู่ร้านใหญ่มาก' => [[-0.2, 408000.0], 407999.8, 0, '-0.01%'],
+            'สองร้านเล็กมากพร้อมกัน' => [[0.2, 0.3, 408000.0], 408000.5, 1, '0.01%'],
+            'เท่าทุนพอดี — ต้องเป็นศูนย์จริง' => [[0.0, 1000.0], 1000.0, 0, '0.00%'],
+        ];
+    }
+
+    /** @param list<float> $profits */
+    #[\PHPUnit\Framework\Attributes\DataProvider('tinyShareProvider')]
+    public function testAShopWithRealProfitNeverShowsZeroShare(
+        array $profits,
+        float $total,
+        int $indexToCheck,
+        string $expected
+    ): void {
+        $shares = distribute_profit_share($profits, $total);
+
+        $this->assertSame(
+            $expected,
+            format_share_percent($shares[$indexToCheck]),
+            'สัดส่วนที่ผู้ใช้เห็นไม่ตรงกับความจริงของแถวนั้น'
+        );
+
+        // สัญญาเดิมต้องไม่เสีย — ผลรวมยังต้องเป็น 100.00 เป๊ะ
+        $this->assertSame(
+            100.0,
+            round(array_sum(array_map(static fn($share): float => (float)$share, $shares)), 2),
+            'แก้เรื่องร้านเล็กแล้วผลรวมไม่ได้ 100.00 อีกต่อไป'
+        );
+    }
 }
