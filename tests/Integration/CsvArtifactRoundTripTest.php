@@ -153,4 +153,110 @@ final class CsvArtifactRoundTripTest extends ControllerTestCase
         $this->assertStringContainsString('ยอดรวม', $found, 'เนื้อหาหลังจุลภาคหายไป — ตัวคั่นรั่ว');
         $this->assertStringContainsString('SUM(A1,A2)', $found, 'เนื้อหาเดิมของโน้ตถูกตัดทิ้ง');
     }
+
+    /**
+     * ⭐⭐⭐ **โหลดไฟล์ออกไป แล้วนำเข้ากลับผ่านแอปจริง ต้องได้ข้อมูลเดิมเป๊ะ**
+     *
+     * ⚠️⚠️ เทสต์อีกสองตัวในไฟล์นี้ตรวจแค่ว่า **ไฟล์ที่ดาวน์โหลดอ่านกลับได้** ด้วยตัวอ่าน CSV
+     * — ไม่มีตัวไหน **นำเข้ากลับผ่าน endpoint จริง** เลย · ชื่อไฟล์บอกว่า "round trip"
+     * แต่ครึ่งหลังของวงกลมไม่เคยถูกเดิน
+     *
+     * ทางนี้ข้าม **สองระบบที่เขียนคนละที่**: ตัวเขียนไฟล์ (`ExportService` + `api/export.php`)
+     * กับตัวอ่านไฟล์ (`RecordService::parseImportCsv`) ซึ่งเป็นรูปแบบที่โปรเจกต์นี้พังซ้ำ
+     * ที่สุด — "กติกาถูกบังคับใช้ที่หนึ่งแต่ไปไม่ถึงอีกที่หนึ่ง"
+     *
+     * สิ่งที่ต้องรอดข้ามวงกลม (ทุกอย่างเป็นกติกาที่เขียนไว้คนละฝั่ง):
+     *   · BOM ที่ตัวเขียนใส่ไว้ → ตัวอ่านต้องตัดทิ้ง
+     *   · `'` ที่ตัวเขียนเติมกันสูตร Excel → ตัวอ่านต้องถอดออกให้พอดี
+     *   · คอลัมน์ที่คำนวณเอง (กำไร/ROAS/เทียบครั้งก่อน) → ตัวอ่านต้องเพิกเฉย
+     *   · แถว "รวม" ท้ายตาราง + บรรทัดว่างก่อนหน้า → ตัวอ่านต้องข้าม
+     *   · โน้ตที่มีจุลภาค/ขึ้นบรรทัด/เครื่องหมายคำพูด → ต้องกลับมาครบทุกตัวอักษร
+     *
+     * ⚠️ นำเข้าลง **อีกร้าน** เพื่อให้เทียบได้ว่า "ข้อมูลที่ไปถึงปลายทาง" ตรงกับต้นทางจริง
+     * ไม่ใช่แค่ทับของเดิมแล้วดูเหมือนไม่มีอะไรเปลี่ยน
+     */
+    public function testTheDownloadedFileImportsBackWithoutLosingAnything(): void
+    {
+        $userId = $this->createUser('roundtrip@example.com', 'RoundPass123');
+        $source = $this->createShop($userId, 'ร้านต้นทาง');
+        $target = $this->createShop($userId, 'ร้านปลายทาง');
+
+        /* ⚠️ ต้องมีทุกสภาพที่ทำให้สองฝั่งเถียงกันได้ — ยอดมีเศษสตางค์ · ค่าแอด ฿0
+           (ROAS ว่าง) · ยอด ฿0 ทั้งคู่ · โน้ตว่าง · โน้ตขึ้นต้นด้วยอักขระสูตร ·
+           โน้ตที่มีจุลภาค/ขึ้นบรรทัด/เครื่องหมายคำพูด · และวันที่ไม่ติดกัน */
+        $rows = [
+            ['2026-04-01', '5000.55', '1200.25', 'เปิดตัว'],
+            ['2026-04-02', '6200.00', '1500.00', 'โน้ตมี, จุลภาค'],
+            ['2026-04-03', '0.00', '0.00', "หลาย\nบรรทัด"],
+            ['2026-04-05', '9876.54', '0.00', '=SUM(A1)'],
+            ['2026-04-08', '1234.56', '9999.99', 'เขาว่า "ดี" มาก'],
+            ['2026-04-10', '7777.77', '2222.22', ''],
+        ];
+
+        $insert = $this->pdo->prepare(
+            'INSERT INTO daily_records (shop_id, record_date, revenue, ad_cost, note, created_at, updated_at)
+             VALUES (:s, :d, :r, :a, :n, NOW(), NOW())'
+        );
+        foreach ($rows as [$date, $revenue, $adCost, $note]) {
+            $insert->execute(['s' => $source, 'd' => $date, 'r' => $revenue, 'a' => $adCost, 'n' => $note]);
+        }
+
+        // ── ครึ่งแรกของวงกลม: โหลดไฟล์จากหน้าประวัติ
+        $download = $this->get('/api/export.php?month=2026-04', $this->startSession($userId, $source));
+        $this->assertSame(200, $download['status'], 'ดาวน์โหลด CSV ไม่สำเร็จ');
+
+        // ── ครึ่งหลัง: นำเข้ากลับผ่าน endpoint จริง ลงอีกร้าน
+        $targetSession = $this->startSession($userId, $target);
+        $import = $this->postFile(
+            '/api/records.php',
+            [
+                'action' => 'import_csv',
+                'csrf_token' => $this->csrfTokenFor($targetSession),
+                'shop_context_id' => (string)$target,
+            ],
+            'csv',
+            'กลับเข้า.csv',
+            (string)$download['body'],
+            $targetSession
+        );
+
+        $this->assertSame(302, $import['status'], (string)$import['body']);
+
+        $read = $this->pdo->prepare(
+            'SELECT record_date, revenue, ad_cost, note FROM daily_records
+             WHERE shop_id = :s ORDER BY record_date'
+        );
+
+        $keyed = static function (array $list): array {
+            $map = [];
+            foreach ($list as $row) {
+                $map[(string)$row['record_date']] = [
+                    'revenue' => (string)$row['revenue'],
+                    'ad_cost' => (string)$row['ad_cost'],
+                    'note' => (string)$row['note'],
+                ];
+            }
+
+            return $map;
+        };
+
+        $read->execute(['s' => $source]);
+        $before = $keyed($read->fetchAll());
+        $read->execute(['s' => $target]);
+        $after = $keyed($read->fetchAll());
+
+        /* ⚠️ เทียบทั้งก้อนทีเดียว ไม่ใช่ไล่ทีละช่องแล้ว `continue` เมื่อไม่เจอ —
+           แถวที่ **หายไป** กับแถวที่ **โผล่มาเกิน** ต้องทำให้เทสต์แดงทั้งคู่
+           (เทสต์ที่ข้ามแถวที่ฝั่งหนึ่งไม่มี คือเทสต์ที่ข้ามบั๊กชนิดที่ตั้งใจจับพอดี) */
+        $this->assertSame(
+            $before,
+            $after,
+            'ข้อมูลหลังนำเข้ากลับไม่ตรงกับต้นทาง — ตัวเขียนไฟล์กับตัวอ่านไฟล์ตีความไม่ตรงกัน'
+        );
+
+        // ยืนยันว่าฉากทดสอบ "ยาก" จริง ไม่ใช่ผ่านเพราะข้อมูลง่ายเกินไป
+        $this->assertCount(count($rows), $before, 'ข้อมูลต้นทางไม่ครบตั้งแต่แรก');
+        $this->assertStringContainsString("\n", $before['2026-04-03']['note'], 'ไม่มีโน้ตที่ขึ้นบรรทัดใหม่ในฉากทดสอบ');
+        $this->assertStringStartsWith('=', $before['2026-04-05']['note'], 'ไม่มีโน้ตที่ขึ้นต้นด้วยอักขระสูตร');
+    }
 }
