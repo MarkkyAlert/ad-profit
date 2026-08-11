@@ -194,6 +194,16 @@ class AuthService
     {
         $normalizedEmail = normalize_email($email);
 
+        // ฟอร์มยังขาดช่องบังคับ = ยังไม่ใช่ความพยายามเดารหัส และยังไม่มีงานหนัก
+        // ให้กันก่อนจอง quota เหมือน register()/resetPassword() ไม่เช่นกดส่งฟอร์มว่าง
+        // ครบเพดานแล้วครั้งที่กรอกรหัสถูกจริงจะถูกบล็อกจาก bucket ต่อ IP
+        if ($normalizedEmail === '' || $password === '') {
+            return [
+                'success' => false,
+                'error' => 'กรุณากรอกอีเมลและรหัสผ่าน',
+            ];
+        }
+
         // ⚠️⚠️ ต้อง **นับก่อน แล้วค่อยตรวจรหัสผ่าน** ไม่ใช่ "ถามว่าเกินหรือยัง" แล้วค่อยนับทีหลัง
         //
         // เดิมเป็น check-then-act โดยมี `password_verify()` (bcrypt ~100ms) คั่นกลาง
@@ -213,13 +223,6 @@ class AuthService
             return [
                 'success' => false,
                 'error' => 'ลองเข้าสู่ระบบบ่อยเกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
-            ];
-        }
-
-        if ($normalizedEmail === '' || $password === '') {
-            return [
-                'success' => false,
-                'error' => 'กรุณากรอกอีเมลและรหัสผ่าน',
             ];
         }
 

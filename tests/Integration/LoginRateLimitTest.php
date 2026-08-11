@@ -156,6 +156,25 @@ final class LoginRateLimitTest extends IntegrationTestCase
         $this->assertTrue(($result['success'] ?? false), 'พิมพ์ถูกแล้วยังเข้าไม่ได้');
     }
 
+    /** ฟอร์มยังขาดช่องบังคับต้องไม่ใช้ quota ที่ไว้กันการเดารหัสผ่าน */
+    public function testBlankLoginFieldsDoNotSpendTheIpQuota(): void
+    {
+        $this->makeUser('owner@example.com');
+        $service = $this->service();
+
+        for ($attempt = 1; $attempt <= (int)RATE_LIMIT_MAX_ATTEMPTS; $attempt++) {
+            $result = $service->login('owner@example.com', '', self::OFFICE_IP);
+            $this->assertFalse($result['success']);
+            $this->assertSame('กรุณากรอกอีเมลและรหัสผ่าน', $result['error']);
+        }
+
+        $this->assertSame(0, $this->ipAttempts(), 'ฟอร์มที่ยังขาดข้อมูลกิน quota ของ IP');
+        $this->assertTrue(
+            $service->login('owner@example.com', 'CorrectPass123', self::OFFICE_IP)['success'],
+            'กรอกรหัสถูกหลังฟอร์มว่างหลายครั้งแล้วถูกบล็อก'
+        );
+    }
+
     /**
      * ⭐ ไล่เดารหัสของบัญชีเดียว **จากเครื่องเดียว** ต้องถูกกันที่เพดาน
      *
