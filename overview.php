@@ -1259,16 +1259,23 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                         $totalProfit = money_total((float)($totals['profit'] ?? ($totalRevenue - $totalAdCost)));
                         $totalRoas = isset($totals['roas']) && $totals['roas'] !== null ? (float)$totals['roas'] : null;
                         $totalProfitMargin = isset($totals['profit_margin']) && $totals['profit_margin'] !== null ? (float)$totals['profit_margin'] : null;
+                        /* ⚠️⚠️ ทุกแถวร้านเหนือแถวนี้เป็นขีดเมื่อไม่มีใครกรอกในเดือนนั้น —
+                           แถวรวมต้องพูดภาษาเดียวกัน ไม่งั้นตารางที่ว่างทั้งตารางลงท้ายด้วย
+                           "รวมทุกร้าน ฿0" ซึ่งอ่านว่า "ทุกร้านรวมกันแล้วได้ศูนย์"
+                           · กติกาเดียวกับแถวรวมของ `annual.php` และชีต "เทียบร้าน" ที่แก้ไปแล้ว
+                           · $hasOverviewData มีอยู่แล้วในหน้านี้ (ใช้กับแถบแจ้งเตือน) แค่ไปไม่ถึงตรงนี้ */
+                        $totalMoney = static fn(float $value): string =>
+                            $hasOverviewData ? formatMoney($value) : no_value_text();
                         ?>
                         <tr class="border-t border-white/10 bg-white/[0.03] font-semibold">
                             <td class="px-3 py-2 text-slate-200" colspan="2">รวมทุกร้าน</td>
-                            <td class="px-3 py-2 text-orange-400"><?= e(formatMoney($totalRevenue)) ?></td>
-                            <td class="px-3 py-2 text-cyan-400"><?= e(formatMoney($totalAdCost)) ?></td>
-                            <td class="px-3 py-2 <?= $totalProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($totalProfit)) ?></td>
+                            <td class="px-3 py-2 text-orange-400"><?= e($totalMoney($totalRevenue)) ?></td>
+                            <td class="px-3 py-2 text-cyan-400"><?= e($totalMoney($totalAdCost)) ?></td>
+                            <td class="px-3 py-2 <?= !$hasOverviewData ? 'text-slate-400' : ($totalProfit >= 0 ? 'text-green-400' : 'text-red-400') ?>"><?= e($totalMoney($totalProfit)) ?></td>
                             <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
                             <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
-                            <td class="px-3 py-2 text-violet-400"><?= e(formatRoas($totalRoas)) ?></td>
-                            <td class="px-3 py-2 text-slate-300"><?= e(formatPercent($totalProfitMargin)) ?></td>
+                            <td class="px-3 py-2 text-violet-400"><?= e($hasOverviewData ? formatRoas($totalRoas) : no_value_text()) ?></td>
+                            <td class="px-3 py-2 text-slate-300"><?= e($hasOverviewData ? formatPercent($totalProfitMargin) : no_value_text()) ?></td>
                             <td class="px-3 py-2 text-slate-400"><?= e(no_value_text()) ?></td>
                         </tr>
                     </tfoot>

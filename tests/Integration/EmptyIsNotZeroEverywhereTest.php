@@ -725,15 +725,12 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
             );
         }
 
-        // แถวรวมท้ายตารางต้องพูดภาษาเดียวกับการ์ด
-        $text = (string)preg_replace('/\s+/u', ' ', strip_tags((string)preg_replace(
-            '#<script.*?</script>#s',
-            ' ',
-            $this->get('/overview.php?view=day&month=2026-07', $session)['body']
-        )));
-        $this->assertMatchesRegularExpression(
-            '/รวมทุกร้าน\s*(' . preg_quote(no_value_text(), '/') . '\s*){5}/u',
-            $text,
+        // แถวรวมท้ายตารางต้องพูดภาษาเดียวกับการ์ด (ช่องสุดท้ายเป็น "สูงสุด 0 วัน" = หลักฐาน ไม่ใช่ผลงาน)
+        $totals = $this->totalsRowOnOverview($session, '/overview.php?view=day&month=2026-07');
+        $this->assertSame('สูงสุด 0 วัน', array_pop($totals), 'ช่อง "วันที่กรอก" ของแถวรวมต้องบอกจำนวนวัน');
+        $this->assertSame(
+            array_fill(0, count($totals), no_value_text()),
+            $totals,
             'แถวรวม "รวมทุกร้าน" ยังพิมพ์ตัวเลขทั้งที่ทั้งเดือนไม่มีใครกรอก'
         );
 
@@ -743,6 +740,75 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
             '฿9,000.75',
             $filled['ยอดขายรวม'] ?? '',
             'เดือนที่มีข้อมูลจริงกลับไม่แสดงตัวเลข — การแก้ทำให้ทุกเดือนเงียบไปหมด'
+        );
+    }
+
+    /**
+     * ช่องทั้งหมดของแถว "รวมทุกร้าน" ในตารางเทียบร้านของหน้ารวมร้าน
+     *
+     * ⚠️ อ่านจาก DOM ไม่ใช่ค้นข้อความทั้งหน้า — เวลาเทสต์ล้ม ข้อความจะบอกว่า
+     * "แถวรวมเป็นอะไร" ตรง ๆ แทนที่จะพ่น HTML ทั้งหน้าออกมาให้อ่านไม่ออก
+     *
+     * @return list<string>
+     */
+    private function totalsRowOnOverview(string $session, string $url): array
+    {
+        $response = $this->get($url, $session);
+        $this->assertSame(200, $response['status'], 'เปิดหน้ารวมร้านไม่สำเร็จ: ' . $url);
+
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        $doc->loadHTML('<?xml encoding="utf-8"?>' . $response['body']);
+        $xpath = new \DOMXPath($doc);
+
+        foreach ($xpath->query('//tfoot//tr') as $tr) {
+            $cells = [];
+            foreach ($tr->childNodes as $node) {
+                if ($node->nodeName === 'td') {
+                    $cells[] = trim((string)preg_replace('/\s+/u', ' ', $node->textContent));
+                }
+            }
+
+            if (($cells[0] ?? '') === 'รวมทุกร้าน') {
+                return array_slice($cells, 1); // ตัดชื่อแถวออก เหลือเฉพาะค่า
+            }
+        }
+
+        $this->fail('ไม่พบแถว "รวมทุกร้าน" ในหน้า ' . $url);
+    }
+
+    /**
+     * ⭐⭐ แท็บ "รายเดือน": ตารางที่ทุกแถวเป็นขีด ต้องไม่ลงท้ายด้วย "รวมทุกร้าน ฿0"
+     *
+     * ⚠️ กติกา "แถวรวมต้องเงียบเมื่อไม่มีข้อมูล" ถูกบังคับใช้กับแถวรวมของหน้ารายปี
+     * และชีต "เทียบร้าน" ไปแล้ว แต่ไปไม่ถึงแถวรวมของแท็บนี้ — ตารางเดียวกันจึงใช้
+     * กติกาสองแบบ: ทุกแถวข้างบนเป็นขีด แถวล่างสุดพิมพ์ ฿0
+     *
+     * ⚠️ ตรวจฝั่งตรงข้ามด้วย — เดือนที่มีข้อมูลจริงแถวรวมต้องยังพิมพ์ตัวเลข
+     */
+    public function testTheMonthlyTabTotalRowStaysSilentWhenEveryShopRowIsBlank(): void
+    {
+        $userId = $this->createUser('monthtotal@example.com', 'MonthTotalPass123');
+        $shopA = $this->createShop($userId, 'ร้านหนึ่ง');
+        $this->createShop($userId, 'ร้านสอง');
+
+        $this->insert($shopA, '2026-06-10', 9000.75, 4000.25);
+
+        $session = $this->startSession($userId, $shopA);
+
+        // ก.ค. ไม่มีใครกรอก → ทุกแถวเป็นขีด แถวรวมต้องเป็นขีดด้วยทุกช่อง
+        $empty = $this->totalsRowOnOverview($session, '/overview.php?view=month&month=2026-07');
+        $this->assertSame(
+            array_fill(0, count($empty), no_value_text()),
+            $empty,
+            'ทุกแถวร้านเป็นขีด แต่แถวรวมยังพิมพ์ตัวเลข — ตารางเดียวกันใช้กติกาสองแบบ'
+        );
+
+        // มิ.ย. มีข้อมูลจริง → แถวรวมต้องยังพิมพ์ตัวเลขตามปกติ
+        $this->assertContains(
+            '฿9,000.75',
+            $this->totalsRowOnOverview($session, '/overview.php?view=month&month=2026-06'),
+            'เดือนที่มีข้อมูลจริง แถวรวมกลับไม่มีตัวเลข — การแก้เงียบเกินไป'
         );
     }
 }
