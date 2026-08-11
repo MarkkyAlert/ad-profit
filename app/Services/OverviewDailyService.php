@@ -104,7 +104,17 @@ class OverviewDailyService
         // วัดจริง: 2 ร้านกรอกครบทั้งคู่แค่ 1–3 ส.ค. แล้วหยุด (4–7 ส.ค. ไม่มีข้อมูลของใครเลย)
         // แถวรวมบอก "ครบทุกวัน" ขณะที่แดชบอร์ดของร้านเดียวกันบนข้อมูลชุดเดียวกัน
         // ขึ้นแถบเหลืองว่า "คุณไม่ได้กรอกข้อมูลมา 4 วันแล้ว"
-        $elapsedDays = (int)(new DateTimeImmutable($endDate))->format('j');
+        //
+        // ⚠️⚠️ แต่ต้องนับเฉพาะวันที่ "อยู่ในความรับผิดชอบ" จริง — คือตั้งแต่วันแรกที่มี
+        // ร้านไหนเริ่มบันทึกเป็นต้นไป · เดิมนับทุกวันของเดือนที่ผ่านไปแล้วตรง ๆ
+        //
+        // วัดจริง: สมัครวันที่ 20 ส.ค. แล้วกรอกครบทุกวันตั้งแต่ 20–31 → ยังขึ้นคำเตือน
+        // "⚠️ 19 วันที่ผ่านมาแล้วแต่ยังไม่มีร้านไหนกรอกเลย" ทั้งที่ทำถูกทุกอย่าง
+        // — เป็นคำเตือนแรกที่ผู้ใช้ใหม่เห็น และมันกล่าวหาผิด
+        //
+        // คอลัมน์ "ร้านที่กรอก" ในตารางเดียวกันใช้กติกานี้อยู่แล้ว (`countShopsTrackedOn()`)
+        // ตัวนับนี้แค่ไม่เคยเอาข้อมูลชุดเดียวกันมาใช้
+        $elapsedDays = $this->daysUnderTracking($trackingSince, $startDate, $endDate);
         $summary = $this->buildSummary($dailyRows, $shopsCount, $elapsedDays);
         $chart = $this->buildChart($dailyRows);
         $shopRows = $this->buildShopRows($shopTotals, $shopNameById);
@@ -121,6 +131,29 @@ class OverviewDailyService
                 'shops' => $shopRows,
             ],
         ];
+    }
+
+    /**
+     * จำนวนวันในช่วงที่ "มีคนเริ่มบันทึกแล้ว" — ใช้เป็นตัวตั้งของ `missing_days`
+     *
+     * ⚠️ วันก่อนที่ร้านแรกจะเริ่มบันทึก ไม่ใช่วันที่ผู้ใช้ "ลืมกรอก" — มันคือวันที่
+     * เขายังไม่ได้ใช้ระบบนี้ · การนับรวมเข้าไปทำให้ผู้ใช้ใหม่ถูกเตือนตั้งแต่วันแรก
+     *
+     * @param array<int,string> $trackingSince วันแรกที่แต่ละร้านมีข้อมูล (Y-m-d, เรียงจากน้อยไปมาก)
+     */
+    private function daysUnderTracking(array $trackingSince, string $startDate, string $endDate): int
+    {
+        $firstTrackedDate = $trackingSince[0] ?? null;
+        if ($firstTrackedDate === null) {
+            return 0; // ยังไม่มีร้านไหนเริ่มบันทึกเลย — ไม่มีวันไหนให้ทวงถาม
+        }
+
+        $from = $firstTrackedDate > $startDate ? $firstTrackedDate : $startDate;
+        if ($from > $endDate) {
+            return 0; // ช่วงที่ดูอยู่เกิดก่อนที่ใครจะเริ่มใช้ระบบ
+        }
+
+        return (new DateTimeImmutable($from))->diff(new DateTimeImmutable($endDate))->days + 1;
     }
 
     /**

@@ -301,4 +301,83 @@ final class OverviewDailyServiceAnalysisTest extends IntegrationTestCase
 
         $this->assertSame(0, $summary['missing_days'] ?? -1, 'กรอกครบทุกวันแต่ยังบอกว่ามีวันขาด');
     }
+
+    /**
+     * ⭐⭐⭐ วันก่อนที่ร้านแรกจะเริ่มบันทึก **ไม่ใช่วันที่ผู้ใช้ลืมกรอก**
+     *
+     * ⚠️⚠️ วัดจริงก่อนแก้: สมัครวันที่ 20 แล้วกรอกครบทุกวันตั้งแต่ 20–30
+     * → หน้ารวมร้านแท็บรายวันยังขึ้น "⚠️ 19 วันที่ผ่านมาแล้วแต่ยังไม่มีร้านไหนกรอกเลย"
+     * ทั้งที่ทำถูกทุกอย่าง — และเป็นคำเตือนแรกที่ผู้ใช้ใหม่เห็น
+     *
+     * ⚠️ กติกา "ร้านที่เริ่มทีหลังไม่ทำให้อดีตกลายเป็นกรอกไม่ครบ" มีอยู่แล้วในคลาสนี้
+     * (`countShopsTrackedOn()` ที่คอลัมน์ "ร้านที่กรอก" ใช้) ตัวนับวันที่ขาดแค่ไม่เคย
+     * เอาข้อมูลชุดเดียวกันมาใช้ — รูปแบบเดิม: กติกาถูกบังคับที่หนึ่งแต่ไปไม่ถึงอีกที่
+     */
+    public function testDaysBeforeAnybodyStartedAreNotCountedAsMissed(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        // เริ่มใช้ระบบวันที่ 20 มิ.ย. แล้วกรอกครบทั้งสองร้านทุกวันจนสิ้นเดือน
+        for ($day = 20; $day <= 30; $day++) {
+            $date = sprintf('2026-06-%02d', $day);
+            $this->createRecord($shopA, $date, 1000.0, 200.0);
+            $this->createRecord($shopB, $date, 1000.0, 200.0);
+        }
+
+        $summary = $this->makeService()->buildDailyOverview($userId, self::MONTH, '2026-08-07')['data']['summary'];
+
+        $this->assertSame(
+            0,
+            $summary['missing_days'] ?? -1,
+            'กรอกครบทุกวันตั้งแต่วันที่เริ่มใช้ระบบ แต่ยังถูกทวงถามถึงวันก่อนหน้านั้น'
+        );
+    }
+
+    /**
+     * ⚠️ ฝั่งตรงข้าม — วันที่ขาด **หลังจาก** เริ่มใช้ระบบแล้ว ต้องยังถูกนับตามเดิม
+     * ไม่งั้นการ "แก้" ที่ปิดคำเตือนทิ้งทั้งหมดก็ผ่านหน้าตาเฉย
+     */
+    public function testDaysMissedAfterStartingAreStillCounted(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        // เริ่มวันที่ 20 · กรอก 20–25 แล้วหยุด (26–30 = 5 วันที่ขาดจริง)
+        for ($day = 20; $day <= 25; $day++) {
+            $date = sprintf('2026-06-%02d', $day);
+            $this->createRecord($shopA, $date, 1000.0, 200.0);
+            $this->createRecord($shopB, $date, 1000.0, 200.0);
+        }
+
+        $summary = $this->makeService()->buildDailyOverview($userId, self::MONTH, '2026-08-07')['data']['summary'];
+
+        $this->assertSame(
+            5,
+            $summary['missing_days'] ?? -1,
+            'วันที่ขาดหลังเริ่มใช้ระบบแล้วต้องยังถูกนับ — ไม่ใช่ปิดคำเตือนทิ้งทั้งหมด'
+        );
+    }
+
+    /** เดือนที่เกิดก่อนวันที่ผู้ใช้เริ่มใช้ระบบ — ไม่มีวันไหนให้ทวงถาม */
+    public function testAMonthBeforeTheUserStartedHasNothingToChaseUp(): void
+    {
+        $userId = $this->createUser();
+        $shopA = $this->createShop($userId, 'ร้าน A');
+        $shopB = $this->createShop($userId, 'ร้าน B');
+
+        $this->createRecord($shopA, '2026-07-05', 1000.0, 200.0);
+        $this->createRecord($shopB, '2026-07-05', 1000.0, 200.0);
+
+        // ดูเดือน มิ.ย. ซึ่งเกิดก่อนที่ใครจะเริ่มบันทึก
+        $summary = $this->makeService()->buildDailyOverview($userId, self::MONTH, '2026-08-07')['data']['summary'];
+
+        $this->assertSame(
+            0,
+            $summary['missing_days'] ?? -1,
+            'เดือนที่เกิดก่อนผู้ใช้เริ่มใช้ระบบ ไม่ควรถูกนับว่าลืมกรอก'
+        );
+    }
 }
