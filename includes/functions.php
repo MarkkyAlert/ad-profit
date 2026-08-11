@@ -1110,7 +1110,13 @@ function normalize_money_string(string $raw): ?string
     }
 
     // สัญลักษณ์เงินและช่องว่างทุกชนิดไม่ใช่ตัวคั่นทศนิยมแน่นอน
-    $value = str_replace(['฿', ' ', "\xC2\xA0"], '', trim($value));
+    // ต้องใช้กติกาเดียวกับ `cleanAmountCell()` ฝั่ง JS: `\s` ครอบคลุม NNBSP
+    // (U+202F) ที่ Excel/แอปแชตชอบใช้คั่นหลักพัน ไม่ใช่แค่ space กับ NBSP
+    // แบบ byte เดิม จึงเคยรับได้เมื่อวางลงตาราง แต่ CSV/API กลับปฏิเสธ
+    $value = preg_replace('/[฿\s\x{00A0}]+/u', '', trim($value));
+    if (!is_string($value)) {
+        return null;
+    }
 
     if ($value === '') {
         return null;
