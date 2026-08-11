@@ -1046,6 +1046,51 @@ function month_is_unfinished(string $monthKey, DateTimeImmutable $today): bool
         && (int)$today->format('j') < (int)$today->format('t');
 }
 
+/**
+ * ⭐⭐ จำนวนวันของช่วง (นับหัวท้าย) — ใช้บอกความยาวของสองฝั่งที่เอามาเทียบกัน
+ */
+function comparison_span_days(string $startDate, string $endDate): int
+{
+    $start = DateTimeImmutable::createFromFormat('!Y-m-d', $startDate);
+    $end = DateTimeImmutable::createFromFormat('!Y-m-d', $endDate);
+    if (!$start || !$end || $end < $start) {
+        return 0;
+    }
+
+    return (int)$start->diff($end)->days + 1;
+}
+
+/**
+ * ⭐⭐⭐ ข้อความกำกับเมื่อสองฝั่งของการเทียบ "ยาวไม่เท่ากัน" — จุดเดียวของถ้อยคำนี้
+ *
+ * [เจ้าของระบบตัดสิน 2026-08-11] **ไม่แก้ตัวเลข แต่ต้องบอกให้ผู้ใช้รู้**
+ *
+ * ⚠️⚠️ ปีอธิกสุรทินมี 366 วัน ปีก่อนหน้ามี 365 — การเทียบ "วันที่เดียวกัน" จึงเอา
+ * ช่วงยาวไปเทียบกับช่วงสั้นกว่า · วัดจริงกับร้านที่ทำกำไร **วันละ ฿1,000 เท่ากันเป๊ะ 4 ปี**:
+ *   29 ก.พ. 71 → **+1.7%** · สิ้นปี 71 → **+0.3%** · 1 มี.ค. 72 → **−1.6%** · สิ้นปี 72 → **−0.3%**
+ *   และแถวเดือน ก.พ. 71 (29 วัน) → **+3.6%** · ก.พ. 72 (28 วัน) → **−3.4%**
+ * ทั้งที่ธุรกิจไม่เปลี่ยนเลยแม้แต่วันเดียว
+ *
+ * ⚠️ **ตัวเลขไม่ได้ผิด** — ปีนั้นได้เงินมากกว่าจริงเพราะมีวันขายเพิ่มมาหนึ่งวัน
+ * สิ่งที่ผิดคือคำว่า "ช่วงเดียวกัน" ที่ทำให้อ่านว่าเทียบกันได้ตรง ๆ
+ * · ทางเลือกที่ตัดข้อมูลจริงทิ้ง 1 วันให้เท่ากัน ถูกปฏิเสธ เพราะจะทำให้การ์ด
+ *   "กำไรรวมทั้งปี" กับป้ายเทียบข้าง ๆ ใช้ตัวเลขคนละชุด (ปัญหาที่โปรเจกต์นี้เจอซ้ำมาแล้ว)
+ *
+ * ⚠️ คืน null เมื่อเท่ากัน — ผู้ใช้ 3 ใน 4 ปีต้องไม่เห็นข้อความนี้เลย
+ */
+function comparison_length_note(?int $currentDays, ?int $previousDays): ?string
+{
+    if ($currentDays === null || $previousDays === null) {
+        return null;
+    }
+
+    if ($currentDays <= 0 || $previousDays <= 0 || $currentDays === $previousDays) {
+        return null;
+    }
+
+    return sprintf('ช่วงนี้ %d วัน เทียบกับ %d วัน', $currentDays, $previousDays);
+}
+
 function comparison_range_end(string $month, ?int $cutoffDay): string
 {
     $monthStart = DateTimeImmutable::createFromFormat('!Y-m-d', $month . '-01');

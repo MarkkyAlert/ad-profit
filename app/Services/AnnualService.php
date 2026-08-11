@@ -88,6 +88,11 @@ class AnnualService
         // (`comparison_range_end()` หดวันตัดให้พอดีเดือนสั้น เช่น 31 มี.ค. → ก.พ.)
         $previousTotalsByMonthKey = [];
         $previousYearReadFailed = false;
+        // ⚠️ ความยาวของสองฝั่งที่เอามาเทียบกัน — ปีอธิกสุรทินทำให้ไม่เท่ากัน
+        // หน้าเว็บ/ไฟล์ต้องกำกับให้ผู้ใช้รู้ (ดู `comparison_length_note()`)
+        $comparedDays = null;
+        $previousComparedDays = null;
+        $previousNotAfterDate = null;
         if ($lastMonth > 0) {
             $previousYear = $year - 1;
             $previousNotAfterDate = $notAfterDate === null
@@ -96,6 +101,16 @@ class AnnualService
                     sprintf('%04d-%02d', $previousYear, $lastMonth),
                     (int)$todayObject->format('j')
                 );
+
+            $comparedDays = comparison_span_days(
+                sprintf('%04d-01-01', $year),
+                $notAfterDate ?? comparison_range_end($endMonth, null)
+            );
+            $previousComparedDays = comparison_span_days(
+                sprintf('%04d-01-01', $previousYear),
+                $previousNotAfterDate
+                    ?? comparison_range_end(sprintf('%04d-%02d', $previousYear, $lastMonth), null)
+            );
 
             try {
                 $previousTotals = $this->recordRepository->getMonthlyTotalsByMonthRange(
@@ -211,6 +226,11 @@ class AnnualService
                    ไม่มีข้อมูล และตอนเท่าทุนพอดี แยกสองกรณีนี้จากตัวเลขอย่างเดียวไม่ได้
                    · ไฟล์ Excel ใช้คีย์นี้ตัดสินว่าจะเขียน 0 หรือเว้นว่าง */
                 'prev_year_days_count' => (int)($previousMonthTotals['days_count'] ?? 0),
+                /* ⚠️ ความยาวของสองฝั่งระดับเดือน — ต่างกันเฉพาะ ก.พ. ของปีอธิกสุรทิน
+                   (29 วัน เทียบ 28 วัน = +3.6% ให้ร้านที่ทำได้เท่ากันทุกวัน)
+                   และเดือนปัจจุบันที่วันตัดสองฝั่งไม่ตรงกัน */
+                'compared_days' => $this->windowDays($monthKey, $notAfterDate),
+                'prev_compared_days' => $this->windowDays($previousMonthKey, $previousNotAfterDate),
                 /* ⚠️⚠️ เดือนที่ปีนี้ยังไม่มี record = เทียบปีก่อนไม่ได้ ไม่ใช่ "ตก 100%"
                    · หน้าจอและไฟล์ Excel เว้นเป็นขีดอยู่แล้ว แต่ **payload ดิบที่ส่งออกทาง
                      `api/annual-data.php` ยังพก −100% ติดไปด้วย** — ใครอ่าน API ตรง ๆ
@@ -344,6 +364,11 @@ class AnnualService
                          หน้าเว็บจึงพิมพ์ "ปีก่อนเท่าทุนพอดี" ทั้งที่ปีก่อนมีกำไรจริง
                        · หลักเดียวกับ `extremes_not_comparable_text()` — ห้ามเดาสาเหตุแทนข้อมูล */
                     'current_year_has_data' => $monthsWithData > 0,
+                    /* ⚠️⚠️ ความยาวของสองฝั่ง — ปีอธิกสุรทินทำให้เทียบ 366 วันกับ 365 วัน
+                       ตัวเลข % ไม่ได้ผิด (ได้เงินมากกว่าจริง) แต่ป้ายเขียนว่า "ช่วงเดียวกัน"
+                       หน้าเว็บ/ไฟล์จึงต้องกำกับด้วย `comparison_length_note()` */
+                    'compared_days' => $comparedDays,
+                    'prev_compared_days' => $previousComparedDays,
                     'projection' => $this->calculateYearEndProjection(
                         $months,
                         $cumulativeProfit,
@@ -533,6 +558,22 @@ class AnnualService
      *
      * @return array{0:float,1:int}
      */
+    /**
+     * จำนวนวันของเดือนหนึ่งที่ถูกนับจริง — ตัดที่ `$notAfterDate` ถ้าวันตัดอยู่ในเดือนนั้น
+     *
+     * ใช้บอกความยาวของสองฝั่งที่เอามาเทียบกัน (`comparison_length_note()`)
+     * ⚠️ เดือนที่อยู่ก่อนวันตัด = ทั้งเดือน · เดือนที่อยู่หลังวันตัด = 0 วัน
+     */
+    private function windowDays(string $monthKey, ?string $notAfterDate): int
+    {
+        $monthEnd = comparison_range_end($monthKey, null);
+        if ($notAfterDate !== null && $notAfterDate < $monthEnd) {
+            $monthEnd = $notAfterDate;
+        }
+
+        return comparison_span_days($monthKey . '-01', $monthEnd);
+    }
+
     private function currentMonthRemainder(int $year, int $lastMonth, ?string $today): array
     {
         if ($lastMonth < 1 || $lastMonth > 12) {

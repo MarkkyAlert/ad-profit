@@ -98,6 +98,9 @@ class OverviewAnnualService
         $previousYearProfit = null;
         $previousTotals = [];
         $previousYearReadFailed = false;
+        // ⚠️ ความยาวของสองฝั่ง — ปีอธิกสุรทินทำให้ไม่เท่ากัน (ดู `comparison_length_note()`)
+        $comparedDays = null;
+        $previousComparedDays = null;
         if ($lastMonth > 0) {
             $previousYear = $year - 1;
 
@@ -109,6 +112,16 @@ class OverviewAnnualService
                     sprintf('%04d-%02d', $previousYear, $lastMonth),
                     (int)$todayObject->format('j')
                 );
+
+            $comparedDays = comparison_span_days(
+                sprintf('%04d-01-01', $year),
+                $notAfterDate ?? comparison_range_end($endMonth, null)
+            );
+            $previousComparedDays = comparison_span_days(
+                sprintf('%04d-01-01', $previousYear),
+                $previousNotAfterDate
+                    ?? comparison_range_end(sprintf('%04d-%02d', $previousYear, $lastMonth), null)
+            );
 
             try {
                 $previousTotals = $this->recordRepository->getMonthlyTotalsByShopIdsAndMonthRange(
@@ -325,6 +338,9 @@ class OverviewAnnualService
                         : null,
                     // ⚠️ เหตุผลของ null — ดูคำอธิบายเต็มใน `AnnualService`
                     'current_year_has_data' => $monthsWithRecord !== [],
+                    // ⚠️ ปีอธิกสุรทินทำให้สองฝั่งยาวไม่เท่ากัน — หน้าเว็บ/ไฟล์ต้องกำกับ
+                    'compared_days' => $comparedDays,
+                    'prev_compared_days' => $previousComparedDays,
                 ],
                 'chart' => [
                     'months' => array_values(array_map(static fn(array $row): string => (string)($row['month_key'] ?? ''), $months)),

@@ -436,6 +436,21 @@ require __DIR__ . '/includes/header.php';
         <?php endif; ?>
     </div>
 
+    <?php
+    /* ⚠️⚠️ [เจ้าของระบบตัดสิน 2026-08-11] ปีอธิกสุรทินทำให้สองฝั่งยาวไม่เท่ากัน
+       ตัวเลข % ไม่ได้ผิด (ปีนั้นได้เงินมากกว่าจริงเพราะมีวันขายเพิ่มมาหนึ่งวัน)
+       แต่คำว่า "ช่วงเดียวกัน" ทำให้อ่านว่าเทียบกันได้ตรง ๆ → กำกับความยาวไว้
+       · วัดจริง: ร้านที่ทำกำไรวันละเท่ากันเป๊ะ 4 ปี ได้ +1.7% ในวันที่ 29 ก.พ.
+       · 3 ใน 4 ปีจะไม่เห็นบรรทัดนี้เลย (helper คืน null เมื่อสองฝั่งเท่ากัน) */
+    $yearLengthNote = comparison_length_note(
+        isset($summary['compared_days']) ? (int)$summary['compared_days'] : null,
+        isset($summary['prev_compared_days']) ? (int)$summary['prev_compared_days'] : null
+    );
+    ?>
+    <?php if ($yearLengthNote !== null && $yoyPercent !== null): ?>
+        <p class="mt-1 text-xs text-slate-400"><?= e($yearLengthNote) ?></p>
+    <?php endif; ?>
+
     <?php /* ⚠️ ร้านที่ยังไม่เคยกรอกเลย ไม่มี "กำไรสะสม" ให้พูดถึง — เดิมพิมพ์ ฿0
              ทั้งที่ยังไม่ได้เริ่ม (กติกาเดียวกับการ์ดตัวเลขด้านบน) */ ?>
     <?php if (count($months) > 0 && !$showEmptyShopInvite): ?>
@@ -591,7 +606,16 @@ require __DIR__ . '/includes/header.php';
                             <?= e($rowProfitPerDay === null ? $blank : formatMoney($rowProfitPerDay)) ?>
                         </td>
                         <?php // ไม่มีข้อมูลของเดือนนี้ = เทียบกับปีก่อนไม่ได้ ไม่ใช่ "ตก 100%" ?>
-                        <td class="px-3 py-2 font-medium <?= e($rowHasData ? $yoyToneClass($rowYoyPercent) : 'text-slate-400') ?>"><?= e($rowHasData ? $formatYoyPercent($rowYoyPercent) : $blank) ?></td>
+                        <?php
+                        /* ⚠️ ระดับเดือนก็ยาวไม่เท่ากันได้ — ก.พ. ของปีอธิกสุรทิน (29 วัน)
+                           เทียบกับ ก.พ. ปีก่อน (28 วัน) = +3.6% ให้ร้านที่ทำได้เท่ากันทุกวัน
+                           ช่องแคบเกินกว่าจะเขียนข้อความ จึงกำกับไว้ที่ tooltip */
+                        $rowLengthNote = comparison_length_note(
+                            isset($row['compared_days']) ? (int)$row['compared_days'] : null,
+                            isset($row['prev_compared_days']) ? (int)$row['prev_compared_days'] : null
+                        );
+                        ?>
+                        <td class="px-3 py-2 font-medium <?= e($rowHasData ? $yoyToneClass($rowYoyPercent) : 'text-slate-400') ?>"<?= $rowHasData && $rowLengthNote !== null && $rowYoyPercent !== null ? ' title="' . e($rowLengthNote) . '"' : '' ?>><?= e($rowHasData ? $formatYoyPercent($rowYoyPercent) : $blank) ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

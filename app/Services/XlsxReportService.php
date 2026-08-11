@@ -514,13 +514,16 @@ class XlsxReportService
             $change = (float)($summary['yoy_profit_change'] ?? 0);
             $sheet->setCellValueExplicit(
                 'A8',
-                sprintf(
-                    'กำไร %s%s%% (%s%s) · ปีก่อน %s',
-                    self::changeArrow($percentValue),
-                    number_format(abs($percentValue), 1),
-                    $change >= 0 ? '+' : '-',
-                    formatMoney(abs($change)),
-                    formatMoney((float)($summary['prev_year_profit'] ?? 0))
+                $this->withComparisonLengthNote(
+                    sprintf(
+                        'กำไร %s%s%% (%s%s) · ปีก่อน %s',
+                        self::changeArrow($percentValue),
+                        number_format(abs($percentValue), 1),
+                        $change >= 0 ? '+' : '-',
+                        formatMoney(abs($change)),
+                        formatMoney((float)($summary['prev_year_profit'] ?? 0))
+                    ),
+                    $summary
                 ),
                 DataType::TYPE_STRING
             );
@@ -1246,13 +1249,16 @@ class XlsxReportService
         $change = (float)($summary['yoy_profit_change'] ?? 0);
         $sheet->setCellValueExplicit(
             'B' . $rowNumber,
-            sprintf(
-                '%s%s%% (%s%s) · ปีก่อน %s',
-                self::changeArrow($percentValue),
-                number_format(abs($percentValue), 1),
-                $change >= 0 ? '+' : '-',
-                formatMoney(abs($change)),
-                formatMoney((float)($summary['prev_year_profit'] ?? 0))
+            $this->withComparisonLengthNote(
+                sprintf(
+                    '%s%s%% (%s%s) · ปีก่อน %s',
+                    self::changeArrow($percentValue),
+                    number_format(abs($percentValue), 1),
+                    $change >= 0 ? '+' : '-',
+                    formatMoney(abs($change)),
+                    formatMoney((float)($summary['prev_year_profit'] ?? 0))
+                ),
+                $summary
             ),
             DataType::TYPE_STRING
         );
@@ -1354,6 +1360,25 @@ class XlsxReportService
      *
      * @param array<string,mixed> $summary
      */
+    /**
+     * ⚠️⚠️ ต่อท้ายข้อความเทียบปีก่อนด้วยความยาวของสองฝั่ง เมื่อยาวไม่เท่ากัน
+     *
+     * [เจ้าของระบบตัดสิน 2026-08-11] ปีอธิกสุรทินมี 366 วัน ปีก่อนหน้ามี 365
+     * ตัวเลข % ไม่ได้ผิด แต่คำว่า "ช่วงเดียวกัน" ทำให้อ่านว่าเทียบกันได้ตรง ๆ
+     * · ไฟล์ต้องพูดเหมือนหน้าจอ — กติกาอยู่ที่ `comparison_length_note()` ที่เดียว
+     *
+     * @param array<string,mixed> $summary
+     */
+    private function withComparisonLengthNote(string $text, array $summary): string
+    {
+        $note = comparison_length_note(
+            isset($summary['compared_days']) ? (int)$summary['compared_days'] : null,
+            isset($summary['prev_compared_days']) ? (int)$summary['prev_compared_days'] : null
+        );
+
+        return $note === null ? $text : $text . ' · ' . $note;
+    }
+
     private function describeMissingYoy(array $summary): string
     {
         if (($summary['prev_year_unavailable'] ?? false) === true) {

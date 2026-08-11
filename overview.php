@@ -111,6 +111,8 @@ $yearlyPrevHasData = false;
 $yearlyCurrentHasData = true;
 $yearlyPrevUnavailable = false;
 $yearlyYoyPercent = null;
+// ⚠️ ประกาศไว้ก่อนเข้ากิ่ง — ค่าจริงคำนวณหลังโหลดสรุปรายปีแล้ว (บทเรียนด้านบน)
+$yearlyLengthNote = null;
 $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['text'];
 $yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['class'];
 
@@ -268,6 +270,13 @@ if ($view === 'day') {
 
     $yearlyYoyText = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['text'];
     $yearlyYoyTone = static fn(?float $percent): string => format_change_badge($percent, no_value_text())['class'];
+
+    /* ⚠️⚠️ [เจ้าของระบบตัดสิน 2026-08-11] ปีอธิกสุรทินทำให้สองฝั่งยาวไม่เท่ากัน
+       ไม่แก้ตัวเลข แต่กำกับความยาวไว้ — เหตุผลเต็มอยู่ที่ `comparison_length_note()` */
+    $yearlyLengthNote = comparison_length_note(
+        isset($yearlySummary['compared_days']) ? (int)$yearlySummary['compared_days'] : null,
+        isset($yearlySummary['prev_compared_days']) ? (int)$yearlySummary['prev_compared_days'] : null
+    );
 
     $chartRaw = (array)($yearlyData['chart'] ?? []);
     $chartLabels = array_map(
@@ -919,6 +928,9 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                             </span>
                         <?php endif; ?>
                     </div>
+                    <?php if ($yearlyLengthNote !== null && $yearlyYoyPercent !== null): ?>
+                        <p class="mt-1 text-xs text-slate-400"><?= e($yearlyLengthNote) ?></p>
+                    <?php endif; ?>
                 </section>
             <?php endif; ?>
 
