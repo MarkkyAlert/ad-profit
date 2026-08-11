@@ -490,6 +490,17 @@ require __DIR__ . '/includes/header.php';
             $dayCompleteDays = (int)($dailySummary['complete_days_count'] ?? 0);
             $dayTotalShops = (int)($dailySummary['total_shops'] ?? 0);
             $dayIncompleteDays = (int)($dailySummary['incomplete_days'] ?? 0);
+
+            /* ⚠️⚠️⚠️ เดือนที่ยังไม่มีร้านไหนกรอกเลย — การ์ดและแถวรวมต้องเงียบ ไม่ใช่พิมพ์ ฿0
+               · เดิมแท็บนี้ขึ้นแถบฟ้า "… ยังไม่มีข้อมูลรายวันของทุกร้าน" แล้วใต้แถบนั้นทันที
+                 คือการ์ด "ยอดขายรวม ฿0 · ค่าแอดรวม ฿0 · กำไรรวม ฿0 (สีเขียว)"
+                 — สองบรรทัดบนจอเดียวกันขัดกันเอง
+               · แท็บรายปีแก้เรื่องนี้ไปแล้ว (`$yearMoney` ฯลฯ) แท็บรายวันตกสำรวจ
+               ⚠️ เกณฑ์คือ "ไม่มีใครกรอกในเดือนที่เลือก" ซึ่งเป็นคำถามของหน้านี้พอดี —
+                  ต่างจากหน้ารายปีของร้านเดียวที่ตอบ ฿0 ให้ปีที่เลือกโดยตั้งใจ */
+            $dayMoney = static fn(float $value): string => $hasDailyData ? formatMoney($value) : no_value_text();
+            $dayRatio = static fn(?float $value): string => $hasDailyData ? formatRoas($value) : no_value_text();
+            $dayPercent = static fn(?float $value): string => $hasDailyData ? formatPercent($value) : no_value_text();
             ?>
 
             <?php if (!$hasDailyData && $activeError === null): ?>
@@ -504,23 +515,23 @@ require __DIR__ . '/includes/header.php';
             <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <article class="stat-card s-revenue">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวม</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e(formatMoney($dayTotalRevenue)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e($dayMoney($dayTotalRevenue)) ?></p>
                 </article>
                 <article class="stat-card s-adcost">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ค่าแอดรวม</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold text-cyan-400"><?= e(formatMoney($dayTotalAdCost)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-cyan-400"><?= e($dayMoney($dayTotalAdCost)) ?></p>
                 </article>
                 <article class="stat-card s-profit">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">กำไรรวม</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold <?= $dayProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($dayProfit)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold <?= !$hasDailyData ? 'text-slate-400' : ($dayProfit >= 0 ? 'text-green-400' : 'text-red-400') ?>"><?= e($dayMoney($dayProfit)) ?></p>
                 </article>
                 <article class="stat-card s-roas">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ROAS เฉลี่ย</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold text-violet-400"><?= e(formatRoas($dayRoas)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-violet-400"><?= e($dayRatio($dayRoas)) ?></p>
                 </article>
                 <article class="stat-card s-neutral">
                     <p class="text-xs font-medium uppercase tracking-wider text-slate-400">อัตรากำไร</p>
-                    <p class="mt-2 text-lg sm:text-xl font-bold text-slate-100"><?= e(formatPercent($dayProfitMargin)) ?></p>
+                    <p class="mt-2 text-lg sm:text-xl font-bold text-slate-100"><?= e($dayPercent($dayProfitMargin)) ?></p>
                 </article>
             </section>
 
@@ -730,11 +741,11 @@ require __DIR__ . '/includes/header.php';
                         <tfoot>
                             <tr class="border-t border-white/10 bg-white/[0.03] font-semibold whitespace-nowrap">
                                 <td class="px-3 py-3 text-slate-200" colspan="2">รวมทุกร้าน</td>
-                                <td class="px-3 py-3 text-orange-400"><?= e(formatMoney($dayTotalRevenue)) ?></td>
-                                <td class="px-3 py-3 text-cyan-400"><?= e(formatMoney($dayTotalAdCost)) ?></td>
-                                <td class="px-3 py-3 <?= $dayProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($dayProfit)) ?></td>
-                                <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($dayRoas)) ?></td>
-                                <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($dayProfitMargin)) ?></td>
+                                <td class="px-3 py-3 text-orange-400"><?= e($dayMoney($dayTotalRevenue)) ?></td>
+                                <td class="px-3 py-3 text-cyan-400"><?= e($dayMoney($dayTotalAdCost)) ?></td>
+                                <td class="px-3 py-3 <?= !$hasDailyData ? 'text-slate-400' : ($dayProfit >= 0 ? 'text-green-400' : 'text-red-400') ?>"><?= e($dayMoney($dayProfit)) ?></td>
+                                <td class="px-3 py-3 text-violet-400"><?= e($dayRatio($dayRoas)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e($dayPercent($dayProfitMargin)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e('สูงสุด ' . $dailyDaysTotal . ' วัน') ?></td>
                             </tr>
                         </tfoot>

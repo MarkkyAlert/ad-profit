@@ -655,4 +655,94 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
             $this->assertSame('0 วัน', $row['วันที่กรอก'], "แท็บ {$tabName}: ช่อง \"วันที่กรอก\" ต้องเป็น 0 วัน");
         }
     }
+
+    /**
+     * อ่านการ์ดตัวเลขบนหน้ารวมร้าน — คืน [หัวการ์ด => ค่าที่พิมพ์]
+     *
+     * @return array<string,string>
+     */
+    private function statCardsOnOverview(string $session, string $url): array
+    {
+        $response = $this->get($url, $session);
+        $this->assertSame(200, $response['status'], 'เปิดหน้ารวมร้านไม่สำเร็จ: ' . $url);
+
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        $doc->loadHTML('<?xml encoding="utf-8"?>' . $response['body']);
+        $xpath = new \DOMXPath($doc);
+
+        $cards = [];
+        foreach ($xpath->query('//article[contains(@class, "stat-card")]') as $card) {
+            if (!$card instanceof \DOMElement) {
+                continue;
+            }
+
+            $texts = [];
+            foreach ($card->getElementsByTagName('p') as $paragraph) {
+                $texts[] = trim((string)preg_replace('/\s+/u', ' ', $paragraph->textContent));
+            }
+
+            if (count($texts) >= 2) {
+                $cards[$texts[0]] = $texts[1];
+            }
+        }
+
+        $this->assertNotSame([], $cards, 'อ่านการ์ดตัวเลขจากหน้ารวมร้านไม่ได้เลย: ' . $url);
+
+        return $cards;
+    }
+
+    /**
+     * ⭐⭐⭐ แท็บ "รายวัน": เดือนที่ยังไม่มีใครกรอกเลย — การ์ดกับแถวรวมต้องเงียบ ไม่ใช่ ฿0
+     *
+     * ⚠️⚠️ เดิมหน้าเดียวกันขึ้นแถบฟ้าว่า "… ยังไม่มีข้อมูลรายวันของทุกร้าน" แล้ว
+     * **ใต้แถบนั้นทันที** คือ "ยอดขายรวม ฿0 · ค่าแอดรวม ฿0 · กำไรรวม ฿0 (สีเขียว)"
+     * — ข้อความกับตัวเลขบนจอเดียวกันขัดกันเอง
+     * · แท็บรายปีแก้เรื่องนี้ไปแล้วตั้งแต่รอบก่อน แท็บรายวันตกสำรวจ (รูปแบบเดิม:
+     *   แก้ถึงที่หนึ่งแต่ไปไม่ถึงอีกที่)
+     *
+     * ⚠️ ต้องยืนยันฝั่งตรงข้ามด้วย — เดือนที่ **มี** ข้อมูลต้องยังเห็นตัวเลขตามปกติ
+     * ไม่งั้นการ "แก้" ที่ทำให้ทุกอย่างเป็นขีดตลอดกาลก็ผ่านหน้าตาเฉย
+     */
+    public function testTheDailyTabStaysSilentForAMonthNobodyFilled(): void
+    {
+        $userId = $this->createUser('dailysilent@example.com', 'DailySilentPass123');
+        $shopA = $this->createShop($userId, 'ร้านหนึ่ง');
+        $this->createShop($userId, 'ร้านสอง');
+
+        // มีข้อมูลเดือน มิ.ย. เท่านั้น — เดือน ก.ค. ไม่มีใครกรอกเลยสักร้าน
+        $this->insert($shopA, '2026-06-10', 9000.75, 4000.25);
+
+        $session = $this->startSession($userId, $shopA);
+
+        $empty = $this->statCardsOnOverview($session, '/overview.php?view=day&month=2026-07');
+        foreach (['ยอดขายรวม', 'ค่าแอดรวม', 'กำไรรวม', 'ROAS เฉลี่ย', 'อัตรากำไร'] as $card) {
+            $this->assertArrayHasKey($card, $empty, "ไม่พบการ์ด \"{$card}\" บนแท็บรายวัน");
+            $this->assertSame(
+                no_value_text(),
+                $empty[$card],
+                "เดือนที่ยังไม่มีใครกรอก: การ์ด \"{$card}\" ต้องเงียบ ไม่ใช่ \"{$empty[$card]}\""
+            );
+        }
+
+        // แถวรวมท้ายตารางต้องพูดภาษาเดียวกับการ์ด
+        $text = (string)preg_replace('/\s+/u', ' ', strip_tags((string)preg_replace(
+            '#<script.*?</script>#s',
+            ' ',
+            $this->get('/overview.php?view=day&month=2026-07', $session)['body']
+        )));
+        $this->assertMatchesRegularExpression(
+            '/รวมทุกร้าน\s*(' . preg_quote(no_value_text(), '/') . '\s*){5}/u',
+            $text,
+            'แถวรวม "รวมทุกร้าน" ยังพิมพ์ตัวเลขทั้งที่ทั้งเดือนไม่มีใครกรอก'
+        );
+
+        // ── ฝั่งตรงข้าม: เดือนที่มีข้อมูลจริงต้องยังเห็นตัวเลข
+        $filled = $this->statCardsOnOverview($session, '/overview.php?view=day&month=2026-06');
+        $this->assertStringContainsString(
+            '฿9,000.75',
+            $filled['ยอดขายรวม'] ?? '',
+            'เดือนที่มีข้อมูลจริงกลับไม่แสดงตัวเลข — การแก้ทำให้ทุกเดือนเงียบไปหมด'
+        );
+    }
 }
