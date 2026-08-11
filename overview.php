@@ -68,6 +68,8 @@ $dailyRows = [];
 $dailySummary = [];
 $dailyShopRows = [];
 $hasDailyData = false;
+// ⚠️ ประกาศไว้ก่อนเข้ากิ่ง (เหมือน $yearlyDaysTotal) — ตัวเลขจริงคำนวณหลังโหลดข้อมูลแล้ว
+$dailyDaysTotal = 0;
 $dailyChartPayload = ['labels' => [], 'revenue' => [], 'ad_cost' => [], 'profit' => []];
 
 $thaiMonths = [
@@ -160,6 +162,13 @@ if ($view === 'day') {
     $dailyTotalAdCost = (float)($dailySummary['total_ad_cost'] ?? 0);
     // ⚠️ นับจากจำนวนวันที่กรอก ไม่ใช่ยอดเงิน (ดูคอมเมนต์ใน annual.php)
     $hasDailyData = (int)($dailySummary['days_count'] ?? 0) > 0;
+
+    /* ⚠️ "วันที่กรอก" ของแถวรวมใช้ค่า **มากสุด** ไม่ใช่ผลบวกข้ามร้าน
+       (3 ร้าน × 31 วัน ≠ 93 วันในเดือนที่มี 31 วัน) — กติกาเดียวกับแท็บรายปี */
+    $dailyDaysTotal = 0;
+    foreach ($dailyShopRows as $shopRow) {
+        $dailyDaysTotal = max($dailyDaysTotal, (int)($shopRow['days_count'] ?? 0));
+    }
 
     $chartRaw = (array)($dailyData['chart'] ?? []);
     $chartDates = array_values((array)($chartRaw['dates'] ?? []));
@@ -683,6 +692,7 @@ require __DIR__ . '/includes/header.php';
                                 <th scope="col" class="px-3 py-2">กำไร</th>
                                 <th scope="col" class="px-3 py-2">ROAS</th>
                                 <th scope="col" class="px-3 py-2">อัตรากำไร</th>
+                                <th scope="col" class="px-3 py-2">วันที่กรอก</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -693,15 +703,27 @@ require __DIR__ . '/includes/header.php';
                                 $rowProfit = money_total((float)($row['profit'] ?? ($rowRevenue - $rowAdCost)));
                                 $rowRoas = isset($row['roas']) && $row['roas'] !== null ? (float)$row['roas'] : null;
                                 $rowProfitMargin = isset($row['profit_margin']) && $row['profit_margin'] !== null ? (float)$row['profit_margin'] : null;
+                                $rowDaysCount = (int)($row['days_count'] ?? 0);
+                                /* ⚠️⚠️ กติกาเดียวกับตารางเทียบร้านของแท็บรายเดือน/รายปี — ร้านที่เดือนนี้
+                                   ยังไม่ได้กรอกเลย ต้องเป็นขีดทั้งแถว ไม่ใช่ ฿0
+                                   · เดิมแท็บนี้ตกสำรวจ: ROAS/อัตรากำไร ตอบ `–` ถูกแล้ว แต่ยอดขาย/ค่าแอด/กำไร
+                                     พิมพ์ ฿0 และกำไรยังเป็น **สีเขียว** ด้วย → แถวเดียวใช้กติกาสองแบบ
+                                   · กดสลับแท็บเฉย ๆ ร้านเดียวกันเปลี่ยนจาก "ยังไม่รู้" เป็น "เท่าทุน"
+                                   · คอลัมน์ "วันที่กรอก" เพิ่งเพิ่มเข้ามาให้ตรงกับอีกสองแท็บ — มันคือ
+                                     *หลักฐาน* ว่าทำไมทั้งแถวถึงเป็นขีด ถ้าไม่มี ผู้ใช้จะไม่มีทางรู้ */
+                                $rowHasData = $rowDaysCount > 0;
                                 ?>
                                 <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
                                     <td class="px-3 py-2 text-slate-400 font-semibold"><?= e((string)($index + 1)) ?></td>
                                     <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
-                                    <td class="px-3 py-2 text-orange-400 font-medium"><?= e(formatMoney($rowRevenue)) ?></td>
-                                    <td class="px-3 py-2 text-cyan-400 font-medium"><?= e(formatMoney($rowAdCost)) ?></td>
-                                    <td class="px-3 py-2 <?= $rowProfit >= 0 ? 'text-green-400' : 'text-red-400' ?> font-bold"><?= e(formatMoney($rowProfit)) ?></td>
+                                    <td class="px-3 py-2 text-orange-400 font-medium"><?= e($rowHasData ? formatMoney($rowRevenue) : no_value_text()) ?></td>
+                                    <td class="px-3 py-2 text-cyan-400 font-medium"><?= e($rowHasData ? formatMoney($rowAdCost) : no_value_text()) ?></td>
+                                    <td class="px-3 py-2 <?= !$rowHasData ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?> font-bold"><?= e($rowHasData ? formatMoney($rowProfit) : no_value_text()) ?></td>
                                     <td class="px-3 py-2 text-violet-400 font-medium"><?= e(formatRoas($rowRoas)) ?></td>
                                     <td class="px-3 py-2 text-slate-400 font-medium"><?= e(formatPercent($rowProfitMargin)) ?></td>
+                                    <?php /* ⚠️ เขียน "0 วัน" ไม่ใช่ขีด — เหมือนแท็บรายเดือน/รายปี
+                                             มันคือหลักฐาน ไม่ใช่ผลงาน (ดูคำอธิบายเต็มที่ตารางของแท็บรายปี) */ ?>
+                                    <td class="px-3 py-2 text-slate-400 font-medium"><?= e($rowDaysCount . ' วัน') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -713,6 +735,7 @@ require __DIR__ . '/includes/header.php';
                                 <td class="px-3 py-3 <?= $dayProfit >= 0 ? 'text-green-400' : 'text-red-400' ?>"><?= e(formatMoney($dayProfit)) ?></td>
                                 <td class="px-3 py-3 text-violet-400"><?= e(formatRoas($dayRoas)) ?></td>
                                 <td class="px-3 py-3 text-slate-300"><?= e(formatPercent($dayProfitMargin)) ?></td>
+                                <td class="px-3 py-3 text-slate-300"><?= e('สูงสุด ' . $dailyDaysTotal . ' วัน') ?></td>
                             </tr>
                         </tfoot>
                     </table>

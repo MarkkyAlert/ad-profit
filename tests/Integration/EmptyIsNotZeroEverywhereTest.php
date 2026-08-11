@@ -545,4 +545,114 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
             'หน้ารวมร้านไม่ได้บอกสาเหตุจริงว่าปีนี้ยังไม่มีข้อมูล'
         );
     }
+
+    /**
+     * อ่านแถวของร้านหนึ่งจากตาราง "เปรียบเทียบระหว่างร้าน" ของหน้ารวมร้าน
+     *
+     * ⚠️ หน้านี้มีหลายตาราง — เลือกตัวที่หัวตารางมีทั้ง "อันดับ" และ "ร้าน"
+     * (ตารางรายวันมีหัว "วันที่" ไม่ใช่ "อันดับ")
+     *
+     * @return array<string,string> หัวคอลัมน์ => ข้อความในช่อง
+     */
+    private function shopRowOnOverview(string $session, string $url, string $shopName): array
+    {
+        $response = $this->get($url, $session);
+        $this->assertSame(200, $response['status'], 'เปิดหน้ารวมร้านไม่สำเร็จ: ' . $url);
+
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        $doc->loadHTML('<?xml encoding="utf-8"?>' . $response['body']);
+        $xpath = new \DOMXPath($doc);
+
+        foreach ($xpath->query('//table') as $table) {
+            if (!$table instanceof \DOMElement) {
+                continue;
+            }
+
+            $headings = [];
+            foreach ($table->getElementsByTagName('th') as $th) {
+                $headings[] = trim((string)preg_replace('/\s+/u', ' ', $th->textContent));
+            }
+
+            if (!in_array('อันดับ', $headings, true) || !in_array('ร้าน', $headings, true)) {
+                continue;
+            }
+
+            foreach ($table->getElementsByTagName('tr') as $tr) {
+                $cells = [];
+                foreach ($tr->childNodes as $node) {
+                    if ($node->nodeName === 'td') {
+                        $cells[] = trim((string)preg_replace('/\s+/u', ' ', $node->textContent));
+                    }
+                }
+
+                if (count($cells) < 3 || ($cells[1] ?? '') !== $shopName) {
+                    continue;
+                }
+
+                $row = [];
+                foreach ($headings as $index => $heading) {
+                    if (isset($cells[$index])) {
+                        $row[$heading] = $cells[$index];
+                    }
+                }
+
+                return $row;
+            }
+        }
+
+        $this->fail('ไม่พบแถวของร้าน "' . $shopName . '" ในตารางเทียบร้านของ ' . $url);
+    }
+
+    /**
+     * ⭐⭐⭐ ทั้งสามแท็บของหน้ารวมร้านต้องพูดตรงกัน — ร้านที่ยังไม่ได้กรอกในช่วงนั้น
+     * ต้องเป็น **ขีดทั้งแถว** ไม่ใช่ ฿0
+     *
+     * ⚠️⚠️ แท็บ **รายวัน** เคยตกสำรวจอยู่แท็บเดียว: ROAS กับอัตรากำไรตอบ `–` ถูกแล้ว
+     * แต่ยอดขาย/ค่าแอด/กำไร พิมพ์ ฿0 และกำไรยังเป็น **สีเขียว** ด้วย
+     * · กดสลับแท็บเฉย ๆ ร้านเดียวกันเปลี่ยนจาก "ยังไม่รู้" เป็น "เท่าทุน"
+     * · ตารางนี้คือเครื่องมือตัดสินว่าร้านไหนคุ้ม — ร้านที่ยังไม่กรอกจะดูดีกว่าร้านที่ขาดทุนจริง
+     *
+     * ⚠️ ต้องไล่ **ทั้งสามแท็บในเทสต์เดียว** ไม่ใช่เขียนเฉพาะแท็บที่เพิ่งแก้ — รูปแบบเดิม
+     * ของโปรเจกต์นี้คือตาข่ายครอบแค่ที่ที่เพิ่งแก้ แล้วอีกที่พังเงียบ
+     */
+    public function testEveryOverviewTabBlanksAShopThatRecordedNothing(): void
+    {
+        $userId = $this->createUser('tabsagree@example.com', 'TabsAgreePass123');
+        $active = $this->createShop($userId, 'ร้านที่กรอกแล้ว');
+        $idle = 'ร้านที่ยังไม่ได้กรอก';
+        $this->createShop($userId, $idle);
+
+        // ร้านแรกกรอกจริงในเดือน/ปีที่กำลังดู · อีกร้านไม่เคยกรอกอะไรเลย
+        $this->insert($active, '2026-08-01', 9000.75, 4000.25);
+
+        $session = $this->startSession($userId, $active);
+
+        $tabs = [
+            'รายวัน' => '/overview.php?view=day&month=2026-08',
+            'รายเดือน' => '/overview.php?view=month&month=2026-08',
+            'รายปี' => '/overview.php?view=year&year=2569',
+        ];
+
+        foreach ($tabs as $tabName => $url) {
+            $row = $this->shopRowOnOverview($session, $url, $idle);
+
+            foreach (['ยอดขาย', 'ค่าแอด', 'กำไร'] as $column) {
+                $this->assertArrayHasKey($column, $row, "แท็บ {$tabName} ไม่มีคอลัมน์ \"{$column}\"");
+                $this->assertSame(
+                    no_value_text(),
+                    $row[$column],
+                    "แท็บ {$tabName}: ช่อง \"{$column}\" ของร้านที่ยังไม่ได้กรอก ต้องเป็นขีด ไม่ใช่ \"{$row[$column]}\""
+                );
+            }
+
+            // ⚠️ คอลัมน์นี้คือ *หลักฐาน* ว่าทำไมทั้งแถวถึงเป็นขีด — ถ้าไม่มี ผู้ใช้ไม่มีทางรู้
+            $this->assertArrayHasKey(
+                'วันที่กรอก',
+                $row,
+                "แท็บ {$tabName} ไม่มีคอลัมน์ \"วันที่กรอก\" ที่อธิบายว่าทำไมทั้งแถวเป็นขีด"
+            );
+            $this->assertSame('0 วัน', $row['วันที่กรอก'], "แท็บ {$tabName}: ช่อง \"วันที่กรอก\" ต้องเป็น 0 วัน");
+        }
+    }
 }
