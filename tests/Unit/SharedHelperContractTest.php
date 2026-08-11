@@ -1307,4 +1307,73 @@ final class SharedHelperContractTest extends TestCase
             'แก้เรื่องร้านเล็กแล้วผลรวมไม่ได้ 100.00 อีกต่อไป'
         );
     }
+
+    /**
+     * ⭐⭐⭐ **วันหมดอายุต้องคิดด้วยนาฬิกาของ MySQL เท่านั้น ห้ามใช้นาฬิกาของ PHP**
+     *
+     * ตัวที่ตรวจว่าหมดอายุหรือยังคือ `expires_at > NOW()` / `expires_at < NOW()`
+     * ซึ่งเป็น NOW() ของ **MySQL** และ connection ไม่ได้ pin `time_zone` ไว้
+     * · ฝั่ง production ทำถูกแล้ว (`DATE_ADD(NOW(), INTERVAL … HOUR)`) และคอมเมนต์
+     *   ในไฟล์นั้นก็เตือนเรื่องนี้ไว้ — แต่กติกาไปไม่ถึงฝั่งเทสต์
+     *
+     * ⚠️⚠️ อาการที่เจอจริง: `CronScriptTest` เขียน `date('Y-m-d H:i:s', time() - 3600)`
+     * ซึ่งเป็นเวลา Asia/Bangkok · **บนเครื่อง dev ผ่านเพราะ MySQL ตั้ง SYSTEM = โซนเดียวกัน
+     * พอดี แต่ CI รัน MariaDB ในคอนเทนเนอร์ที่เป็น UTC** → ต่างกัน 7 ชม. แถวที่ตั้งใจให้
+     * หมดอายุแล้วกลายเป็นอนาคต → **CI แดงค้างข้ามหลายคอมมิต** ซึ่งอันตรายกว่าตัวบั๊กเอง
+     * เพราะพอ CI แดงเป็นปกติ ของจริงพังแล้วไม่มีใครเห็น
+     *
+     * ⚠️⚠️ **จับที่ "ชื่อของค่า" ไม่ใช่ระยะห่างของบรรทัด** — เวอร์ชันแรกบังคับให้
+     * `expires_at` กับการเรียกนาฬิกาอยู่บรรทัดเดียวกัน · เวอร์ชันที่สองขยายเป็นช่วง
+     * ±4 บรรทัด · **มิวเทชันแล้วทั้งคู่ยังลอด** สำหรับรูปที่เขียนกันปกติที่สุด
+     * (`$expiresAt = date(...);` วางห่างออกไป 8 บรรทัดแล้วค่อยเอาไปผูก)
+     * ตอนนี้จับ 2 รูปที่เป็นรูปจริงของบั๊ก: ชื่อที่แปลว่า "วันหมดอายุ" ถูกกำหนดค่า
+     * จากนาฬิกาของ PHP · และ `expires_at` อยู่บรรทัดเดียวกับการเรียกนาฬิกา
+     *
+     * ⚠️ **ขอบเขตที่ตัวกวาดนี้ไม่ครอบ** (จดไว้ตรง ๆ ดีกว่าให้คนอ่านคิดว่าครอบหมด):
+     * ถ้าตั้งชื่อตัวแปรเป็นอย่างอื่นสิ้นเชิง เช่น `$t = time() - 3600;` แล้วค่อยเอาไป
+     * ผูกกับ `:expires_at` ในอีกที่หนึ่ง — ตัวกวาดมองไม่เห็น
+     */
+    public function testNobodyComputesAnExpiryWithThePhpClock(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/app/Repositories/*.php'),
+            (array)glob($root . '/app/Services/*.php'),
+            (array)glob($root . '/cron/*.php'),
+            (array)glob($root . '/tests/Integration/*.php'),
+            (array)glob($root . '/tests/Unit/*.php')
+        );
+
+        $clock = '\b(date|gmdate|strtotime|time)\s*\(';
+
+        $offenders = [];
+        foreach ($files as $file) {
+            // ⚠️ ตัดคอมเมนต์ก่อน — คำอธิบายของกติกานี้เอ่ยถึงโค้ดที่ห้ามเขียนอยู่แล้ว
+            // ถ้าไม่ตัด ตัวกวาดจะรายงานตัวเองเป็นผู้กระทำผิด (เคยเกิดมาแล้วกับตัวกวาดอื่น)
+            $source = $this->codeWithoutComments((string)file_get_contents((string)$file));
+
+            foreach (explode("\n", $source) as $number => $line) {
+                $isExpiryName = preg_match(
+                    '/(expire|expiry)[a-z_]*[\'"]?\s*(=>|=)[^;]*' . $clock . '/i',
+                    $line
+                ) === 1;
+                $isExpiryColumn = str_contains($line, 'expires_at')
+                    && preg_match('/' . $clock . '/', $line) === 1;
+
+                if (!$isExpiryName && !$isExpiryColumn) {
+                    continue;
+                }
+
+                $offenders[] = basename((string)$file) . ':' . ($number + 1) . ' → ' . trim($line);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "วันหมดอายุถูกคิดด้วยนาฬิกาของ PHP — ต้องให้ MySQL เป็นคนบวก/ลบเวลา\n"
+            . "(เช่น DATE_ADD(NOW(), INTERVAL :ttl_hours HOUR)) ไม่งั้นเครื่องที่ PHP\n"
+            . "กับ MySQL คนละเขตเวลาจะได้ผลคนละอย่าง:\n  " . implode("\n  ", $offenders)
+        );
+    }
 }

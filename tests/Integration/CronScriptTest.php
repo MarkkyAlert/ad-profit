@@ -108,26 +108,40 @@ final class CronScriptTest extends IntegrationTestCase
         );
     }
 
-    /** ⭐ ล้าง token ที่หมดอายุจริง — แถวที่ยังไม่หมดอายุต้องอยู่ครบ */
+    /**
+     * ⭐ ล้าง token ที่หมดอายุจริง — แถวที่ยังไม่หมดอายุต้องอยู่ครบ
+     *
+     * ⚠️⚠️ **วันหมดอายุต้องคิดด้วยนาฬิกาของ MySQL ไม่ใช่ของ PHP** — กติกาเดียวกับที่
+     * `PasswordResetRepository::createToken()` เขียนไว้ (มันใช้ `DATE_ADD(NOW(), …)`
+     * ด้วยเหตุผลนี้เป๊ะ ๆ) · connection ไม่ได้ pin `time_zone` ไว้ และตัวลบเทียบด้วย
+     * `expires_at < NOW()` ของ MySQL
+     *
+     * ⚠️ เดิมเทสต์นี้เขียน `date('Y-m-d H:i:s', time() - 3600)` ของ PHP ซึ่งใช้
+     * `APP_TIMEZONE` (Asia/Bangkok) · **บนเครื่อง dev ผ่านเพราะ MySQL ตั้ง SYSTEM =
+     * เขตเวลาเดียวกันพอดี แต่ CI รัน MariaDB ในคอนเทนเนอร์ที่เป็น UTC** → ต่างกัน 7 ชม.
+     * แถวที่ตั้งใจให้ "หมดอายุไปแล้ว 1 ชม." กลายเป็นอนาคตอีก 6 ชม. ในสายตา MySQL
+     * จึงไม่ถูกลบ · **CI แดงค้างมาหลายคอมมิต ซึ่งอันตรายกว่าตัวบั๊กเอง** เพราะ
+     * ไม่มีใครเห็นตอนของจริงพัง (ทำซ้ำได้ด้วย `SET GLOBAL time_zone = '+00:00'`)
+     */
     public function testExpiredResetTokensAreDeletedButLiveOnesSurvive(): void
     {
         $userId = $this->createUser();
 
         $insert = $this->pdo->prepare(
             'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
-             VALUES (:user_id, :hash, :expires_at, NOW())'
+             VALUES (:user_id, :hash, DATE_ADD(NOW(), INTERVAL :offset_hour HOUR), NOW())'
         );
         $insert->execute([
             ':user_id' => $userId,
             ':hash' => str_repeat('a', 64),
-            ':expires_at' => date('Y-m-d H:i:s', time() - 3600),   // หมดอายุไปแล้ว 1 ชม.
+            ':offset_hour' => -1,   // หมดอายุไปแล้ว 1 ชม.
         ]);
 
         $userTwo = $this->createUser('live@example.com');
         $insert->execute([
             ':user_id' => $userTwo,
             ':hash' => str_repeat('b', 64),
-            ':expires_at' => date('Y-m-d H:i:s', time() + 3600),   // ยังใช้ได้อีก 1 ชม.
+            ':offset_hour' => 1,    // ยังใช้ได้อีก 1 ชม.
         ]);
 
         $result = $this->runScript('cron/cleanup-password-reset-tokens.php');
