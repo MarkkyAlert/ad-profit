@@ -856,6 +856,27 @@ class RecordService
             }
 
             $oldDate = (string)($existingRecord['record_date'] ?? '');
+
+            // การอ่านก่อน transaction มีไว้เพียงช่วยให้ legacy future row ผ่านด่านแรกได้
+            // แต่ระหว่างนั้นอีกแท็บอาจย้ายแถวกลับมาเป็นวันปกติแล้วได้ จึงต้องตรวจซ้ำจาก
+            // วันที่ของแถวที่ล็อกอยู่จริง ไม่เช่นคำขอเก่าจะใช้ข้อยกเว้นนั้นสร้างวันอนาคตใหม่
+            $lockedValidation = $this->validateRecordPayload(
+                $recordDate,
+                $revenue,
+                $adCost,
+                $note,
+                $today,
+                $oldDate
+            );
+            if (($lockedValidation['success'] ?? false) !== true) {
+                if ($startedTransaction && $this->db instanceof PDO && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+
+                return $lockedValidation;
+            }
+
+            $payload = $lockedValidation['data'];
             $newDate = (string)$payload['record_date'];
 
             if ($oldDate !== $newDate) {
