@@ -373,6 +373,72 @@ final class RecordActionEndpointTest extends ControllerTestCase
         $this->assertSame(2, $this->countRows('daily_records'), 'ไฟล์ที่ถูกต้องยังนำเข้าไม่ได้');
     }
 
+    /**
+     * ⭐⭐⭐ ไฟล์ที่ไม่ได้บันทึกเป็น UTF-8 ต้องบอกวิธีแก้ ไม่ใช่ "ไม่สามารถบันทึกข้อมูลได้"
+     *
+     * ⚠️⚠️ Excel บนวินโดวส์ภาษาไทยบันทึก CSV เป็น CP874 (ANSI) โดยปริยาย
+     * ด่านหัวตารางจับได้เฉพาะตอน **หัวเป็นภาษาไทย** (ชื่อคอลัมน์จับคู่ไม่ติด) แต่หัว
+     * ภาษาอังกฤษ `date/revenue/ad_cost/note` เป็น ASCII ล้วนจึงผ่านด่านนั้นไปได้
+     * แล้วไบต์ไทยของ **คอลัมน์โน้ต** ไปตายที่ MySQL
+     *
+     * วัดจริงก่อนแก้: บันทึก **0 แถว** พร้อมข้อความ "ไม่สามารถบันทึกข้อมูลได้"
+     * ซึ่งไม่บอกอะไรเลยว่าต้องทำอะไรต่อ · ไฟล์เดียวกันถ้าโน้ตเป็น UTF-8 บันทึกได้ปกติ
+     * (เทสต์นี้ยืนยันข้อนั้นด้วย — ไม่งั้นพิสูจน์ไม่ได้ว่าสาเหตุคือการเข้ารหัส)
+     *
+     * ⚠️ ไฟล์จากระบบอื่น (แพลตฟอร์มขายของ/แอดแพลตฟอร์ม) มักมีหัวเป็นอังกฤษ
+     * ทางนี้จึงเป็นทางที่ผู้ใช้เดินจริงบ่อย ไม่ใช่กรณีหายาก
+     */
+    public function testACsvThatIsNotUtf8SaysHowToFixIt(): void
+    {
+        $userId = $this->createUser();
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+
+        $thaiNote = 'ยิงแอดชุดใหม่';
+        $legacyNote = iconv('UTF-8', 'CP874//IGNORE', $thaiNote);
+        $this->assertIsString($legacyNote, 'เครื่องนี้แปลงเป็น CP874 ไม่ได้ — เทสต์จะไม่ได้ตรวจอะไร');
+        $this->assertNotSame($thaiNote, $legacyNote, 'ไบต์ต้องต่างจาก UTF-8 จริง ๆ');
+
+        $response = $this->postFile(
+            '/api/records.php',
+            [
+                'action' => 'import_csv',
+                'csrf_token' => $this->csrfTokenFor($session),
+                'shop_context_id' => (string)$shopId,
+            ],
+            'csv',
+            'ยอดขาย.csv',
+            "date,revenue,ad_cost,note\n2026-08-01,5000,1200,{$legacyNote}\n",
+            $session
+        );
+
+        $this->assertSame(302, $response['status'], (string)$response['body']);
+        $this->assertSame(0, $this->countRows('daily_records'), 'ไฟล์ที่อ่านไม่ออกไม่ควรเขียนอะไรลงฐานข้อมูล');
+        $this->assertStringContainsString(
+            'CSV UTF-8',
+            $this->flashMessages($session),
+            'ไฟล์ที่ไม่ใช่ UTF-8 ต้องบอกวิธีแก้ ไม่ใช่ข้อความรวม ๆ ที่ผู้ใช้ทำอะไรต่อไม่ได้'
+        );
+
+        /* ⚠️ ฝั่งตรงข้าม — ไฟล์หน้าตาเดียวกันเป๊ะ ต่างแค่โน้ตเป็น UTF-8 ต้องผ่านตามปกติ
+           ไม่งั้นการ "แก้" ที่ปฏิเสธไฟล์ทุกใบที่มีภาษาไทยก็ผ่านหน้าตาเฉย */
+        $ok = $this->postFile(
+            '/api/records.php',
+            [
+                'action' => 'import_csv',
+                'csrf_token' => $this->csrfTokenFor($session),
+                'shop_context_id' => (string)$shopId,
+            ],
+            'csv',
+            'ยอดขาย.csv',
+            "date,revenue,ad_cost,note\n2026-08-02,5000,1200,{$thaiNote}\n",
+            $session
+        );
+
+        $this->assertSame(302, $ok['status'], (string)$ok['body']);
+        $this->assertSame(1, $this->countRows('daily_records'), 'ไฟล์ UTF-8 ที่มีภาษาไทยกลับนำเข้าไม่ได้');
+    }
+
     /** ⭐ ไม่แนบไฟล์มาเลย → ต้องบอกให้ชัด ไม่ใช่เงียบหรือขึ้น 404 */
     public function testImportingWithoutAFileIsReported(): void
     {
