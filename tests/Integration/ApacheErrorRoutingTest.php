@@ -245,7 +245,16 @@ final class ApacheErrorRoutingTest extends TestCase
 
         $folder = basename(dirname(__DIR__, 2));
 
-        foreach (['/includes/config.php', '/app/Services/RecordService.php', '/.env'] as $path) {
+        /* ⚠️⚠️ `.git/` สำคัญเป็นพิเศษ — deploy ด้วย `git clone` แล้วโฟลเดอร์นี้จะขึ้นไปด้วย
+           · กฎที่กัน "ไฟล์ขึ้นต้นด้วยจุด" **กันไม่ได้** เพราะไฟล์ข้างในชื่อ `config`/`HEAD`
+             ซึ่งไม่มีจุดนำหน้า · วัดจริงก่อนแก้: ทั้งคู่ตอบ **200** = ดาวน์โหลดซอร์สย้อนหลังได้ */
+        foreach ([
+            '/includes/config.php',
+            '/app/Services/RecordService.php',
+            '/.env',
+            '/.git/config',
+            '/.git/HEAD',
+        ] as $path) {
             $this->assertSame(
                 403,
                 $this->request('/' . $folder . $path)['status'],

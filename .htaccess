@@ -43,7 +43,13 @@ ErrorDocument 500 /error.php
 # เปิดให้เข้าถึงเฉพาะ: หน้าเว็บที่รากโปรเจกต์ และ api/
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^(app|cron|database|docs|includes|logs|tests|tools|uploads|vendor)/ - [F,L]
+    # ⚠️⚠️⚠️ `\.git/` สำคัญเป็นพิเศษ — ถ้า deploy ด้วย `git clone` โฟลเดอร์นี้จะขึ้นไปด้วย
+    #    · กฎ `<FilesMatch "^\.">` ข้างล่าง **กันไม่ได้** เพราะมันดูที่ *ชื่อไฟล์*
+    #      แต่ไฟล์ข้างใน `.git/` ชื่อ `config` · `HEAD` · `index` ซึ่งไม่มีจุดนำหน้า
+    #    · วัดจริงกับ Apache ก่อนเพิ่มบรรทัดนี้: `/.git/config` และ `/.git/HEAD` ตอบ **200**
+    #      = ใครก็ได้ดาวน์โหลดประวัติซอร์สโค้ดทั้งหมด รวมความลับที่เคยเผลอ commit ไว้
+    #    · เป็นเป้าที่เครื่องมือสแกนอัตโนมัติไล่หาเป็นอย่างแรก ๆ
+    RewriteRule ^(\.git|app|cron|database|docs|includes|logs|tests|tools|uploads|vendor)/ - [F,L]
 
     # ── ลิงก์ที่ไม่มีอยู่จริง → หน้าแจ้งข้อผิดพลาดของเราเอง ──────────────────
     # ⚠️⚠️ ทำที่นี่แทน `ErrorDocument 404` เพราะพาธตรงนี้ **สัมพัทธ์กับโฟลเดอร์
