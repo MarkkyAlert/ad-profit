@@ -979,15 +979,27 @@ $flashError = get_flash('error');
     </header>
 
     <main id="main-content" class="mx-auto min-h-[calc(100vh-160px)] w-full max-w-6xl px-3 pt-4 pb-28 sm:px-4 sm:pt-6 sm:pb-32">
-        <?php if ($flashSuccess !== null): ?>
-            <?php /* ⚠️ ข้อความผิดพลาดต้องอยู่นานกว่าข้อความสำเร็จ — คนอ่านต้องใช้เวลาทำความเข้าใจ
-                             และมักต้องทำอะไรต่อ · `data-toast-kind` บอกสคริปต์ใน footer.php ว่าจะให้อยู่นานเท่าไร */ ?>
-                    <div id="app-toast" data-toast-kind="success" role="status" tabindex="0" title="แตะเพื่อปิด" class="toast-anim fixed right-4 top-4 z-50 flex cursor-pointer items-center gap-2 rounded-2xl border border-green-500/30 bg-[#071510] px-4 py-3 text-sm font-medium text-green-400 shadow-xl shadow-black/50 backdrop-blur-md">
-                <span>✅</span><?= e($flashSuccess) ?>
-            </div>
-        <?php endif; ?>
-        <?php if ($flashError !== null): ?>
-            <div id="app-toast" data-toast-kind="error" role="alert" tabindex="0" title="แตะเพื่อปิด" class="toast-anim fixed right-4 top-4 z-50 flex cursor-pointer items-center gap-2 rounded-2xl border border-red-500/30 bg-[#140808] px-4 py-3 text-sm font-medium text-red-400 shadow-xl shadow-black/50 backdrop-blur-md">
-                <span>❌</span><?= e($flashError) ?>
+        <?php if ($flashSuccess !== null || $flashError !== null): ?>
+            <?php /* ⚠️⚠️ ทั้งสองแถบเคยใช้ `id="app-toast"` เหมือนกัน และวางทับกันที่มุมเดียวกัน
+                     · สคริปต์ใช้ getElementById ซึ่งคืน **ตัวแรกตัวเดียว** อีกตัวจึงไม่มีตัวจับเวลา
+                       ไม่ปิดเมื่อแตะ และค้างอยู่บนจอตลอด
+                     · แถบที่มาทีหลังยังวาดทับตัวแรกจนอ่านไม่เห็นด้วย
+                     · เกิดได้จริง: บันทึกสำเร็จแล้วเด้งกลับมา เจอว่าร้านถูกลบจากอีกเครื่อง
+                       → มีทั้งข้อความสำเร็จและข้อความเตือนพร้อมกัน
+                     ตอนนี้ใส่ไว้ในกล่องเดียวที่เรียงลงมา และเปลี่ยนเป็น `data-app-toast`
+                     เพื่อให้สคริปต์จัดการได้ **ทุกตัว** ไม่ใช่ตัวแรกตัวเดียว
+                     ⚠️ ข้อความผิดพลาดต้องอยู่นานกว่าข้อความสำเร็จ — คนอ่านต้องใช้เวลาทำความเข้าใจ
+                        และมักต้องทำอะไรต่อ · `data-toast-kind` บอกสคริปต์ว่าจะให้อยู่นานเท่าไร */ ?>
+            <div class="fixed right-4 top-4 z-50 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
+                <?php if ($flashSuccess !== null): ?>
+                    <div data-app-toast data-toast-kind="success" role="status" tabindex="0" title="แตะเพื่อปิด" class="toast-anim flex cursor-pointer items-center gap-2 rounded-2xl border border-green-500/30 bg-[#071510] px-4 py-3 text-sm font-medium text-green-400 shadow-xl shadow-black/50 backdrop-blur-md">
+                        <span>✅</span><?= e($flashSuccess) ?>
+                    </div>
+                <?php endif; ?>
+                <?php if ($flashError !== null): ?>
+                    <div data-app-toast data-toast-kind="error" role="alert" tabindex="0" title="แตะเพื่อปิด" class="toast-anim flex cursor-pointer items-center gap-2 rounded-2xl border border-red-500/30 bg-[#140808] px-4 py-3 text-sm font-medium text-red-400 shadow-xl shadow-black/50 backdrop-blur-md">
+                        <span>❌</span><?= e($flashError) ?>
+                    </div>
+                <?php endif; ?>
             </div>
         <?php endif; ?>

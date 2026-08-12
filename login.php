@@ -308,16 +308,26 @@ $flashError = get_flash('error');
         </div>
     </div>
 
-    <?php if ($flashSuccess !== null): ?>
-        <div id="app-toast" class="toast-anim fixed right-4 top-4 z-50 flex items-center gap-2 rounded-2xl border border-green-500/30 bg-[#071510] px-4 py-3 text-sm font-medium text-green-400 shadow-xl shadow-black/50 backdrop-blur-md">
-            <span>✅</span><?= e($flashSuccess) ?>
-        </div>
-    <?php endif; ?>
-
-    <?php if ($flashError !== null): ?>
-        <div id="app-toast" class="toast-anim fixed right-4 top-4 z-50 flex items-center gap-2 rounded-2xl border border-red-500/30 bg-[#140808] px-4 py-3 text-sm font-medium text-red-400 shadow-xl shadow-black/50 backdrop-blur-md">
-            <span>❌</span><?= e($flashError) ?>
-        </div>
+    <?php /* ⚠️⚠️ หน้านี้ไม่ได้ใช้ header/footer ร่วม จึงเคยมีแถบแจ้งผลคนละแบบกับทั้งระบบ:
+             ไม่มี role ให้โปรแกรมอ่านหน้าจอประกาศ · แตะปิดไม่ได้ · หายใน 3 วินาที
+             ทั้งที่หน้าอื่นให้ข้อความผิดพลาดอยู่ 10 วินาที
+             · หน้านี้คือที่ที่ข้อความผิดพลาดสำคัญที่สุด ("อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+               "ลองเข้าสู่ระบบบ่อยเกินไป กรุณารอ 1 นาที") — คนที่พลาดข้อความจะกดซ้ำแล้ว
+               ไปชนตัวจำกัดจำนวนครั้งพอดี
+             · และทั้งสองแถบเคยใช้ id เดียวกัน วางทับกัน (เหตุผลเต็มอยู่ใน header.php) */ ?>
+    <?php if ($flashSuccess !== null || $flashError !== null): ?>
+    <div class="fixed right-4 top-4 z-50 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
+        <?php if ($flashSuccess !== null): ?>
+            <div data-app-toast data-toast-kind="success" role="status" tabindex="0" title="แตะเพื่อปิด" class="toast-anim flex cursor-pointer items-center gap-2 rounded-2xl border border-green-500/30 bg-[#071510] px-4 py-3 text-sm font-medium text-green-400 shadow-xl shadow-black/50 backdrop-blur-md">
+                <span>✅</span><?= e($flashSuccess) ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($flashError !== null): ?>
+            <div data-app-toast data-toast-kind="error" role="alert" tabindex="0" title="แตะเพื่อปิด" class="toast-anim flex cursor-pointer items-center gap-2 rounded-2xl border border-red-500/30 bg-[#140808] px-4 py-3 text-sm font-medium text-red-400 shadow-xl shadow-black/50 backdrop-blur-md">
+                <span>❌</span><?= e($flashError) ?>
+            </div>
+        <?php endif; ?>
+    </div>
     <?php endif; ?>
 
     <script>
@@ -346,13 +356,26 @@ $flashError = get_flash('error');
 
             render(activeTab);
 
-            const toast = document.getElementById('app-toast');
-            if (toast) {
-                setTimeout(() => {
+            /* ⚠️ ใช้กติกาเดียวกับทั้งระบบ (footer.php) — ผิดพลาดอยู่ 10 วินาที · สำเร็จ 6 วินาที ·
+               แตะเพื่อปิดได้ · ข้อความผิดพลาดดึงโฟกัสมาให้ · และจัดการ **ทุกแถบ** ไม่ใช่ตัวแรก */
+            document.querySelectorAll('[data-app-toast]').forEach((toast) => {
+                const dismissToast = () => {
+                    if (!toast.isConnected) {
+                        return;
+                    }
+
                     toast.classList.add('opacity-0', 'transition', 'duration-300');
                     setTimeout(() => toast.remove(), 300);
-                }, 3000);
-            }
+                };
+
+                const isError = toast.getAttribute('data-toast-kind') === 'error';
+                setTimeout(dismissToast, isError ? 10000 : 6000);
+                toast.addEventListener('click', dismissToast);
+
+                if (isError) {
+                    toast.focus({ preventScroll: true });
+                }
+            });
         })();
     </script>
 </body>

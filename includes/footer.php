@@ -105,8 +105,11 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
              คำเตือน ไม่เห็นคำยืนยัน แล้วอาจกดซ้ำเพราะไม่แน่ใจว่าสำเร็จหรือยัง
            · ข้อความผิดพลาดอยู่นานกว่า เพราะต้องใช้เวลาอ่านและมักต้องทำอะไรต่อ
            · แตะที่แถบเพื่อปิดเองได้ (บางคนอยากให้พ้นทางเลย) */
-        const toast = document.getElementById('app-toast');
-        if (toast) {
+        /* ⚠️⚠️ ต้องจัดการ **ทุกแถบ** ไม่ใช่ตัวแรกตัวเดียว
+           เดิมทั้งสองแถบใช้ id เดียวกัน แล้วสคริปต์ใช้ getElementById ซึ่งคืนตัวแรก
+           → แถบที่สองไม่มีตัวจับเวลา ไม่ปิดเมื่อแตะ และค้างบนจอตลอด
+           (เกิดจริงตอนมีทั้งข้อความสำเร็จและข้อความเตือนพร้อมกัน) */
+        document.querySelectorAll('[data-app-toast]').forEach((toast) => {
             const dismissToast = () => {
                 if (!toast.isConnected) {
                     return;
@@ -128,7 +131,7 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
             if (isError) {
                 toast.focus({ preventScroll: true });
             }
-        }
+        });
 
         /* ⭐ ช่องที่กรอกผิดต้องถูกทำเครื่องหมายไว้ ไม่ใช่บอกแค่ในแถบข้อความ
            ใช้ผลตรวจของเบราว์เซอร์เอง (required · type=email · min/max) จึงครอบทุกฟอร์ม
