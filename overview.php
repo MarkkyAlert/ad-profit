@@ -415,20 +415,27 @@ require __DIR__ . '/includes/header.php';
 
         <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end sm:gap-3">
             <?php if ($shopCount >= 2): ?>
-                <div class="inline-flex rounded-xl border border-white/10 bg-white/5 p-1 text-xs">
+                <?php /* ⚠️⚠️ ปุ่มสามอันนี้บอก "กำลังดูมุมไหน" ด้วย **สีอย่างเดียว**
+                         คนที่ใช้โปรแกรมอ่านหน้าจอจะได้ยินลิงก์สามอันเหมือนกันหมด ไม่รู้ว่า
+                         ตอนนี้อยู่มุมไหน — ปัญหาเดียวกับเมนูล่างที่แก้ไปแล้วด้วย `aria-current`
+                         · ครอบด้วย `<nav>` ที่มีชื่อ เพื่อให้กระโดดมาที่ชุดนี้ได้ตรง ๆ */ ?>
+                <nav aria-label="มุมมองของหน้ารวมทุกร้าน" class="inline-flex rounded-xl border border-white/10 bg-white/5 p-1 text-xs">
                     <a href="<?= e(app_url('/overview.php?view=day&month=' . $selectedMonth)) ?>"
+                        <?= $view === 'day' ? 'aria-current="page"' : '' ?>
                         class="rounded-lg px-3 py-1.5 font-semibold transition-colors <?= $view === 'day' ? 'bg-white/10 text-slate-100' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200' ?>">
                         รายวัน
                     </a>
                     <a href="<?= e(app_url('/overview.php?view=month&month=' . $selectedMonth)) ?>"
+                        <?= $view === 'month' ? 'aria-current="page"' : '' ?>
                         class="rounded-lg px-3 py-1.5 font-semibold transition-colors <?= $view === 'month' ? 'bg-white/10 text-slate-100' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200' ?>">
                         รายเดือน
                     </a>
                     <a href="<?= e(app_url('/overview.php?view=year&year=' . (string)$selectedYear)) ?>"
+                        <?= $view === 'year' ? 'aria-current="page"' : '' ?>
                         class="rounded-lg px-3 py-1.5 font-semibold transition-colors <?= $view === 'year' ? 'bg-white/10 text-slate-100' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200' ?>">
                         รายปี
                     </a>
-                </div>
+                </nav>
             <?php endif; ?>
 
             <?php if ($view === 'year'): ?>

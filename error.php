@@ -153,11 +153,21 @@ $dashboardUrl = $basePath . '/dashboard.php';
             min-height: 44px;
             padding: 0 24px;
             border-radius: 12px;
-            background: linear-gradient(135deg, #f97316, #ea580c);
+            /* ⚠️⚠️ ต้องเป็นสีชุดเดียวกับปุ่มหลักของระบบ (`includes/brand-colors.php`)
+               · หน้านี้ **ตั้งใจไม่ include ไฟล์นั้น** เพราะต้องขึ้นได้แม้ระบบพังจนตอบ 500
+                 จึงต้องคัดลอกค่ามาไว้เอง — และเป็นเหตุผลเดียวกับที่มันตกสำรวจตอนแก้คอนทราสต์
+               · ชุดเก่า #f97316 / #ea580c วัดได้ 2.80 / 3.56 : 1 (เกณฑ์ 4.5)
+                 ชุดนี้ 5.18 / 7.31 : 1 — และนี่คือปุ่มเดียวบนหน้าที่พาผู้ใช้กลับได้ */
+            background: linear-gradient(135deg, #c2410c, #9a3412);
             color: #fff;
             font-weight: 600;
             font-size: 15px;
             text-decoration: none
+        }
+
+        a:focus-visible {
+            outline: 2px solid #818cf8;
+            outline-offset: 2px
         }
     </style>
 </head>

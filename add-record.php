@@ -86,7 +86,7 @@ require __DIR__ . '/includes/header.php';
             <input
                 id="record-date"
                 name="record_date"
-                aria-describedby="existing-record-hint"
+                aria-describedby="existing-record-hint future-date-warning"
                 type="date"
                 data-date="<?= e(date('d/m/Y')) ?>"
                 max="<?= e($todayDate) ?>"
@@ -95,7 +95,10 @@ require __DIR__ . '/includes/header.php';
                 class="w-full rounded-xl px-4 py-2.5 transition-all date-input-formatted"
                 style="position: relative;"
                 onchange="this.setAttribute('data-date', this.value ? this.value.split('-').reverse().join('/') : '')">
-            <p id="future-date-warning" class="mt-1 hidden text-xs text-amber-300">
+            <?php /* ⚠️ ต้องประกาศเองเหมือน `#existing-record-hint` — ข้อความนี้โผล่มาจาก
+                     สคริปต์หลังผู้ใช้เลือกวัน ถ้าไม่มี live region คนที่ใช้โปรแกรมอ่านหน้าจอ
+                     จะไม่รู้เลยว่ามีคำเตือนขึ้นมา แล้วกดบันทึกไปเจอ error ที่อธิบายไม่ได้ */ ?>
+            <p id="future-date-warning" role="status" aria-live="polite" class="mt-1 hidden text-xs text-amber-300">
                 วันที่นี้อยู่ในอนาคต ระบบจะไม่บันทึกยอดที่ยังไม่เกิดขึ้น
             </p>
         </div>

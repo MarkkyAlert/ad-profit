@@ -824,6 +824,216 @@ final class SharedHelperContractTest extends TestCase
         );
     }
 
+    /**
+     * ⭐⭐⭐ **ตัวอักษรขาวบนพื้นไล่สี ต้องผ่านเกณฑ์ — ไม่ว่าจะเขียนไว้ที่ไฟล์ไหน**
+     *
+     * ⚠️⚠️ มีตัวกวาดเรื่องสีปุ่มอยู่แล้ว แต่มันมองหา **ชื่อคลาส** (`.btn-orange` ฯลฯ)
+     * · `error.php` **จงใจไม่ include `brand-colors.php`** (ต้องขึ้นได้แม้ระบบพังจนตอบ 500)
+     *   จึงคัดลอกสีมาไว้เอง และเขียนเป็น `.back-link` ไม่ใช่ `.btn-orange`
+     *   → ตัวกวาดเดิม **มองไม่เห็นเลย** ปุ่มนั้นจึงค้างอยู่กับสีชุดเก่าที่ตกเกณฑ์
+     * · วัดจริง: `#f97316` = **2.80 : 1** · `#ea580c` = **3.56 : 1** (เกณฑ์ 4.5)
+     *   และมันคือ **ปุ่มเดียวบนหน้านั้นที่พาผู้ใช้กลับได้** จากหน้า 403/404/500
+     *
+     * ตัวกวาดนี้จึงไล่จาก **เลขสีในไฟล์** ไม่ใช่จากชื่อคลาส — เขียนปุ่มใหม่ที่ไหน
+     * ด้วยชื่ออะไรก็ถูกตรวจ ขอแค่เป็นพื้นไล่สีที่มีตัวอักษรสีขาว
+     *
+     * ⚠️ รูปแบบเดียวกับบทเรียนเดิมที่บันทึกไว้: "ตัวกวาดที่เขียนไว้กันเรื่องนี้เอง
+     * ก็มีรูโหว่แบบเดียวกัน" — ตัวกวาดที่ผูกกับชื่อ จะไม่มีวันเห็นของที่ตั้งชื่ออื่น
+     */
+    public function testWhiteTextOnAnyColouredGradientIsDarkEnough(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/*.php'),
+            (array)glob($root . '/includes/*.php')
+        );
+
+        $offenders = [];
+        $checked = 0;
+
+        foreach ($files as $file) {
+            $path = (string)$file;
+            $code = (string)file_get_contents($path);
+
+            /* ⚠️⚠️ ต้องดูทั้ง **บล็อกกฎ** ไม่ใช่ตัว gradient ลอย ๆ — เพราะต้องแยก
+               "พื้นหลังที่มีตัวอักษรขาวทับ" ออกจาก "ตัวอักษรที่ระบายด้วยไล่สีเอง"
+               · ชื่อแอป `.text-gradient` ใช้ `background-clip: text` คือ **ตัวอักษรเป็นสีนั้น**
+                 ไม่มีขาวทับ · เกณฑ์ 4.5 จึงใช้กับมันไม่ได้ (บันทึกไว้ใน CLAUDE.md แล้ว)
+               · วัดจริง: เวอร์ชันแรกของตัวกวาดนี้รายงานชื่อแอปเป็นผู้กระทำผิด 12 จุด */
+            preg_match_all('/\{([^{}]*linear-gradient[^{}]*)\}/i', $code, $rules);
+
+            foreach ($rules[1] as $body) {
+                /* ⚠️⚠️ ต้องตัดคอมเมนต์ CSS ก่อนเสมอ — คอมเมนต์ที่อธิบายว่า "สีชุดเก่าตกเกณฑ์"
+                   มักเขียนเลขสีชุดนั้นไว้ตรง ๆ · ไม่ตัดแล้วตัวกวาดจะรายงานคำอธิบาย
+                   ของตัวเองเป็นผู้กระทำผิด (เกิดขึ้นจริงตอนเขียนตัวกวาดนี้) */
+                $body = (string)preg_replace('#/\*.*?\*/#s', ' ', $body);
+
+                if (preg_match('/background-clip\s*:\s*text|-webkit-background-clip/i', $body) === 1) {
+                    continue;   // ตัวอักษรระบายด้วยไล่สี ไม่ใช่พื้นหลัง
+                }
+                if (preg_match('/(?<!-)color\s*:\s*(#fff(?:fff)?\b|white\b|rgba?\(\s*255\s*,\s*255\s*,\s*255)/i', $body) !== 1) {
+                    continue;   // ไม่มีตัวอักษรสีขาวทับ — เกณฑ์นี้ไม่เกี่ยว
+                }
+
+                preg_match_all('/#([0-9a-f]{6})\b/i', $body, $colours);
+
+                foreach ($colours[1] as $hex) {
+                    if (strtolower($hex) === 'ffffff') {
+                        continue;
+                    }
+
+                    $checked++;
+                    $ratio = $this->contrastWithWhite($hex);
+
+                    if ($ratio < 4.5) {
+                        $offenders[] = sprintf('%s → #%s = %.2f : 1', basename($path), $hex, $ratio);
+                    }
+                }
+            }
+        }
+
+        /* ⚠️ ทั้งระบบใช้ `var(--btn-…)` จาก `brand-colors.php` แล้ว จึงเหลือไฟล์เดียว
+           ที่เขียนเลขสีตรง ๆ คือ `error.php` (ตั้งใจไม่ include อะไรเลย) = 2 สี
+           ถ้าเลขนี้ลดลงแปลว่า regex พัง ไม่ใช่ว่าโค้ดสะอาดขึ้น */
+        $this->assertGreaterThanOrEqual(2, $checked, 'ตัวกวาดหาพื้นไล่สีไม่เจอเลย — regex คงพัง');
+        $this->assertSame(
+            [],
+            $offenders,
+            "ตัวอักษรสีขาวบนพื้นไล่สีเหล่านี้จางเกินเกณฑ์ 4.5 : 1\n" . implode("\n", $offenders)
+        );
+    }
+
+    /**
+     * ⭐⭐ **วงโฟกัสต้องเป็นสีทึบ — ห้าม `outline: none` แล้วพึ่งขอบโปร่งใส**
+     *
+     * ⚠️⚠️ วัดจริงบนเบราว์เซอร์: ขอบโปร่งใสที่ผสมกับพื้นเข้มได้ **1.26 : 1** (เกณฑ์ 3.0)
+     * คนที่เดินด้วยแป้น Tab จึงไม่รู้ว่าตอนนี้โฟกัสอยู่ช่องไหน — และหน้าที่โดนหนักสุด
+     * คือหน้าเข้าสู่ระบบซึ่งเป็นหน้าแรกที่ทุกคนต้องผ่าน
+     *
+     * ⚠️ ต้องกวาด **ทุกไฟล์ที่นิยาม `:focus` เอง** — 4 ไฟล์นิยามซ้ำกันคนละที่
+     * (`includes/header.php` · `login.php` · `forgot-password.php` · `reset-password.php`)
+     * เพราะสามหน้าหลังมี `<head>` ของตัวเอง · แก้ที่เดียวไม่พอ (บทเรียนเดิมของสีปุ่ม)
+     */
+    public function testFocusRingsAreSolidNotTransparent(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/*.php'),
+            (array)glob($root . '/includes/*.php')
+        );
+
+        $offenders = [];
+        $checked = 0;
+
+        foreach ($files as $file) {
+            $path = (string)$file;
+            $code = (string)file_get_contents($path);
+
+            // บล็อกกฎที่มี `:focus` อยู่ใน selector
+            preg_match_all('/([^{}]*:focus(?:-visible)?[^{}]*)\{([^}]*)\}/i', $code, $rules, PREG_SET_ORDER);
+
+            foreach ($rules as $rule) {
+                $body = $rule[2];
+                $checked++;
+
+                if (preg_match('/outline\s*:\s*none/i', $body) === 1) {
+                    $offenders[] = basename($path) . ': ปิด outline ทิ้ง (' . trim($rule[1]) . ')';
+                    continue;
+                }
+
+                if (preg_match('/outline\s*:[^;]*rgba?\([^)]*,\s*0?\.\d+\s*\)/i', $body) === 1) {
+                    $offenders[] = basename($path) . ': วงโฟกัสใช้สีโปร่งใส (' . trim($rule[1]) . ')';
+                    continue;
+                }
+
+                /* ⚠️ กฎที่ไม่พูดถึง outline เลย **ไม่ผิด** — มีกฎ `:focus` ที่ทำอย่างอื่น
+                   เช่น `.skip-link:focus { top: 12px }` ที่เลื่อนลิงก์ข้ามเนื้อหาเข้ามาในจอ
+                   ตัวกวาดจับเฉพาะกฎที่ **ปิด** วงโฟกัส หรือทำให้มันจางจนมองไม่เห็น
+                   (เวอร์ชันแรกรายงาน `.skip-link:focus` เป็นผู้กระทำผิด ทั้งที่ถูกต้องอยู่แล้ว) */
+
+                if (preg_match('/outline\s*:[^;]*#([0-9a-f]{6})/i', $body, $found) === 1) {
+                    $ratio = $this->contrastWithBackground($found[1]);
+                    if ($ratio < 3.0) {
+                        $offenders[] = sprintf(
+                            '%s: วงโฟกัส #%s = %.2f : 1 (ต้อง ≥ 3.0)',
+                            basename($path),
+                            $found[1],
+                            $ratio
+                        );
+                    }
+                }
+            }
+        }
+
+        $this->assertGreaterThan(3, $checked, 'ตัวกวาดหากฎ :focus ไม่เจอเลย — regex คงพัง');
+        $this->assertSame([], $offenders, "วงโฟกัสที่มองไม่เห็น\n" . implode("\n", $offenders));
+    }
+
+    /**
+     * ⭐ **ข้อความตัวอย่างในช่องกรอกก็ต้องอ่านออก** (เกณฑ์เดียวกับข้อความทั่วไป 4.5 : 1)
+     *
+     * ⚠️ ป้ายชื่อช่องช่วยได้ก็จริง แต่ `placeholder` มักเป็นที่เดียวที่บอก **รูปแบบ**
+     * ที่ต้องพิมพ์ (`your@email.com` · `0.00`) — อ่านไม่ออกคือไม่ได้ข้อมูลนั้นเลย
+     */
+    public function testPlaceholderTextIsReadable(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/*.php'),
+            (array)glob($root . '/includes/*.php')
+        );
+
+        $offenders = [];
+        $checked = 0;
+
+        foreach ($files as $file) {
+            $path = (string)$file;
+            $code = (string)file_get_contents($path);
+
+            preg_match_all('/::placeholder[^{}]*\{([^}]*)\}/i', $code, $rules);
+
+            foreach ($rules[1] as $body) {
+                if (preg_match('/color\s*:\s*#([0-9a-f]{6})/i', $body, $found) !== 1) {
+                    continue;
+                }
+
+                $checked++;
+                $ratio = $this->contrastWithBackground($found[1]);
+
+                if ($ratio < 4.5) {
+                    $offenders[] = sprintf('%s → #%s = %.2f : 1', basename($path), $found[1], $ratio);
+                }
+            }
+        }
+
+        $this->assertGreaterThan(2, $checked, 'ตัวกวาดหากฎ ::placeholder ไม่เจอเลย');
+        $this->assertSame([], $offenders, "ข้อความตัวอย่างในช่องกรอกจางเกินไป\n" . implode("\n", $offenders));
+    }
+
+    /**
+     * พื้นหลังเข้มสุดของแอป (#070c18) — ใช้เป็นฐานเทียบคอนทราสต์
+     * ⚠️ ใช้สูตรเดียวกับ `contrastWithWhite()` ที่มีอยู่แล้ว ไม่เขียนสูตรซ้ำ
+     */
+    private function contrastWithBackground(string $hex): float
+    {
+        $luminance = static function (string $value): float {
+            $channel = static function (int $byte): float {
+                $v = $byte / 255;
+
+                return $v <= 0.03928 ? $v / 12.92 : (float)(((($v + 0.055) / 1.055)) ** 2.4);
+            };
+
+            return 0.2126 * $channel((int)hexdec(substr($value, 0, 2)))
+                + 0.7152 * $channel((int)hexdec(substr($value, 2, 2)))
+                + 0.0722 * $channel((int)hexdec(substr($value, 4, 2)));
+        };
+
+        $first = $luminance(strtolower($hex));
+        $second = $luminance('070c18');
+
+        return (max($first, $second) + 0.05) / (min($first, $second) + 0.05);
+    }
+
     public function testNobodyUsesGreyTooFaintToRead(): void
     {
         $banned = ['text-slate-500', 'text-slate-600', 'text-slate-700', 'text-gray-500', 'text-gray-600'];

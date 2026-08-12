@@ -34,12 +34,20 @@ $pageTitle = 'ลืมรหัสผ่าน - ' . APP_NAME;
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
             color: #e2e8f0;
         }
-        input:focus {
-            outline: none;
-            border-color: rgba(99,102,241,0.65);
-            box-shadow: 0 0 0 3px rgba(99,102,241,0.15), 0 0 20px rgba(99,102,241,0.06);
+        /* ⚠️⚠️ วงโฟกัสต้องเป็นสีทึบและใช้ `outline` จริง — ห้าม `outline: none` แล้วพึ่งขอบโปร่งใส
+           · ขอบที่ผสมความโปร่งใสกับพื้นเข้ม ๆ วัดจริงได้ **1.26 : 1** (เกณฑ์ 3.0)
+             คนที่เดินด้วยแป้น Tab จึงไม่รู้ว่าตอนนี้อยู่ช่องไหน
+           · `outline` วาดทับด้านนอกกล่อง จึงไม่ถูกพื้นหลังของกล่องกลืน ต่างจาก border
+           · `#818cf8` = 6.55 : 1 บนพื้น #070c18 · เป็นสีตระกูลเดียวกับของเดิม หน้าตาจึงแทบไม่เปลี่ยน */
+        input:focus,
+        a:focus-visible,
+        button:focus-visible {
+            border-color: #818cf8;
+            outline: 2px solid #818cf8;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px rgba(129,140,248,0.2);
         }
-        input::placeholder { color: #4b5870; }
+        input::placeholder { color: #7b8aa3; }
         .btn-orange {
             display: block;
             width: 100%;

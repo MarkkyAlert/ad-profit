@@ -60,9 +60,14 @@ final class DynamicMessageAccessibilityTest extends ControllerTestCase
         $body = $this->addRecordPage();
         preg_match('/<input[^>]*\bid="record-date"[^>]*>/', $body, $tag);
 
-        $this->assertStringContainsString(
-            'aria-describedby="existing-record-hint"',
-            (string)($tag[0] ?? ''),
+        /* ⚠️ ต้องดูว่า "มีอยู่ในรายชื่อไหม" ไม่ใช่เทียบสตริงทั้งก้อน —
+           `aria-describedby` รับได้หลาย id และช่องนี้ผูกกับคำเตือน 2 อัน
+           (เขียนแบบเทียบทั้งก้อนไว้ แล้วพอเพิ่มคำเตือนที่สองก็แดงทันทีทั้งที่ถูกขึ้น) */
+        preg_match('/aria-describedby="([^"]*)"/', (string)($tag[0] ?? ''), $described);
+
+        $this->assertContains(
+            'existing-record-hint',
+            preg_split('/\s+/', trim($described[1] ?? '')),
             'ช่องวันที่ไม่ได้ผูกกับคำเตือน "จะเขียนทับ"'
         );
     }
@@ -85,6 +90,100 @@ final class DynamicMessageAccessibilityTest extends ControllerTestCase
             (string)preg_replace('/\s+/', ' ', $body),
             'เครื่องหมาย "หน้าปัจจุบัน" ไปอยู่ผิดปุ่ม'
         );
+    }
+
+    /**
+     * ⭐⭐ **คำเตือน "วันที่นี้อยู่ในอนาคต" ต้องถูกประกาศเหมือนคำเตือนอื่นในฟอร์มเดียวกัน**
+     *
+     * ⚠️⚠️ ช่องวันที่ช่องเดียวกันมีคำเตือน 2 อัน — "วันนี้มีข้อมูลอยู่แล้ว" ถูกแก้ไปแล้ว
+     * แต่ "วันที่อยู่ในอนาคต" ตกสำรวจ · ทั้งคู่โผล่มาจากสคริปต์หลังผู้ใช้เลือกวัน
+     * ถ้าไม่มี live region คนที่ใช้โปรแกรมอ่านหน้าจอจะไม่รู้ว่ามีคำเตือนขึ้นมาเลย
+     * แล้วกดบันทึกไปเจอข้อความปฏิเสธจากเซิร์ฟเวอร์ที่อธิบายไม่ได้ว่าทำไม
+     *
+     * ⚠️ `aria-describedby` รับได้หลาย id — ต้องมีทั้งสองอัน ไม่ใช่เลือกอันใดอันหนึ่ง
+     */
+    public function testTheFutureDateWarningIsAnnouncedToo(): void
+    {
+        $body = $this->addRecordPage();
+
+        $this->assertSame(
+            1,
+            preg_match('/<p[^>]*id="future-date-warning"[^>]*>/', $body, $warning),
+            'ไม่พบคำเตือนวันอนาคตในหน้า'
+        );
+        $this->assertStringContainsString(
+            'aria-live',
+            $warning[0],
+            'คำเตือนวันอนาคตโผล่มาเงียบ ๆ — โปรแกรมอ่านหน้าจอไม่ประกาศให้'
+        );
+
+        $this->assertSame(
+            1,
+            preg_match('/<input[^>]*id="record-date"[^>]*>/', $body, $input),
+            'ไม่พบช่องวันที่'
+        );
+        preg_match('/aria-describedby="([^"]*)"/', $input[0], $described);
+        $ids = preg_split('/\s+/', trim($described[1] ?? ''));
+
+        foreach (['existing-record-hint', 'future-date-warning'] as $needed) {
+            $this->assertContains(
+                $needed,
+                $ids,
+                'ช่องวันที่ไม่ได้ผูกกับ "' . $needed . '" — คำเตือนนั้นจะไม่ถูกอ่านตอนโฟกัสช่อง'
+            );
+        }
+    }
+
+    /**
+     * ⭐⭐ **ตัวเลือกมุมมองของหน้ารวมร้าน บอก "กำลังดูมุมไหน" ด้วยสีอย่างเดียว**
+     *
+     * ⚠️ เป็นบั๊กเดียวกับเมนูล่างที่แก้ไปแล้วด้วย `aria-current` — ตัวสลับมุมมองตกสำรวจ
+     * คนที่ใช้โปรแกรมอ่านหน้าจอได้ยินลิงก์สามอันเหมือนกันหมด ไม่รู้ว่าอยู่มุมไหน
+     *
+     * ⚠️ ต้องไล่ **ทุกมุม** ไม่ใช่มุมปริยายมุมเดียว — เครื่องหมายที่ติดผิดลิงก์
+     * แย่กว่าไม่ติดเลย และจะเห็นก็ต่อเมื่อลองสลับมุมจริง
+     */
+    public function testTheOverviewViewSwitcherSaysWhichViewIsOpen(): void
+    {
+        $userId = $this->createUser('viewswitch@example.com', 'ViewSwitch1234');
+        $shopId = $this->createShop($userId, 'ร้านหนึ่ง');
+        $this->createShop($userId, 'ร้านสอง');            // หน้ารวมร้านต้องมี ≥ 2 ร้าน
+        $session = $this->startSession($userId, $shopId);
+
+        foreach (['day' => 'รายวัน', 'month' => 'รายเดือน', 'year' => 'รายปี'] as $view => $label) {
+            $body = (string)$this->get('/overview.php?view=' . $view, $session)['body'];
+
+            /* ⚠️⚠️ ต้องเจาะจงว่าเป็น nav **ของตัวสลับมุมมอง** — หน้านี้มี nav อื่นอยู่แล้ว
+               (เมนูล่างใน footer.php) · เวอร์ชันแรกหาแค่ `<nav aria-label=` ลอย ๆ
+               แล้วไปเจอเมนูล่างพอดี → ถอด nav ของตัวสลับออกทั้งอัน เทสต์ยังเขียว (วัดแล้ว) */
+            $this->assertSame(
+                1,
+                preg_match('/<nav[^>]*aria-label="[^"]*มุมมอง[^"]*"[^>]*>(.*?)<\/nav>/su', $body, $switcher),
+                $view . ': ตัวสลับมุมมองไม่ได้ถูกครอบด้วย nav ที่มีชื่อของตัวเอง'
+            );
+            foreach (['รายวัน', 'รายเดือน', 'รายปี'] as $label) {
+                $this->assertStringContainsString(
+                    $label,
+                    $switcher[1],
+                    $view . ': ลิงก์ "' . $label . '" ไม่ได้อยู่ใน nav ของตัวสลับมุมมอง'
+                );
+            }
+
+            preg_match_all('/<a\s[^>]*view=([a-z]+)[^>]*>/', $body, $links, PREG_SET_ORDER);
+            $current = [];
+            foreach ($links as $link) {
+                if (str_contains($link[0], 'aria-current="page"')) {
+                    $current[] = $link[1];
+                }
+            }
+
+            $this->assertSame(
+                [$view],
+                $current,
+                $view . ': เครื่องหมาย "มุมที่กำลังดู" ควรอยู่ที่ลิงก์ ' . $label
+                . ' อันเดียว แต่ไปอยู่ที่ ' . implode(',', $current)
+            );
+        }
     }
 
     /** ⭐ แท็บเข้าสู่ระบบ/สมัครสมาชิก ต้องบอกว่ากำลังเลือกอันไหน */

@@ -186,14 +186,22 @@ $flashError = get_flash('error');
             color: #e2e8f0
         }
 
-        input:focus {
-            border-color: rgba(99, 102, 241, .65) !important;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, .15) !important;
-            outline: none !important
+        /* ⚠️⚠️ วงโฟกัสต้องเป็นสีทึบและใช้ `outline` จริง — ห้าม `outline: none` แล้วพึ่งขอบโปร่งใส
+           · ขอบที่ผสมความโปร่งใสกับพื้นเข้ม ๆ วัดจริงได้ **1.26 : 1** (เกณฑ์ 3.0)
+             คนที่เดินด้วยแป้น Tab จึงไม่รู้ว่าตอนนี้อยู่ช่องไหน
+           · `outline` วาดทับด้านนอกกล่อง จึงไม่ถูกพื้นหลังของกล่องกลืน ต่างจาก border
+           · `#818cf8` = 6.55 : 1 บนพื้น #070c18 · เป็นสีตระกูลเดียวกับของเดิม หน้าตาจึงแทบไม่เปลี่ยน */
+        input:focus,
+        a:focus-visible,
+        button:focus-visible {
+            border-color: #818cf8 !important;
+            outline: 2px solid #818cf8 !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, .2) !important
         }
 
         input::placeholder {
-            color: #4b5870
+            color: #7b8aa3
         }
 
         .tab-active {
