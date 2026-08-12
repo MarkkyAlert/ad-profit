@@ -79,20 +79,28 @@ if (is_file($envPath)) {
         $env[trim($key)] = trim($value);
     }
 
-    foreach (['DB_HOST', 'DB_NAME', 'DB_USER'] as $key) {
+    /* ⚠️⚠️ ต้องจับ "ค่าตัวอย่างที่ยังไม่ได้แทนที่" ด้วย ไม่ใช่แค่ "ว่างหรือไม่ว่าง"
+       · แพ็กเกจที่เตรียมไว้ให้ใส่คำว่า "ใส่…" เป็นตัวอย่าง ซึ่ง **ไม่ว่าง**
+         ตัวตรวจรุ่นแรกจึงตอบว่าผ่าน ทั้งที่ยังไม่ได้กรอกอะไรเลย (เจอตอนทดสอบแพ็กเกจ)
+       · เป็นความผิดพลาดแบบเดียวกับ "ตัวกันที่ไม่มีวันทำงาน" ที่โปรเจกต์นี้เจอมาหลายรอบ */
+    $looksUnfilled = static function (string $value): bool {
+        return $value === '' || str_contains($value, 'ใส่') || str_contains($value, 'YOUR_');
+    };
+
+    foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'] as $key) {
         $check(
-            ($env[$key] ?? '') !== '',
+            !$looksUnfilled((string)($env[$key] ?? '')),
             'ตั้งค่า ' . $key . ' แล้ว',
-            'กรอกใน .env'
+            'ยังเป็นค่าตัวอย่าง — เปิด .env แล้วแทนที่คำว่า "ใส่…" ด้วยค่าจริง'
         );
     }
 
     /* ⚠️⚠️ ลืมตั้ง APP_URL แล้วลิงก์ในอีเมลจะเป็น /reset-password.php?token=…
        ซึ่งกดจากกล่องจดหมายไม่ได้ ขณะที่หน้าเว็บบอกว่า "ส่งลิงก์แล้ว"
        และ .env.example ส่งค่าว่างมา จึงพลาดได้ง่ายมาก */
-    $appUrl = $env['APP_URL'] ?? '';
+    $appUrl = (string)($env['APP_URL'] ?? '');
     $check(
-        $appUrl !== '' && preg_match('#^https?://#i', $appUrl) === 1,
+        !$looksUnfilled($appUrl) && preg_match('#^https?://#i', $appUrl) === 1,
         'ตั้งค่า APP_URL เป็นที่อยู่เว็บเต็ม (ตอนนี้: ' . ($appUrl === '' ? 'ว่าง' : $appUrl) . ')',
         'ต้องเป็นแบบ https://โดเมนของคุณ · ถ้าว่าง ลิงก์ในอีเมลจะกดไม่ได้'
     );
@@ -106,7 +114,7 @@ if (is_file($envPath)) {
     $mailKeys = ['MAIL_ENABLED', 'MAIL_USERNAME', 'MAIL_PASSWORD', 'MAIL_FROM_ADDRESS'];
     $mailReady = true;
     foreach ($mailKeys as $key) {
-        if (($env[$key] ?? '') === '') {
+        if ($looksUnfilled((string)($env[$key] ?? ''))) {
             $mailReady = false;
         }
     }
