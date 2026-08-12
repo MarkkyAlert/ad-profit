@@ -1,0 +1,106 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration;
+
+// ⚠️ คลาสฐานไม่ได้อยู่ใน autoload — ไฟล์ที่ชื่อมาก่อน ControllerTestCase ตามตัวอักษรต้อง require เอง
+require_once __DIR__ . '/ControllerTestCase.php';
+
+/**
+ * ⭐⭐ **ข้อความที่สคริปต์เปลี่ยนสด ต้องถูกประกาศ ไม่ใช่เปลี่ยนเงียบ ๆ**
+ *
+ * ⚠️⚠️ ในหน้าบันทึกข้อมูล ข้อความสำคัญที่สุดของหน้าถูกเขียนด้วยสคริปต์ทั้งหมด:
+ *   · "กำลังโหลดข้อมูลเดิมของวันที่ …"
+ *   · "มีข้อมูลอยู่แล้ว — **กดบันทึกจะเป็นการแก้ไขทับ**"
+ *   · "โหลดข้อมูลเดิมไม่สำเร็จ — ตรวจสอบก่อนกดบันทึก"
+ * ข้อความกลางไม่ใช่ของประดับ — มันคือคำเตือนว่า **การกดบันทึกครั้งนี้จะเขียนทับของเดิม**
+ * ถ้าไม่ประกาศ คนที่ใช้โปรแกรมอ่านหน้าจอจะกดบันทึกโดยไม่รู้เลย
+ *
+ * ⚠️ ใช้ `role="status"` (สุภาพ) ไม่ใช่ `alert` — ข้อความเปลี่ยนทุกครั้งที่เลือกวัน
+ * ถ้าขัดจังหวะทุกครั้งจะรบกวนจนใช้งานไม่ได้
+ */
+final class DynamicMessageAccessibilityTest extends ControllerTestCase
+{
+    private function addRecordPage(): string
+    {
+        $userId = $this->createUser('a11y@example.com', 'A11yPass123456');
+        $shopId = $this->createShop($userId, 'ร้านทดสอบ');
+
+        return (string)$this->get('/add-record.php', $this->startSession($userId, $shopId))['body'];
+    }
+
+    /** ⭐ ทุกกล่องที่สคริปต์เขียนข้อความลงไป ต้องเป็นพื้นที่ประกาศสด */
+    public function testEveryLiveMessageAreaAnnouncesItself(): void
+    {
+        $body = $this->addRecordPage();
+
+        foreach ([
+            'existing-record-hint' => 'คำเตือนว่าจะเขียนทับข้อมูลเดิม (ฟอร์มวันเดียว)',
+            'bulk-paste-notice' => 'คำเตือนตอนวางข้อมูลจาก Excel',
+            'bulk-fill-notice' => 'ข้อความตอนเติมวันที่ขาด',
+        ] as $id => $label) {
+            $this->assertMatchesRegularExpression(
+                '/<p[^>]*\bid="' . preg_quote($id, '/') . '"[^>]*>/',
+                $body,
+                'ไม่พบกล่อง "' . $label . '"'
+            );
+            preg_match('/<p[^>]*\bid="' . preg_quote($id, '/') . '"[^>]*>/', $body, $tag);
+            $this->assertStringContainsString(
+                'aria-live',
+                (string)($tag[0] ?? ''),
+                '"' . $label . '" เปลี่ยนข้อความด้วยสคริปต์แต่ไม่ประกาศ — โปรแกรมอ่านหน้าจอจะเงียบ'
+            );
+        }
+    }
+
+    /** ⭐ ช่องวันที่ต้องผูกกับคำเตือน — จะได้ยินตอนโฟกัสช่องนั้น ไม่ต้องเดินหาเอง */
+    public function testTheDateFieldPointsAtTheOverwriteWarning(): void
+    {
+        $body = $this->addRecordPage();
+        preg_match('/<input[^>]*\bid="record-date"[^>]*>/', $body, $tag);
+
+        $this->assertStringContainsString(
+            'aria-describedby="existing-record-hint"',
+            (string)($tag[0] ?? ''),
+            'ช่องวันที่ไม่ได้ผูกกับคำเตือน "จะเขียนทับ"'
+        );
+    }
+
+    /** ⭐ เมนูล่างต้องบอกว่าหน้าไหนคือหน้าปัจจุบัน ไม่ใช่บอกด้วยสีอย่างเดียว */
+    public function testTheBottomNavigationSaysWhichPageYouAreOn(): void
+    {
+        $userId = $this->createUser('nav@example.com', 'NavPass1234567');
+        $shopId = $this->createShop($userId, 'ร้านเมนู');
+        $session = $this->startSession($userId, $shopId);
+
+        $body = (string)$this->get('/history.php', $session)['body'];
+        $this->assertSame(
+            1,
+            substr_count($body, 'aria-current="page"'),
+            'เมนูล่างต้องมีหน้าปัจจุบันหนึ่งเดียวที่ถูกทำเครื่องหมาย'
+        );
+        $this->assertMatchesRegularExpression(
+            '/history\.php"[^>]*aria-current="page"/s',
+            (string)preg_replace('/\s+/', ' ', $body),
+            'เครื่องหมาย "หน้าปัจจุบัน" ไปอยู่ผิดปุ่ม'
+        );
+    }
+
+    /** ⭐ แท็บเข้าสู่ระบบ/สมัครสมาชิก ต้องบอกว่ากำลังเลือกอันไหน */
+    public function testTheLoginTabsSayWhichOneIsSelected(): void
+    {
+        $body = (string)$this->get('/login.php', $this->startSession(0, 0))['body'];
+
+        $this->assertSame(
+            2,
+            substr_count($body, 'role="tab"'),
+            'ปุ่มสองอันนี้ทำหน้าที่เป็นแท็บ แต่ไม่ได้ประกาศตัวว่าเป็นแท็บ'
+        );
+        $this->assertStringContainsString(
+            'aria-selected',
+            $body,
+            'แท็บไม่บอกว่ากำลังเลือกอันไหน — โปรแกรมอ่านหน้าจอจะไม่รู้ว่าฟอร์มที่เห็นเป็นของแท็บไหน'
+        );
+    }
+}

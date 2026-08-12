@@ -86,6 +86,7 @@ require __DIR__ . '/includes/header.php';
             <input
                 id="record-date"
                 name="record_date"
+                aria-describedby="existing-record-hint"
                 type="date"
                 data-date="<?= e(date('d/m/Y')) ?>"
                 max="<?= e($todayDate) ?>"
@@ -138,7 +139,14 @@ require __DIR__ . '/includes/header.php';
 
         <div class="md:col-span-2">
             <?php // บอกให้รู้ตัวว่ากำลังแก้ของเดิม ไม่ใช่เพิ่มใหม่ — JS อัปเดตข้อความนี้ตอนเปลี่ยนวัน ?>
-            <p id="existing-record-hint" class="mb-2 text-xs text-amber-300 <?= $existingRecord !== null ? '' : 'hidden' ?>">
+            <?php /* ⚠️⚠️ ต้องเป็นพื้นที่ประกาศสด (`aria-live`) — ข้อความในนี้ถูก **แก้ด้วยสคริปต์**
+                     ตอนเปลี่ยนวันที่ ("กำลังโหลด…" · "มีข้อมูลอยู่แล้ว กดบันทึกจะแก้ไขทับ" ·
+                     "โหลดไม่สำเร็จ") · ถ้าไม่ประกาศ คนที่ใช้โปรแกรมอ่านหน้าจอจะไม่รู้เลยว่า
+                     การกดบันทึกครั้งนี้จะ **เขียนทับข้อมูลเดิม** ซึ่งเป็นคำเตือนที่สำคัญที่สุดในหน้านี้
+                     ⚠️ ใช้ `role="status"` (สุภาพ) ไม่ใช่ `alert` — ข้อความเปลี่ยนทุกครั้งที่เลือกวัน
+                        ถ้าขัดจังหวะทุกครั้งจะรบกวนจนใช้งานไม่ได้
+                     ⚠️ `aria-describedby` ที่ช่องวันที่ทำให้ได้ยินคำเตือนตอนโฟกัสช่องนั้นด้วย */ ?>
+            <p id="existing-record-hint" role="status" aria-live="polite" class="mb-2 text-xs text-amber-300 <?= $existingRecord !== null ? '' : 'hidden' ?>">
                 <?php // ⚠️ ห้ามเขียน "วันนี้" ตายตัว — ผู้ใช้เปลี่ยนวันที่ได้ แล้วป้ายจะพูดถึงวันผิด ?>
                 ✎ วันที่เลือกไว้มีข้อมูลอยู่แล้ว — ระบบเติมค่าเดิมไว้ให้ กดบันทึกจะเป็นการแก้ไขทับ
             </p>
@@ -179,7 +187,7 @@ require __DIR__ . '/includes/header.php';
                     ↓ เติมวันที่ขาดลงตาราง
                 </button>
             </div>
-            <p id="bulk-fill-notice" class="mt-2 hidden text-xs text-amber-100/70"></p>
+            <p role="status" aria-live="polite" id="bulk-fill-notice" class="mt-2 hidden text-xs text-amber-100/70"></p>
         </div>
     <?php else: ?>
         <div class="mb-4 rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3">
@@ -197,7 +205,7 @@ require __DIR__ . '/includes/header.php';
             แล้วกด <kbd class="rounded bg-white/10 px-1">Ctrl</kbd>+<kbd class="rounded bg-white/10 px-1">V</kbd>
             ในช่องที่ต้องการเริ่มวาง
         </p>
-        <p id="bulk-paste-notice" class="mb-3 hidden text-xs text-amber-200"></p>
+        <p role="status" aria-live="polite" id="bulk-paste-notice" class="mb-3 hidden text-xs text-amber-200"></p>
 
         <?php
         // ⚠️⚠️ ต้องมี `min-w-[…]` ไม่ใช่แค่ `min-w-full`

@@ -245,8 +245,12 @@ $flashError = get_flash('error');
 
             <div class="glass-card p-7 shadow-2xl shadow-indigo-900/5">
                 <div class="mb-6 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/5 p-1 text-sm">
-                    <button type="button" data-tab-trigger="login" class="tab-trigger rounded-lg px-3 py-2.5 font-semibold transition-all duration-150 text-slate-400">เข้าสู่ระบบ</button>
-                    <button type="button" data-tab-trigger="register" class="tab-trigger rounded-lg px-3 py-2.5 font-semibold transition-all duration-150 text-slate-400">สมัครสมาชิก</button>
+                    <?php /* ⚠️ ปุ่มสองอันนี้ทำหน้าที่เป็นแท็บ แต่เดิมบอก "กำลังเลือกอันไหน" ด้วยสีอย่างเดียว
+                             คนที่ใช้โปรแกรมอ่านหน้าจอจะได้ยินแค่ "ปุ่ม เข้าสู่ระบบ" กับ "ปุ่ม สมัครสมาชิก"
+                             โดยไม่รู้ว่าตอนนี้ฟอร์มที่เห็นอยู่เป็นของอันไหน — ซึ่งเป็นหน้าจอแรกสุดที่ผู้ใช้เจอ
+                             `aria-selected` ถูกอัปเดตโดยสคริปต์ทุกครั้งที่สลับแท็บ */ ?>
+                    <button type="button" role="tab" aria-selected="false" data-tab-trigger="login" class="tab-trigger rounded-lg px-3 py-2.5 font-semibold transition-all duration-150 text-slate-400">เข้าสู่ระบบ</button>
+                    <button type="button" role="tab" aria-selected="false" data-tab-trigger="register" class="tab-trigger rounded-lg px-3 py-2.5 font-semibold transition-all duration-150 text-slate-400">สมัครสมาชิก</button>
                 </div>
 
                 <section data-tab-panel="login" class="tab-panel space-y-4">
@@ -339,6 +343,8 @@ $flashError = get_flash('error');
             function render(tab) {
                 triggers.forEach((trigger) => {
                     const isActive = trigger.dataset.tabTrigger === tab;
+                    // ⚠️ ต้องอัปเดตด้วย ไม่งั้นโปรแกรมอ่านหน้าจอจะบอกแท็บที่เลือกอยู่ผิด
+                    trigger.setAttribute('aria-selected', isActive ? 'true' : 'false');
                     trigger.classList.toggle('tab-active', isActive);
                     trigger.classList.toggle('text-indigo-300', isActive);
                     trigger.classList.toggle('text-slate-400', !isActive);

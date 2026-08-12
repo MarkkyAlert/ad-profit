@@ -32,7 +32,11 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
         foreach ($navLinks as $link):
             $isActive = $currentPage === $link['page'];
         ?>
+            <?php /* ⚠️ หน้าปัจจุบันถูกบอกด้วย **สีเท่านั้น** — คนที่ใช้โปรแกรมอ่านหน้าจอ
+                     จะได้ยินปุ่มทั้ง 5 เหมือนกันหมด ไม่รู้ว่าตอนนี้อยู่หน้าไหน
+                     `aria-current="page"` เป็นตัวบอกมาตรฐานที่ทุกโปรแกรมอ่านหน้าจอรู้จัก */ ?>
             <a href="<?= e(app_url($link['href'])) ?>"
+                <?= $isActive ? 'aria-current="page"' : '' ?>
                 class="flex flex-col items-center gap-0.5 rounded-xl px-1 py-2.5 transition-all duration-150 <?= $isActive ? 'nav-active' : 'hover:bg-white/5 hover:text-slate-300' ?>">
                 <span class="text-base leading-none"><?= $link['icon'] ?></span>
                 <span class="mt-0.5 leading-tight"><?= $link['label'] ?></span>
