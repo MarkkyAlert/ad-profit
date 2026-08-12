@@ -765,6 +765,65 @@ final class SharedHelperContractTest extends TestCase
         );
     }
 
+    /**
+     * ⭐⭐⭐ **ทุกช่องตารางที่พิมพ์ข้อความที่ "ผู้ใช้พิมพ์เอง" ต้องมีเพดานความกว้าง + ตัดบรรทัดได้**
+     *
+     * ⚠️⚠️ แถวของตารางตั้ง `whitespace-nowrap` ไว้ให้ตัวเลขไม่ตัดคำกลางจำนวน — ซึ่งถูกแล้ว
+     * สำหรับช่องที่ระบบสร้าง **แต่ผิดทันทีสำหรับช่องที่ผู้ใช้พิมพ์เอง** เพราะยาวได้ถึง
+     * 255 ตัว (โน้ต) และ 100 ตัว (ชื่อร้าน) · ภาษาไทยไม่มีเว้นวรรค เบราว์เซอร์จึงตัดไม่ได้เลย
+     * ช่องนั้นกว้างออกไปเรื่อย ๆ แล้วดันคอลัมน์ที่เหลือออกนอกจอ
+     *
+     * ⚠️⚠️ **วัดจริงมาแล้วกับช่องโน้ต** (จอ 1280): โน้ต 223 ตัวทำให้ช่องกว้าง 1,396px
+     * ดันตารางเป็น 2,249px ในกรอบ 1,078px → **ปุ่มแก้ไข/ลบไปอยู่นอกจอ** แก้รายการนั้นไม่ได้เลย
+     *
+     * ⚠️ ตอนนั้นแก้เฉพาะช่องโน้ต · **ช่องชื่อร้านในหน้ารวมร้าน 3 ที่ตกสำรวจ** ทั้งที่เป็น
+     * ข้อความที่ผู้ใช้พิมพ์เองเหมือนกัน และอยู่ในแถว `whitespace-nowrap` เหมือนกัน
+     * — รูปแบบเดิมของโปรเจกต์นี้: กติกาถูกบังคับใช้ที่หนึ่งแต่ไปไม่ถึงอีกที่หนึ่ง
+     *
+     * ⚠️ ตัวกวาดไล่จาก **ไฟล์จริง** ไม่ใช่รายชื่อที่พิมพ์ไว้ — เพิ่มตารางใหม่ที่โชว์
+     * ชื่อร้าน/โน้ต แล้วลืมใส่เพดาน = แดงทันที
+     */
+    public function testEveryCellHoldingUserTypedTextIsWidthCapped(): void
+    {
+        $root = dirname(__DIR__, 2);
+        // ⚠️ ต้องรู้จัก `$note` ตัวแปรเปล่า ๆ ด้วย — สองตารางที่แก้ไปแล้วใช้ชื่อนี้
+        //    ถ้าจับแต่ `$row['note']` ตัวกวาดจะไม่มีวันเห็นเซลล์โน้ตเลยสักอัน (วัดแล้ว)
+        $userTyped = '/(shop_name|shopName|noteText|\$note\b|\[.note.\])/';
+        $required = ['break-words', 'max-w-'];
+
+        $offenders = [];
+
+        foreach ((array)glob($root . '/*.php') as $file) {
+            $path = (string)$file;
+            $lines = explode("\n", (string)file_get_contents($path));
+
+            foreach ($lines as $number => $line) {
+                if (preg_match('/<td\b[^>]*>/', $line) !== 1) {
+                    continue;
+                }
+                if (preg_match($userTyped, $line) !== 1) {
+                    continue;
+                }
+
+                foreach ($required as $needle) {
+                    if (!str_contains($line, $needle)) {
+                        $offenders[] = basename($path) . ':' . ($number + 1)
+                            . ' ขาด "' . $needle . '" → ' . trim(mb_substr($line, 0, 110));
+                        break;
+                    }
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "ช่องตารางที่ผู้ใช้พิมพ์ข้อความเองต้องตัดบรรทัดได้และมีเพดานความกว้าง\n"
+            . "(ไทยไม่มีเว้นวรรค ช่องจะกว้างจนดันคอลัมน์อื่นออกนอกจอ)\n"
+            . implode("\n", $offenders)
+        );
+    }
+
     public function testNobodyUsesGreyTooFaintToRead(): void
     {
         $banned = ['text-slate-500', 'text-slate-600', 'text-slate-700', 'text-gray-500', 'text-gray-600'];

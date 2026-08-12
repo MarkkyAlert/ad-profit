@@ -736,7 +736,7 @@ require __DIR__ . '/includes/header.php';
                                 ?>
                                 <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
                                     <td class="px-3 py-2 text-slate-400 font-semibold"><?= e((string)($index + 1)) ?></td>
-                                    <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
+                                    <td class="px-3 py-2 text-slate-300 font-medium whitespace-normal break-words lg:max-w-[16rem] lg:align-top"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
                                     <td class="px-3 py-2 text-orange-400 font-medium"><?= e($rowHasData ? formatMoney($rowRevenue) : no_value_text()) ?></td>
                                     <td class="px-3 py-2 text-cyan-400 font-medium"><?= e($rowHasData ? formatMoney($rowAdCost) : no_value_text()) ?></td>
                                     <td class="px-3 py-2 <?= !$rowHasData ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?> font-bold"><?= e($rowHasData ? formatMoney($rowProfit) : no_value_text()) ?></td>
@@ -1080,7 +1080,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                                 ?>
                                 <tr class="border-b border-white/[0.06] table-row-hover whitespace-nowrap">
                                     <td class="px-3 py-2 text-slate-400 font-semibold"><?= e((string)($index + 1)) ?></td>
-                                    <td class="px-3 py-2 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
+                                    <td class="px-3 py-2 text-slate-300 font-medium whitespace-normal break-words lg:max-w-[16rem] lg:align-top"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
                                     <td class="px-3 py-2 text-orange-400 font-medium"><?= e($rowHasData ? formatMoney($rowRevenue) : no_value_text()) ?></td>
                                     <td class="px-3 py-2 text-cyan-400 font-medium"><?= e($rowHasData ? formatMoney($rowAdCost) : no_value_text()) ?></td>
                                     <td class="px-3 py-2 <?= !$rowHasData ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?> font-bold"><?= e($rowHasData ? formatMoney($rowProfit) : no_value_text()) ?></td>
@@ -1233,7 +1233,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                             ?>
                             <tr class="border-b border-white/[0.06] table-row-hover">
                                 <td class="px-3 py-1.5 text-slate-400"><?= e((string)($rowIndex + 1)) ?></td>
-                                <td class="px-3 py-1.5 text-slate-300 font-medium"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
+                                <td class="px-3 py-1.5 text-slate-300 font-medium whitespace-normal break-words lg:max-w-[16rem] lg:align-top"><?= e((string)($row['shop_name'] ?? 'ร้านค้า')) ?></td>
                                 <td class="px-3 py-1.5 text-orange-400 font-medium"><?= e($rowHasData ? formatMoney($rowRevenue) : no_value_text()) ?></td>
                                 <td class="px-3 py-1.5 text-cyan-400 font-medium"><?= e($rowHasData ? formatMoney($rowAdCost) : no_value_text()) ?></td>
                                 <td class="px-3 py-1.5 <?= !$rowHasData ? 'text-slate-400' : ($rowProfit >= 0 ? 'text-green-400' : 'text-red-400') ?> font-bold"><?= e($rowHasData ? formatMoney($rowProfit) : no_value_text()) ?></td>
