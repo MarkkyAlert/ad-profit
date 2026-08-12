@@ -46,6 +46,25 @@ if (!headers_sent()) {
 }
 
 $escape = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+
+/* ⚠️⚠️ ปุ่มกลับต้องคำนวณที่อยู่เอง — ห้ามเขียน `/dashboard.php` ตายตัว
+ *
+ * บน Hostinger รากโปรเจกต์คือ `public_html/` ลิงก์แบบ `/dashboard.php` จึงถูก
+ * **แต่คู่มือบอกให้ติดตั้งใน `http://localhost/ad-profit/` ตอนพัฒนา** และคนที่ซื้อ
+ * เทมเพลตไปวางในโฟลเดอร์ย่อยก็มี · ลิงก์ที่ขึ้นต้นด้วย `/` จะพาไปที่รากโดเมน
+ * ซึ่งไม่มีแอปอยู่ → กดปุ่ม "กลับหน้าแดชบอร์ด" แล้วเจอ 404 ของ Apache ซ้ำอีกชั้น
+ * (หน้าที่มีไว้ช่วยคนหลงทาง กลายเป็นทางตัน)
+ *
+ * ⚠️ ห้ามใช้ `app_url()` — หน้านี้ต้องขึ้นได้แม้ตอนที่ระบบพังจนโหลด bootstrap ไม่ได้
+ * จึงคำนวณจาก `SCRIPT_NAME` ซึ่งเว็บเซิร์ฟเวอร์ให้มาเสมอ ไม่ต้องพึ่งไฟล์อื่นเลย
+ */
+$scriptName = (string)($_SERVER['SCRIPT_NAME'] ?? '/error.php');
+$basePath = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
+// ⚠️ กันค่าที่ไม่คาดคิด — ยอมเฉพาะเส้นทางที่ขึ้นต้นด้วย / และไม่มีตัวพาออกนอกเว็บ
+if ($basePath !== '' && (!str_starts_with($basePath, '/') || str_contains($basePath, '..'))) {
+    $basePath = '';
+}
+$dashboardUrl = $basePath . '/dashboard.php';
 ?>
 <!doctype html>
 <html lang="th">
@@ -157,7 +176,7 @@ $escape = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTE
         <p class="code">รหัส <?= $escape((string)$status) ?></p>
         <h1><?= $escape($heading) ?></h1>
         <p><?= $escape($detail) ?></p>
-        <a href="/dashboard.php">กลับหน้าแดชบอร์ด</a>
+        <a href="<?= $escape($dashboardUrl) ?>">กลับหน้าแดชบอร์ด</a>
     </div>
 </body>
 
