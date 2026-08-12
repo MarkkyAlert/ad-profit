@@ -261,6 +261,85 @@ final class ReportingWritePathLineageTest extends ControllerTestCase
     }
 
     /**
+     * ⭐⭐⭐ **ทาง 5 — การลบ ก็เป็นทางเขียนเหมือนกัน และเป็นทางเดียวที่ไม่เคยถูกไล่ถึงปลายทาง**
+     *
+     * ⚠️⚠️ ตาข่ายเดิมไล่ครบ 4 ทางที่ *เพิ่ม/แก้* ข้อมูล (กรอกเดี่ยว · ตารางหลายวัน ·
+     * แก้ไขรายการ · นำเข้าไฟล์) แต่ **การลบมีเทสต์แค่ระดับ endpoint** คือยืนยันว่าแถว
+     * หายไปจากฐานข้อมูล — **ไม่เคยมีใครถามว่ารายงานตามทันไหม**
+     *
+     * ทำไมถึงสำคัญ: การลบคือทางเดียวที่ทำให้ตัวเลข **ลดลง** · ถ้าปลายทางไหนสักที่
+     * ยังนับแถวที่ลบไปแล้ว ผู้ใช้จะเห็นกำไรสูงกว่าความจริงโดยไม่มีอะไรบอก และเป็น
+     * ทิศทางที่คนไม่ทันสังเกต (เลขมากขึ้นดูเหมือนข่าวดี)
+     *
+     * ⚠️ ต้องตรวจ **สองด้าน**: ยอดของวันที่ลบต้องหายไป **และ** ยอดของแถวประกอบฉาก
+     * ในเดือนเดียวกันต้องยังอยู่ครบ — ไม่งั้นการ "แก้" ที่ลบทั้งเดือนทิ้งก็ผ่านได้
+     */
+    public function testDeletingARecordReachesEveryReport(): void
+    {
+        [, $shopId, $session] = $this->signedInShop('delete@example.com');
+
+        $this->pdo->prepare(
+            'INSERT INTO daily_records (shop_id, record_date, revenue, ad_cost, note, created_at, updated_at)
+             VALUES (?, \'2026-08-05\', ?, ?, \'จะถูกลบ\', NOW(), NOW())'
+        )->execute([$shopId, self::REVENUE, self::AD_COST]);
+        $recordId = (int)$this->pdo->query('SELECT id FROM daily_records ORDER BY id DESC LIMIT 1')->fetchColumn();
+
+        // ยืนยันก่อนว่ารายงานเห็นมันจริง ไม่งั้น "หายไป" ทีหลังพิสูจน์อะไรไม่ได้
+        $before = $this->annualMonthProfitOnScreen($session, 'ส.ค.');
+        $this->assertNotNull($before, 'หน้ารายปีไม่แสดงเดือน ส.ค. ตั้งแต่ก่อนลบ');
+        $this->assertEqualsWithDelta(self::MONTH_PROFIT, $before, 0.005, 'ยอดตั้งต้นก่อนลบไม่ตรง');
+
+        $response = $this->post('/api/records.php', [
+            'csrf_token' => $this->csrfTokenFor($session),
+            'action' => 'delete',
+            'shop_context_id' => $this->shopContextFrom($session),
+            'record_id' => (string)$recordId,
+        ], $session);
+        $this->assertSame(302, $response['status']);
+
+        $remaining = (int)$this->pdo->query(
+            "SELECT COUNT(*) FROM daily_records WHERE shop_id = {$shopId} AND record_date = '2026-08-05'"
+        )->fetchColumn();
+        $this->assertSame(0, $remaining, 'แถวยังอยู่ในฐานข้อมูลหลังกดลบ');
+
+        $expected = self::EXTRA_REVENUE - self::EXTRA_AD_COST;   // เหลือแต่แถวประกอบฉาก
+
+        $onScreen = $this->annualMonthProfitOnScreen($session, 'ส.ค.');
+        $this->assertNotNull($onScreen, 'หน้ารายปีไม่แสดงเดือน ส.ค. หลังลบ');
+        $this->assertEqualsWithDelta(
+            $expected,
+            $onScreen,
+            0.005,
+            'หน้ารายปียังนับแถวที่ลบไปแล้ว — ผู้ใช้เห็นกำไรสูงกว่าความจริง'
+        );
+
+        $dashboard = $this->get('/dashboard.php?range=month_pick&month=2026-08', $session);
+        $this->assertSame(200, $dashboard['status'], 'เปิดแดชบอร์ดไม่สำเร็จหลังลบ');
+        $plain = (string)preg_replace('/\s+/u', ' ', strip_tags(
+            (string)preg_replace('#<script.*?</script>#s', ' ', $dashboard['body'])
+        ));
+        $this->assertStringContainsString(formatMoney($expected), $plain, 'แดชบอร์ดไม่ได้อัปเดตหลังลบ');
+        $this->assertStringNotContainsString(
+            formatMoney(self::MONTH_PROFIT),
+            $plain,
+            'แดชบอร์ดยังพิมพ์ยอดเดิมที่รวมแถวที่ลบไปแล้ว'
+        );
+
+        $csv = $this->get('/api/export.php?month=2026-08', $session);
+        $this->assertSame(200, $csv['status'], 'ดาวน์โหลด CSV ไม่สำเร็จหลังลบ');
+        $this->assertStringNotContainsString(
+            number_format(self::PROFIT, 2, '.', ''),
+            $csv['body'],
+            'ไฟล์ CSV ยังมีรายการที่ลบไปแล้ว'
+        );
+        $this->assertStringContainsString(
+            number_format(self::EXTRA_REVENUE, 2, '.', ''),
+            $csv['body'],
+            'ไฟล์ CSV หายไปทั้งเดือน — การลบไม่ควรกระทบวันอื่น'
+        );
+    }
+
+    /**
      * ⭐⭐ เป้าหมายรายเดือนที่ตั้งผ่าน endpoint จริง ต้องไปโผล่ในหน้ารายปี
      *
      * ⚠️ `monthly_goals` เป็นตารางเดียวที่รายงานอ่านแต่ไม่ได้มาจากทางเขียน record
