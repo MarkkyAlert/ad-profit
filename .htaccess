@@ -43,7 +43,7 @@ ErrorDocument 500 /error.php
 # เปิดให้เข้าถึงเฉพาะ: หน้าเว็บที่รากโปรเจกต์ และ api/
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^(app|cron|database|docs|includes|logs|tests|uploads|vendor)/ - [F,L]
+    RewriteRule ^(app|cron|database|docs|includes|logs|tests|tools|uploads|vendor)/ - [F,L]
 
     # ── ลิงก์ที่ไม่มีอยู่จริง → หน้าแจ้งข้อผิดพลาดของเราเอง ──────────────────
     # ⚠️⚠️ ทำที่นี่แทน `ErrorDocument 404` เพราะพาธตรงนี้ **สัมพัทธ์กับโฟลเดอร์
