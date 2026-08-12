@@ -460,6 +460,8 @@ final class BrowserScriptParityTest extends ControllerTestCase
             'เข้าสู่ระบบ' => ['login.php'],
             'ส่วนหัวร่วม' => ['includes/header.php'],
             'ส่วนท้ายร่วม' => ['includes/footer.php'],
+            // ตัวกันกดส่งซ้ำของหน้าเดี่ยว (เข้าสู่ระบบ · ลืมรหัสผ่าน · ตั้งรหัสใหม่)
+            'ตัวกันกดส่งซ้ำของหน้าเดี่ยว' => ['includes/auth-form-guard.php'],
         ];
     }
 

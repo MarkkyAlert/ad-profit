@@ -378,6 +378,8 @@ $flashError = get_flash('error');
             });
         })();
     </script>
+
+    <?php require __DIR__ . '/includes/auth-form-guard.php'; ?>
 </body>
 
 </html>

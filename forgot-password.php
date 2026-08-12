@@ -125,5 +125,7 @@ $pageTitle = 'ลืมรหัสผ่าน - ' . APP_NAME;
             </div>
         </div>
     </div>
+
+    <?php require __DIR__ . '/includes/auth-form-guard.php'; ?>
 </body>
 </html>
