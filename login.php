@@ -244,16 +244,23 @@ $flashError = get_flash('error');
             </div>
 
             <div class="glass-card p-7 shadow-2xl shadow-indigo-900/5">
-                <div class="mb-6 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/5 p-1 text-sm">
-                    <?php /* ⚠️ ปุ่มสองอันนี้ทำหน้าที่เป็นแท็บ แต่เดิมบอก "กำลังเลือกอันไหน" ด้วยสีอย่างเดียว
-                             คนที่ใช้โปรแกรมอ่านหน้าจอจะได้ยินแค่ "ปุ่ม เข้าสู่ระบบ" กับ "ปุ่ม สมัครสมาชิก"
-                             โดยไม่รู้ว่าตอนนี้ฟอร์มที่เห็นอยู่เป็นของอันไหน — ซึ่งเป็นหน้าจอแรกสุดที่ผู้ใช้เจอ
-                             `aria-selected` ถูกอัปเดตโดยสคริปต์ทุกครั้งที่สลับแท็บ */ ?>
-                    <button type="button" role="tab" aria-selected="false" data-tab-trigger="login" class="tab-trigger rounded-lg px-3 py-2.5 font-semibold transition-all duration-150 text-slate-400">เข้าสู่ระบบ</button>
-                    <button type="button" role="tab" aria-selected="false" data-tab-trigger="register" class="tab-trigger rounded-lg px-3 py-2.5 font-semibold transition-all duration-150 text-slate-400">สมัครสมาชิก</button>
+                <?php /* ⚠️⚠️ ปุ่มสองอันนี้ทำหน้าที่เป็นแท็บ แต่เดิมบอก "กำลังเลือกอันไหน" ด้วยสีอย่างเดียว
+                         คนที่ใช้โปรแกรมอ่านหน้าจอจะได้ยินแค่ "ปุ่ม เข้าสู่ระบบ" กับ "ปุ่ม สมัครสมาชิก"
+                         โดยไม่รู้ว่าตอนนี้ฟอร์มที่เห็นอยู่เป็นของอันไหน — ซึ่งเป็นหน้าจอแรกสุดที่ผู้ใช้เจอ
+
+                         ⚠️ ต้องประกาศให้ครบทั้งชุด ไม่ใช่แค่ `aria-selected`:
+                           · `role="tablist"` ที่กล่องครอบ — บอกว่าปุ่มสองอันนี้เป็นชุดเดียวกัน
+                             (ไม่งั้นถูกอ่านเป็นปุ่มลอย ๆ สองปุ่มที่ไม่เกี่ยวอะไรกัน)
+                           · `aria-controls` + `role="tabpanel"` + `aria-labelledby` — บอกว่า
+                             แท็บไหนคุมฟอร์มไหน คนที่ใช้โปรแกรมอ่านหน้าจอจึงกระโดดจากแท็บ
+                             ไปยังฟอร์มของมันได้ตรง ๆ แทนที่จะต้องไล่อ่านลงมาทีละบรรทัด
+                         `aria-selected` ถูกอัปเดตโดยสคริปต์ทุกครั้งที่สลับแท็บ */ ?>
+                <div role="tablist" aria-label="เข้าสู่ระบบหรือสมัครสมาชิก" class="mb-6 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/5 p-1 text-sm">
+                    <button type="button" role="tab" id="tab-login" aria-selected="false" aria-controls="panel-login" data-tab-trigger="login" class="tab-trigger rounded-lg px-3 py-2.5 font-semibold transition-all duration-150 text-slate-400">เข้าสู่ระบบ</button>
+                    <button type="button" role="tab" id="tab-register" aria-selected="false" aria-controls="panel-register" data-tab-trigger="register" class="tab-trigger rounded-lg px-3 py-2.5 font-semibold transition-all duration-150 text-slate-400">สมัครสมาชิก</button>
                 </div>
 
-                <section data-tab-panel="login" class="tab-panel space-y-4">
+                <section role="tabpanel" id="panel-login" aria-labelledby="tab-login" data-tab-panel="login" class="tab-panel space-y-4">
                     <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" class="space-y-4">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="login">
@@ -276,7 +283,7 @@ $flashError = get_flash('error');
                     </form>
                 </section>
 
-                <section data-tab-panel="register" class="tab-panel hidden space-y-4">
+                <section role="tabpanel" id="panel-register" aria-labelledby="tab-register" data-tab-panel="register" class="tab-panel hidden space-y-4">
                     <form action="<?= e(app_url('/api/auth.php')) ?>" method="post" class="space-y-4">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="register">

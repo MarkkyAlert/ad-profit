@@ -103,4 +103,61 @@ final class DynamicMessageAccessibilityTest extends ControllerTestCase
             'แท็บไม่บอกว่ากำลังเลือกอันไหน — โปรแกรมอ่านหน้าจอจะไม่รู้ว่าฟอร์มที่เห็นเป็นของแท็บไหน'
         );
     }
+
+    /**
+     * ⭐⭐ แท็บต้องบอกด้วยว่า **ตัวเองคุมฟอร์มไหน** ไม่ใช่แค่บอกว่ากำลังเลือกอันไหน
+     *
+     * ⚠️ `role="tab"` + `aria-selected` อย่างเดียวยังไม่พอ — ปุ่มสองอันจะถูกอ่านเป็น
+     * ปุ่มลอย ๆ ที่ไม่เกี่ยวอะไรกัน และไม่มีอะไรเชื่อมไปยังฟอร์มที่มันคุมอยู่
+     * คนที่ใช้โปรแกรมอ่านหน้าจอจึงต้องไล่อ่านลงมาทีละบรรทัดเพื่อหาว่าฟอร์มอยู่ตรงไหน
+     * ทั้งที่หน้านี้คือหน้าจอแรกสุดที่ผู้ใช้ทุกคนต้องผ่าน
+     *
+     * ต้องครบชุด: `role="tablist"` ที่กล่องครอบ · `aria-controls` ที่แท็บ ·
+     * `role="tabpanel"` + `aria-labelledby` ที่ฟอร์ม — และ **ต้องชี้ถึงกันจริง**
+     */
+    public function testEachTabSaysWhichFormItControls(): void
+    {
+        $body = (string)$this->get('/login.php', $this->startSession(0, 0))['body'];
+
+        $this->assertStringContainsString(
+            'role="tablist"',
+            $body,
+            'ไม่มีกล่องครอบที่บอกว่าปุ่มสองอันนี้เป็นชุดแท็บเดียวกัน'
+        );
+
+        preg_match_all('/<button[^>]*role="tab"[^>]*>/i', $body, $tabs);
+        $this->assertCount(2, $tabs[0], 'ต้องมีแท็บ 2 อัน');
+
+        foreach ($tabs[0] as $tab) {
+            $this->assertSame(
+                1,
+                preg_match('/\bid="([^"]+)"/', $tab, $tabId),
+                'แท็บไม่มี id ฟอร์มจึงชี้กลับมาหาไม่ได้: ' . $tab
+            );
+            $this->assertSame(
+                1,
+                preg_match('/aria-controls="([^"]+)"/', $tab, $controls),
+                'แท็บไม่ได้บอกว่าคุมฟอร์มไหน: ' . $tab
+            );
+
+            /* ⚠️ ต้องพิสูจน์ว่า **ชี้ถึงกันจริง** ไม่ใช่แค่มีคำว่า aria-controls อยู่
+               ชื่อที่ชี้ผิดจะทำให้โปรแกรมอ่านหน้าจอกระโดดไปที่ที่ไม่มีอยู่ ซึ่งแย่กว่าไม่ใส่ */
+            $panelPattern = '/<section[^>]*id="' . preg_quote($controls[1], '/') . '"[^>]*>/i';
+            $this->assertSame(
+                1,
+                preg_match($panelPattern, $body, $panel),
+                'แท็บชี้ไปที่ "' . $controls[1] . '" แต่ไม่มีฟอร์มที่ใช้ชื่อนี้'
+            );
+            $this->assertStringContainsString(
+                'role="tabpanel"',
+                $panel[0],
+                'ฟอร์ม "' . $controls[1] . '" ไม่ได้ประกาศตัวว่าเป็นเนื้อหาของแท็บ'
+            );
+            $this->assertStringContainsString(
+                'aria-labelledby="' . $tabId[1] . '"',
+                $panel[0],
+                'ฟอร์ม "' . $controls[1] . '" ไม่ได้ชี้กลับไปหาแท็บที่คุมมัน'
+            );
+        }
+    }
 }
