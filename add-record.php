@@ -253,7 +253,7 @@ require __DIR__ . '/includes/header.php';
                          ช่องมาตรฐาน · หน้าเดียวกันเขียน "8 ส.ค. 2569" ในตาราง ผู้ใช้จึงต้อง
                          แปลงวันที่ในหัวไปมา → เขียนเดือนแบบไทยกำกับไว้ข้าง ๆ ให้อ่านตรงกัน
                          (สคริปต์อัปเดตข้อความนี้เมื่อผู้ใช้เปลี่ยนเดือน) */ ?>
-                <span id="bulk-month-thai" class="text-sm text-slate-300"><?= e(formatThaiMonth(date('Y-m'))) ?></span>
+                <span id="bulk-month-thai" data-thai-month-for="bulk-month" class="text-sm text-slate-300"><?= e(formatThaiMonth(date('Y-m'))) ?></span>
             </div>
 
             <button type="button" id="bulk-add-row" class="btn-ghost px-4 py-2 text-sm">+ เพิ่มแถว</button>

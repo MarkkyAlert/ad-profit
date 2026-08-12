@@ -455,6 +455,7 @@ require __DIR__ . '/includes/header.php';
                         max="<?= e(date('Y-m')) ?>"
                         value="<?= e($selectedMonth) ?>"
                         class="rounded-xl px-3 py-2 text-sm transition-all">
+                    <span data-thai-month-for="overview-month" class="text-sm text-slate-300"><?= e(formatThaiMonth($selectedMonth)) ?></span>
                     <button type="submit" class="btn-ghost px-4 py-2 text-sm">แสดงผล</button>
                 </form>
             <?php endif; ?>

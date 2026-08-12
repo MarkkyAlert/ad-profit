@@ -498,6 +498,7 @@ require __DIR__ . '/includes/header.php';
                     <label for="month-pick-input" class="mb-1 block text-xs text-slate-400">เดือน</label>
                     <input id="month-pick-input" name="month" type="month" max="<?= e(date('Y-m')) ?>" value="<?= e($monthPickerValue) ?>" class="rounded-xl px-3 py-2 text-sm transition-all">
                 </div>
+                <span data-thai-month-for="month-pick-input" class="pb-2 text-sm text-slate-300"><?= e(formatThaiMonth($monthPickerValue)) ?></span>
             </div>
 
             <button type="submit" class="btn-ghost px-4 py-2 text-sm">อัปเดต</button>

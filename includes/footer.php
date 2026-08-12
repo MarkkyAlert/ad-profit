@@ -137,6 +137,46 @@ $isSignedIn = $isSignedIn ?? (isset($_SESSION['user_id']) && (int)$_SESSION['use
             }
         });
 
+        /* ⭐⭐ ป้ายเดือนภาษาไทยกำกับช่อง `<input type="month">`
+           ⚠️ ช่องชนิดนี้เขียนเดือนเป็นภาษาอังกฤษและปี ค.ศ. เสมอ ("August 2026") ตามภาษา
+              ของเบราว์เซอร์ — **แก้ที่ตัวช่องไม่ได้** เป็นข้อจำกัดของเบราว์เซอร์
+           · ขณะที่รายงานทั้งหน้าเขียน "ส.ค. 2569" ผู้ใช้จึงต้องแปลงเดือนและปีไปมา
+             ระหว่างตัวกรองกับผลลัพธ์ที่อยู่บนจอเดียวกัน
+           · หน้าบันทึกข้อมูลแก้ด้วยการเขียนกำกับไว้ข้าง ๆ อยู่แล้ว — หน้าที่เหลือตกสำรวจ
+           ⚠️⚠️ ชื่อเดือนมาจาก PHP (`formatThaiMonth()`) ไม่ได้พิมพ์ซ้ำในนี้ —
+              จะได้ไม่มีวันเพี้ยนจากฝั่งเซิร์ฟเวอร์ */
+        const THAI_MONTH_LABELS = <?= json_encode(array_map(
+            // เอาชื่อเดือนจากตัวจริง แล้วตัดปีออก (เหลือแค่ "ม.ค.") — ปีเติมทีหลังจากค่าในช่อง
+            static fn(int $month): string => (string)preg_replace(
+                '/\s*\d+$/u',
+                '',
+                formatThaiMonth(sprintf('2000-%02d', $month))
+            ),
+            range(1, 12)
+        ), JSON_UNESCAPED_UNICODE) ?>;
+
+        document.querySelectorAll('[data-thai-month-for]').forEach((label) => {
+            const input = document.getElementById(label.getAttribute('data-thai-month-for'));
+            if (!input) {
+                return;
+            }
+
+            const paint = () => {
+                const matched = /^(\d{4})-(\d{2})$/.exec(input.value || '');
+                if (!matched) {
+                    label.textContent = '';
+                    return;
+                }
+
+                const name = THAI_MONTH_LABELS[Number(matched[2]) - 1] || '';
+                label.textContent = name + ' ' + (Number(matched[1]) + 543);   // ปี พ.ศ.
+            };
+
+            paint();
+            input.addEventListener('change', paint);
+            input.addEventListener('input', paint);
+        });
+
         /* ⭐ ช่องที่กรอกผิดต้องถูกทำเครื่องหมายไว้ ไม่ใช่บอกแค่ในแถบข้อความ
            ใช้ผลตรวจของเบราว์เซอร์เอง (required · type=email · min/max) จึงครอบทุกฟอร์ม
            ในระบบโดยไม่ต้องไปแก้ทีละหน้า · ธงหลุดทันทีที่ผู้ใช้แตะช่องนั้น */
