@@ -192,7 +192,8 @@ class ExportService
         // ปีปัจจุบันตัดที่วันนี้ เพราะ daily_records เป็น actuals เท่านั้น
         // ปีอดีตยัง export ได้เต็มปีตามเดิม
         $endOfLastMonth = (new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $lastMonth)))->format('Y-m-t');
-        $endDate = $year === (int)$todayObject->format('Y')
+        $isCurrentYear = $year === (int)$todayObject->format('Y');
+        $endDate = $isCurrentYear
             ? $todayObject->format('Y-m-d')
             : $endOfLastMonth;
 
@@ -246,6 +247,11 @@ class ExportService
             'data' => [
                 'year' => $year,
                 'shop_name' => (string)($shop['name'] ?? 'ร้านค้า'),
+                /* ⚠️ ไฟล์ต้องบอกวันตัดของตัวเองได้ — หน้าประวัติไม่ตัดวันอนาคต
+                   (ต้องแสดงแถวเก่าให้ลบได้) ไฟล์จึงมีแถวน้อยกว่าจอได้โดยไม่มีอะไรอธิบาย
+                   ผู้เรียกเอาสองค่านี้ไปทำข้อความผ่าน `export_coverage_note()` */
+                'covered_through' => $endDate,
+                'covered_through_is_trimmed' => $isCurrentYear,
                 'rows' => $rows,
                 'totals' => [
                     // ⭐ ปัดเป็นสตางค์ — ไฟล์ที่ดาวน์โหลดต้องตรงกับตัวเลขบนหน้าเว็บ

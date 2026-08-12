@@ -184,6 +184,24 @@ class XlsxReportService
             ->getStartColor()->setARGB(self::TOTALS_FILL_ARGB);
         $sheet->getRowDimension($totalsRowNumber)->setRowHeight(self::BASE_ROW_HEIGHT + 2);
 
+        /* ⭐⭐ บอกวันตัดของไฟล์เอง — ปีปัจจุบันตัดที่วันนี้เพราะ `daily_records`
+           เป็นยอดจริงเท่านั้น · หน้าประวัติไม่ตัด (ต้องแสดงแถวเก่าที่ลงวันล่วงหน้า
+           ไว้ให้ลบได้) ร้านที่มีแถวแบบนั้นจึงเห็นจำนวนแถวสองที่ไม่เท่ากัน
+           **[เจ้าของระบบตัดสิน 2026-08-12] คงพฤติกรรมไว้ แต่ให้ไฟล์อธิบายตัวเอง**
+           ⚠️ ข้อความอยู่ที่ `export_coverage_note()` ที่เดียว และคืน null เมื่อไม่ได้ตัด
+              (ปีที่จบแล้ว) — เขียนกำกับทุกปีคือเสียงรบกวนที่ไม่บอกอะไรใหม่ */
+        $coverageNote = export_coverage_note(
+            isset($payload['covered_through']) ? (string)$payload['covered_through'] : null,
+            (bool)($payload['covered_through_is_trimmed'] ?? false)
+        );
+
+        if ($coverageNote !== null) {
+            $noteRowNumber = $totalsRowNumber + 2;
+            $sheet->setCellValueExplicit('A' . $noteRowNumber, $coverageNote, DataType::TYPE_STRING);
+            $sheet->mergeCells('A' . $noteRowNumber . ':' . $noteColumn . $noteRowNumber);
+            $sheet->getStyle('A' . $noteRowNumber)->getFont()->setItalic(true)->setSize(self::BASE_FONT_SIZE - 1);
+        }
+
         $this->setColumnWidths($sheet, [
             'A' => 14, 'B' => 15, 'C' => 15, 'D' => 15, 'E' => 11, 'F' => 30,
         ]);
