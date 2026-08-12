@@ -684,6 +684,12 @@ $flashError = get_flash('error');
                 position: relative
             }
 
+            /* ⚠️ `<select>` เป็น element ที่เบราว์เซอร์วาดเอง — `::after` ไม่ถูกเรนเดอร์
+               จึงขยายพื้นที่กดด้วย ::after ไม่ได้ ต้องเพิ่มความสูงจริงแทน */
+            .tap-height {
+                min-height: 44px
+            }
+
             .tap-target::after {
                 content: "";
                 position: absolute;
@@ -865,7 +871,7 @@ $flashError = get_flash('error');
                          โปรแกรมอ่านหน้าจอจะได้บอกว่า "ยุบอยู่/กางอยู่" · เดิมได้ยินแค่ชื่ออีเมล
                          กับสามเหลี่ยม ▼ โดยไม่รู้ว่ากดแล้วมีอะไร ทั้งที่ "ออกจากระบบ" ซ่อนอยู่ในนี้
                          · ▼ เป็นแค่ภาพประกอบ ซ่อนจากโปรแกรมอ่านหน้าจอ ไม่งั้นถูกอ่านเป็นชื่อรูปสามเหลี่ยม */ ?>
-                <button type="button" id="profile-menu-button" aria-expanded="false" aria-haspopup="true" aria-controls="profile-dropdown" class="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 sm:py-1.5 text-xs text-slate-300 shadow-sm hover:bg-white/10 transition-colors">
+                <button type="button" id="profile-menu-button" aria-expanded="false" aria-haspopup="true" aria-controls="profile-dropdown" class="tap-target flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 sm:py-1.5 text-xs text-slate-300 shadow-sm hover:bg-white/10 transition-colors">
                     <span aria-hidden="true">👤</span>
                     <?php /* title = อีเมลเสมอ ผู้ใช้จะได้ยืนยันบัญชีได้แม้ตั้งชื่อเล่นไว้ */ ?>
                     <span class="max-w-[120px] sm:max-w-[180px] truncate" title="<?= e($userEmail) ?>"><?= e($userLabel) ?></span>
@@ -893,7 +899,7 @@ $flashError = get_flash('error');
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="switch">
                         <input type="hidden" name="redirect_to" value="<?= e($redirectTo) ?>">
-                        <select name="shop_id" aria-label="เลือกร้านค้า" onchange="this.form.submit()" class="w-full sm:w-48 lg:w-56 rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 sm:py-1.5 text-sm text-slate-300 font-medium shadow-sm hover:border-indigo-500/50 transition-colors">
+                        <select name="shop_id" aria-label="เลือกร้านค้า" onchange="this.form.submit()" class="tap-height w-full sm:w-48 lg:w-56 rounded-xl border border-white/10 bg-[#070c18] px-3 py-2 sm:py-1.5 text-sm text-slate-300 font-medium shadow-sm hover:border-indigo-500/50 transition-colors">
                             <?php foreach ($headerShops as $shop): ?>
                                 <?php
                                 // ⚠️ ห้ามใช้ชื่อ $shopId — header.php ถูก include กลางหน้า
@@ -915,9 +921,9 @@ $flashError = get_flash('error');
 
                 <div class="shrink-0 text-xs">
                     <?php if ($currentPage === 'shops'): ?>
-                        <a href="<?= e(app_url('/dashboard.php')) ?>" class="btn-ghost px-2.5 py-1.5 sm:px-3" data-loading-link="true">← กลับ</a>
+                        <a href="<?= e(app_url('/dashboard.php')) ?>" class="tap-target btn-ghost px-2.5 py-1.5 sm:px-3" data-loading-link="true">← กลับ</a>
                     <?php else: ?>
-                        <a href="<?= e(app_url('/shops.php')) ?>" class="btn-primary px-2.5 py-1.5 sm:px-3" data-loading-link="true">🏪 จัดการร้าน</a>
+                        <a href="<?= e(app_url('/shops.php')) ?>" class="tap-target btn-primary px-2.5 py-1.5 sm:px-3" data-loading-link="true">🏪 จัดการร้าน</a>
                     <?php endif; ?>
                 </div>
             </div>

@@ -1000,6 +1000,11 @@ final class SharedHelperContractTest extends TestCase
     private function markupOnly(string $code): string
     {
         $code = (string)preg_replace('#<script\b[^>]*>.*?</script>#is', ' ', $code);
+        /* ⚠️⚠️ ต้องตัด `<style>` ด้วย เหตุผลเดียวกับ `<script>` เป๊ะ ๆ —
+           คอมเมนต์ CSS ที่อธิบายกติกามักอ้างชื่อแท็กตรง ๆ เช่น "`<select>` เป็น element
+           ที่เบราว์เซอร์วาดเอง `::after` จึงไม่ทำงาน" · ไม่ตัดแล้วตัวกวาดจะนับข้อความ
+           ในคอมเมนต์เป็น "ช่องกรอกที่ไม่มีชื่อ" แล้วรายงานผิด (เกิดขึ้นจริงมาแล้ว) */
+        $code = (string)preg_replace('#<style\b[^>]*>.*?</style>#is', ' ', $code);
         $code = (string)preg_replace('/<\?(php|=)(.*?)(\?>|$)/s', '__PHP__', $code);
 
         return (string)preg_replace('/<!--.*?-->/s', ' ', $code);
