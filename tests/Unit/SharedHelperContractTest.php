@@ -689,6 +689,82 @@ final class SharedHelperContractTest extends TestCase
      * ⚠️ เทสต์นี้กวาด "ชื่อคลาส" ไม่ได้วัดสีจริง — ถ้าวันหนึ่งเปลี่ยนชุดสีของ Tailwind
      * ต้องกลับมาวัดใหม่ด้วยเบราว์เซอร์ ไม่ใช่เชื่อรายชื่อนี้อย่างเดียว
      */
+    /**
+     * ⭐⭐⭐ **ตัวเลขเดียวกันต้องเรียกชื่อเดียวกันทั้งระบบ — เลขที่ผู้ใช้กรอกคือ "รายได้"**
+     *
+     * ⚠️⚠️ เดิมเรียกสองชื่อสลับกันไปมาโดยไม่มีกติกา:
+     *   · ช่องที่ผู้ใช้กรอก · หน้าประวัติ · ไฟล์ CSV · ไฟล์ Excel → **"รายได้"**
+     *   · แดชบอร์ด · หน้ารายปี · หน้ารวมร้าน → **"ยอดขาย"**
+     *   · แม้แต่ **ในหน้าแดชบอร์ดหน้าเดียวกัน** กราฟหนึ่งเขียน "รายได้" อีกกราฟเขียน "ยอดขาย"
+     *
+     * ผลกับผู้ใช้: กรอกเลขลงช่อง "รายได้" แล้วไปดูรายงานเจอคำว่า "ยอดขาย" — ต้องเดาเอาเอง
+     * ว่าเป็นเลขตัวเดียวกันไหม และเวลาเทียบหน้าจอกับไฟล์ที่ดาวน์โหลดก็ต้องแปลงคำในหัวอีกชั้น
+     *
+     * ✅ **[เจ้าของระบบตัดสิน 2026-08-12] ใช้คำว่า "รายได้" คำเดียวทั้งระบบ**
+     *
+     * ⚠️ ที่ยังใช้คำว่า "ยอดขาย" ได้และต้องไม่ไปแตะ:
+     *   · **ชื่อแอปบนหน้าจอ "วิเคราะห์ยอดขาย"** — เป็นชื่อ ไม่ใช่ชื่อคอลัมน์
+     *   · **หัวตารางที่ยอมรับตอนนำเข้าไฟล์ CSV** (`RecordService::COLUMN_ALIASES`) —
+     *     ไฟล์เก่าของผู้ใช้ที่หัวเขียนว่า "ยอดขาย" ต้องนำเข้าได้เหมือนเดิมตลอดไป
+     *     **รับเข้ามาได้หลายคำ แต่พิมพ์ออกไปคำเดียว**
+     *   · คอมเมนต์ที่เล่าเหตุการณ์เก่าแบบคำต่อคำ (เป็นประวัติ ไม่ใช่ข้อความบนจอ)
+     */
+    public function testTheSameNumberIsNeverCalledByTwoDifferentNames(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = array_merge(
+            (array)glob($root . '/*.php'),
+            (array)glob($root . '/includes/*.php'),
+            (array)glob($root . '/api/*.php'),
+            (array)glob($root . '/app/Services/*.php')
+        );
+
+        $offenders = [];
+
+        foreach ($files as $file) {
+            $path = (string)$file;
+
+            /* ตัดคอมเมนต์ของ PHP ด้วยตัวแยกโทเคนจริง — ไม่ใช่ regex ที่กลืนโค้ดพลาดได้
+               ⚠️ คอมเมนต์ของ JS อยู่ใน T_INLINE_HTML จึงไม่ถูกตัด ต้องตัดต่ออีกชั้น */
+            $live = '';
+            foreach (token_get_all((string)file_get_contents($path)) as $token) {
+                if (is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                    continue;
+                }
+                $live .= is_array($token) ? $token[1] : $token;
+            }
+
+            $live = (string)preg_replace('#/\*.*?\*/#s', ' ', $live);
+            $live = (string)preg_replace('#^\s*//.*$#m', ' ', $live);
+
+            foreach (explode("\n", $live) as $number => $line) {
+                if (!str_contains($line, 'ยอดขาย')) {
+                    continue;
+                }
+
+                // ชื่อแอป — ไม่ใช่ชื่อของตัวเลข
+                $withoutBrand = str_replace('วิเคราะห์ยอดขาย', '', $line);
+                if (!str_contains($withoutBrand, 'ยอดขาย')) {
+                    continue;
+                }
+
+                // หัวตารางที่ยอมรับตอนนำเข้าไฟล์ (รับเข้า ไม่ใช่พิมพ์ออก)
+                if (str_contains($withoutBrand, "'ยอดขาย' =>")) {
+                    continue;
+                }
+
+                $offenders[] = basename($path) . ':' . ($number + 1) . ' → ' . trim($line);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            "ยังมีที่เรียกเลขตัวเดียวกันว่า \"ยอดขาย\" อยู่ — ทั้งระบบตกลงใช้คำว่า \"รายได้\"\n"
+            . implode("\n", $offenders)
+        );
+    }
+
     public function testNobodyUsesGreyTooFaintToRead(): void
     {
         $banned = ['text-slate-500', 'text-slate-600', 'text-slate-700', 'text-gray-500', 'text-gray-600'];

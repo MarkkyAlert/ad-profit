@@ -513,7 +513,7 @@ require __DIR__ . '/includes/header.php';
 
     <?php if ($daysCount === 0 && !$dashboardFailed): ?>
         <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
-            ยังไม่มีข้อมูลในช่วงเวลานี้ ลองไปที่หน้า "➕ บันทึก" เพื่อเริ่มบันทึกยอดขายและค่าแอด
+            ยังไม่มีข้อมูลในช่วงเวลานี้ ลองไปที่หน้า "➕ บันทึก" เพื่อเริ่มบันทึกรายได้และค่าแอด
         </div>
     <?php endif; ?>
 </section>
@@ -539,7 +539,7 @@ require __DIR__ . '/includes/header.php';
 <?php if (!$showFirstRecordInvite): ?>
 <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <article class="stat-card s-revenue">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวม</p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">รายได้รวม</p>
         <p class="mt-2 text-xl sm:text-2xl font-bold text-orange-400"><?= e(formatMoney((float)$summary['total_revenue'])) ?></p>
         <?php if ($comparisonEnabled): ?>
             <p class="mt-1 text-xs <?= e($comparisonText['total_revenue']['class']) ?>"><?= e($comparisonText['total_revenue']['text']) ?></p>
@@ -1207,7 +1207,7 @@ require __DIR__ . '/includes/header.php';
                 data: {
                     labels: sixMonthPayload.labels,
                     datasets: [{
-                            label: 'ยอดขาย',
+                            label: 'รายได้',
                             data: sixMonthPayload.revenue,
                             borderColor: '#f97316',
                             backgroundColor: 'rgba(249, 115, 22, 0.2)',

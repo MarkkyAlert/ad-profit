@@ -67,7 +67,7 @@ final class EmptyShopHonestyTest extends ControllerTestCase
         $body = $this->get('/annual.php?year=2569', $session)['body'];
 
         $this->assertStringContainsString(
-            'ยังไม่มีข้อมูลยอดขาย',
+            'ยังไม่มีข้อมูลรายได้',
             $this->visibleText($body),
             'หน้าไม่ได้บอกด้วยซ้ำว่ายังไม่มีข้อมูล'
         );

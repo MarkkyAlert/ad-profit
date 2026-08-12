@@ -354,7 +354,7 @@ require __DIR__ . '/includes/header.php';
     <?php if (!$hasAnnualData && $annualError === null): ?>
         <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
             <?php /* ⚠️ ห้ามเขียน "ปีนี้" ตายตัว — ผู้ใช้เลือกดูปีอื่นได้ */ ?>
-            ปี <?= e((string)($selectedYear + 543)) ?> ยังไม่มีข้อมูลยอดขาย ลองเริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
+            ปี <?= e((string)($selectedYear + 543)) ?> ยังไม่มีข้อมูลรายได้ ลองเริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
         </div>
     <?php endif; ?>
 </section>
@@ -372,7 +372,7 @@ require __DIR__ . '/includes/header.php';
 <?php if (!$showEmptyShopInvite): ?>
 <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
     <article class="stat-card s-revenue">
-        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวมทั้งปี</p>
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-400">รายได้รวมทั้งปี</p>
         <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e(formatMoney($totalRevenue)) ?></p>
     </article>
     <article class="stat-card s-adcost">
@@ -554,7 +554,7 @@ require __DIR__ . '/includes/header.php';
             <thead>
                 <tr class="border-b border-white/10 text-left text-slate-400">
                     <th scope="col" class="px-3 py-2">เดือน</th>
-                    <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                    <th scope="col" class="px-3 py-2">รายได้</th>
                     <th scope="col" class="px-3 py-2">ค่าแอด</th>
                     <th scope="col" class="px-3 py-2">กำไร</th>
                     <th scope="col" class="px-3 py-2">ROAS</th>
@@ -644,7 +644,7 @@ require __DIR__ . '/includes/header.php';
 <section class="section-card mt-6 p-4 sm:p-5">
     <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
         <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (<?= e((string)count($months)) ?> เดือน)</h2>
-        <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร · เส้นประ = กำไรปีก่อน</span>
+        <span class="text-xs text-slate-400">รายได้ / ค่าแอด / กำไร · เส้นประ = กำไรปีก่อน</span>
     </div>
     <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
         <div style="min-width: 600px; height: 100%;">
@@ -781,7 +781,7 @@ require __DIR__ . '/includes/header.php';
             data: {
                 labels: chartPayload.labels,
                 datasets: [{
-                        label: 'ยอดขาย',
+                        label: 'รายได้',
                         data: chartPayload.revenue,
                         backgroundColor: '#f97316'
                     },

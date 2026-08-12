@@ -637,7 +637,7 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
         foreach ($tabs as $tabName => $url) {
             $row = $this->shopRowOnOverview($session, $url, $idle);
 
-            foreach (['ยอดขาย', 'ค่าแอด', 'กำไร'] as $column) {
+            foreach (['รายได้', 'ค่าแอด', 'กำไร'] as $column) {
                 $this->assertArrayHasKey($column, $row, "แท็บ {$tabName} ไม่มีคอลัมน์ \"{$column}\"");
                 $this->assertSame(
                     no_value_text(),
@@ -716,7 +716,7 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
         $session = $this->startSession($userId, $shopA);
 
         $empty = $this->statCardsOnOverview($session, '/overview.php?view=day&month=2026-07');
-        foreach (['ยอดขายรวม', 'ค่าแอดรวม', 'กำไรรวม', 'ROAS เฉลี่ย', 'อัตรากำไร'] as $card) {
+        foreach (['รายได้รวม', 'ค่าแอดรวม', 'กำไรรวม', 'ROAS เฉลี่ย', 'อัตรากำไร'] as $card) {
             $this->assertArrayHasKey($card, $empty, "ไม่พบการ์ด \"{$card}\" บนแท็บรายวัน");
             $this->assertSame(
                 no_value_text(),
@@ -738,7 +738,7 @@ final class EmptyIsNotZeroEverywhereTest extends ControllerTestCase
         $filled = $this->statCardsOnOverview($session, '/overview.php?view=day&month=2026-06');
         $this->assertStringContainsString(
             '฿9,000.75',
-            $filled['ยอดขายรวม'] ?? '',
+            $filled['รายได้รวม'] ?? '',
             'เดือนที่มีข้อมูลจริงกลับไม่แสดงตัวเลข — การแก้ทำให้ทุกเดือนเงียบไปหมด'
         );
     }

@@ -524,7 +524,7 @@ require __DIR__ . '/includes/header.php';
 
             <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <article class="stat-card s-revenue">
-                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวม</p>
+                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">รายได้รวม</p>
                     <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e($dayMoney($dayTotalRevenue)) ?></p>
                 </article>
                 <article class="stat-card s-adcost">
@@ -617,7 +617,7 @@ require __DIR__ . '/includes/header.php';
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
                                 <th scope="col" class="px-3 py-2">วันที่</th>
-                                <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                                <th scope="col" class="px-3 py-2">รายได้</th>
                                 <th scope="col" class="px-3 py-2">ค่าแอด</th>
                                 <th scope="col" class="px-3 py-2">กำไร</th>
                                 <th scope="col" class="px-3 py-2">ROAS</th>
@@ -688,7 +688,7 @@ require __DIR__ . '/includes/header.php';
             <section class="section-card mt-6 p-4 sm:p-5">
                 <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                     <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายวัน (รวมทุกร้าน)</h2>
-                    <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
+                    <span class="text-xs text-slate-400">รายได้ / ค่าแอด / กำไร</span>
                 </div>
                 <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
                     <div style="min-width: <?= max(400, count($dailyChartPayload['labels']) * 28) ?>px; height: 100%;">
@@ -708,7 +708,7 @@ require __DIR__ . '/includes/header.php';
                             <tr class="border-b border-white/10 text-left text-slate-400">
                                 <th scope="col" class="px-3 py-2">อันดับ</th>
                                 <th scope="col" class="px-3 py-2">ร้าน</th>
-                                <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                                <th scope="col" class="px-3 py-2">รายได้</th>
                                 <th scope="col" class="px-3 py-2">ค่าแอด</th>
                                 <th scope="col" class="px-3 py-2">กำไร</th>
                                 <th scope="col" class="px-3 py-2">ROAS</th>
@@ -785,7 +785,7 @@ require __DIR__ . '/includes/header.php';
                         data: {
                             labels: chartPayload.labels,
                             datasets: [{
-                                    label: 'ยอดขาย',
+                                    label: 'รายได้',
                                     data: chartPayload.revenue,
                                     backgroundColor: barColor('#f97316')
                                 },
@@ -867,13 +867,13 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
 ?>
             <?php if (!$hasYearlyData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
-                    ปี <?= e((string)($selectedYear + 543)) ?> ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
+                    ปี <?= e((string)($selectedYear + 543)) ?> ยังไม่มีข้อมูลรายได้ของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>
             <?php endif; ?>
 
             <section class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <article class="stat-card s-revenue">
-                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">ยอดขายรวมทั้งปี</p>
+                    <p class="text-xs font-medium uppercase tracking-wider text-slate-400">รายได้รวมทั้งปี</p>
                     <p class="mt-2 text-lg sm:text-xl font-bold text-orange-400"><?= e($yearMoney($yearTotalRevenue)) ?></p>
                 </article>
                 <article class="stat-card s-adcost">
@@ -988,7 +988,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                         <thead>
                             <tr class="border-b border-white/10 text-left text-slate-400">
                                 <th scope="col" class="px-3 py-2">เดือน</th>
-                                <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                                <th scope="col" class="px-3 py-2">รายได้</th>
                                 <th scope="col" class="px-3 py-2">ค่าแอด</th>
                                 <th scope="col" class="px-3 py-2">กำไร</th>
                                 <th scope="col" class="px-3 py-2">ROAS</th>
@@ -1035,7 +1035,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
             <section class="section-card mt-6 p-4 sm:p-5">
                 <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                     <h2 class="text-base sm:text-lg font-semibold text-slate-100">กราฟแท่งรายเดือน (<?= e((string)count($yearlyMonths)) ?> เดือน)</h2>
-                    <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
+                    <span class="text-xs text-slate-400">รายได้ / ค่าแอด / กำไร</span>
                 </div>
                 <div class="h-52 sm:h-64 lg:h-80 w-full overflow-x-auto">
                     <div style="min-width: 600px; height: 100%;">
@@ -1055,7 +1055,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                             <tr class="border-b border-white/10 text-left text-slate-400">
                                 <th scope="col" class="px-3 py-2">อันดับ</th>
                                 <th scope="col" class="px-3 py-2">ร้าน</th>
-                                <th scope="col" class="px-3 py-2">ยอดขาย</th>
+                                <th scope="col" class="px-3 py-2">รายได้</th>
                                 <th scope="col" class="px-3 py-2">ค่าแอด</th>
                                 <th scope="col" class="px-3 py-2">กำไร</th>
                                 <th scope="col" class="px-3 py-2">ROAS</th>
@@ -1127,7 +1127,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                         data: {
                             labels: chartPayload.labels,
                             datasets: [{
-                                    label: 'ยอดขาย',
+                                    label: 'รายได้',
                                     data: chartPayload.revenue,
                                     backgroundColor: '#f97316'
                                 },
@@ -1188,7 +1188,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
         <?php else: ?>
             <?php if (!$hasOverviewData && $activeError === null): ?>
                 <div class="mt-4 rounded-lg border border-cyan-500/30 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-400">
-                    <?= e(formatThaiMonth($selectedMonth)) ?> ยังไม่มีข้อมูลยอดขายของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
+                    <?= e(formatThaiMonth($selectedMonth)) ?> ยังไม่มีข้อมูลรายได้ของทุกร้าน แนะนำให้เริ่มบันทึกข้อมูลที่หน้า "➕ บันทึก"
                 </div>
             <?php endif; ?>
 
@@ -1198,7 +1198,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                         <tr class="border-b border-white/10 text-left text-slate-400">
                             <th scope="col" class="px-3 py-1.5">อันดับ</th>
                             <th scope="col" class="px-3 py-1.5">ร้าน</th>
-                            <th scope="col" class="px-3 py-1.5">ยอดขาย</th>
+                            <th scope="col" class="px-3 py-1.5">รายได้</th>
                             <th scope="col" class="px-3 py-1.5">ค่าแอด</th>
                             <th scope="col" class="px-3 py-1.5">กำไร</th>
                             <th scope="col" class="px-3 py-1.5">สัดส่วนกำไร</th>
@@ -1298,7 +1298,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
             <section class="section-card mt-6 p-5">
                 <div class="mb-3 flex items-center justify-between gap-2">
                     <h2 class="text-lg font-semibold text-slate-100">กราฟแท่งเปรียบเทียบระหว่างร้าน</h2>
-                    <span class="text-xs text-slate-400">ยอดขาย / ค่าแอด / กำไร</span>
+                    <span class="text-xs text-slate-400">รายได้ / ค่าแอด / กำไร</span>
                 </div>
                 <?php if ($shopsMissingFromCharts > 0): ?>
                     <p class="mb-3 text-xs text-slate-400">
@@ -1339,7 +1339,7 @@ $yearPercent = static fn(?float $value): string => $hasYearlyData ? formatPercen
                             data: {
                                 labels: barPayload.labels,
                                 datasets: [{
-                                        label: 'ยอดขาย',
+                                        label: 'รายได้',
                                         data: barPayload.revenue,
                                         backgroundColor: '#f97316'
                                     },

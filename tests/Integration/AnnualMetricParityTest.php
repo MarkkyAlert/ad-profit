@@ -41,7 +41,7 @@ final class AnnualMetricParityTest extends ControllerTestCase
      * `testTheDaysColumnKeepsItsDeliberateDifference()` ซึ่งอธิบายว่าทำไมสองฝั่งต่างกัน)
      */
     private const COLUMN_MAP = [
-        'ยอดขาย' => 'B',
+        'รายได้' => 'B',
         'ค่าแอด' => 'C',
         'กำไร' => 'D',
         'ROAS' => 'E',
