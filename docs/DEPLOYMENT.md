@@ -12,6 +12,120 @@
 
 ---
 
+## 0) ⭐ ติดตั้งครั้งแรกด้วย `git clone` (แนะนำ — ทดลองจริงแล้วทุกขั้น)
+
+> **ทำไมถึงแนะนำ clone มากกว่าลากไฟล์ผ่าน FTP**
+>
+> · **`.htaccess` มี 9 ไฟล์และเป็นไฟล์ซ่อน** — โปรแกรม FTP ส่วนใหญ่ซ่อนไฟล์ที่ขึ้นต้น
+>   ด้วยจุดโดยปริยาย ลากทั้งโฟลเดอร์แล้วตัวกันไม่ขึ้นตาม = `.env` ถูกดาวน์โหลดได้
+>   · clone มาครบทั้ง 9 ไฟล์อัตโนมัติ (ยืนยันแล้ว)
+> · `vendor/` (66 MB) ไม่ต้องอัป — ติดตั้งบนเซิร์ฟเวอร์แทน เหลือ **7.9 MB**
+> · `.env` ของเครื่องพัฒนาไม่มีทางหลุดขึ้นไปทับ
+> · อัปเดตครั้งถัดไปเหลือ `git pull`
+
+### ขั้นที่ 1 — เตรียมโฟลเดอร์
+
+⚠️ `git clone` **ลงโฟลเดอร์ที่ไม่ว่างไม่ได้** (ทดสอบแล้ว: `fatal: destination path '.'
+already exists and is not an empty directory`) · Hostinger มักมี `index.html` หรือ
+`default.php` ของตัวเองวางไว้
+
+```bash
+cd ~/public_html
+ls -A                      # ดูว่ามีอะไรอยู่
+rm -f index.html default.php   # ลบเฉพาะไฟล์เริ่มต้นของโฮสต์
+```
+
+### ขั้นที่ 2 — clone
+
+```bash
+git clone https://github.com/<บัญชี>/<repo>.git .
+```
+
+⚠️ **จุดท้ายสุดสำคัญ** — แปลว่า "ลงตรงนี้เลย" ถ้าลืมจะได้โฟลเดอร์ซ้อนอีกชั้น
+แล้วเว็บจะเปิดไม่ขึ้น
+
+ตรวจทันที:
+```bash
+find . -name ".htaccess" | wc -l      # ต้องได้ 9
+ls -A .env                            # ต้องไม่มี (ถูกต้องแล้ว)
+```
+
+### ขั้นที่ 3 — ติดตั้งไลบรารีชุด production
+
+```bash
+composer install --no-dev --optimize-autoloader
+```
+
+⚠️ **ห้ามลืม `--no-dev`** — ไม่ใส่จะได้เครื่องมือทดสอบติดไปด้วย (66 MB แทน 7.9 MB)
+
+### ขั้นที่ 4 — สร้าง `.env`
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+ค่าที่**ต้อง**แก้:
+
+| ค่า | ใส่อะไร |
+|---|---|
+| `APP_ENV` | `production` |
+| `APP_URL` | `https://โดเมนของคุณ` (**URL เต็ม** ลืมแล้วลิงก์ในอีเมลกดไม่ได้) |
+| `DB_NAME` `DB_USER` `DB_PASS` | ค่าที่ Hostinger สร้างให้ (มักขึ้นต้น `u123456_`) |
+| `MAIL_*` ทั้ง 4 ค่า | ไม่ตั้ง = ผู้ใช้ที่ลืมรหัสผ่านเข้าระบบไม่ได้ตลอดไป |
+
+### ขั้นที่ 5 — นำเข้าโครงสร้างฐานข้อมูล (**ครั้งเดียวเท่านั้น**)
+
+⚠️⚠️ **`database/schema.sql` ฝังชื่อฐานข้อมูล `ad_profit` ไว้ตายตัว** แต่ Hostinger
+ตั้งชื่อให้เองแบบ `u123456_adprofit` → นำเข้าตรง ๆ จะไปสร้างฐานข้อมูลผิดตัว
+**แล้วฐานข้อมูลจริงยังว่างอยู่**
+
+ตัด 2 บรรทัดนั้นออกก่อน:
+```bash
+sed '/^CREATE DATABASE/,/^USE ad_profit;/d' database/schema.sql > /tmp/schema-hosting.sql
+```
+
+แล้วนำเข้าไฟล์ `/tmp/schema-hosting.sql` ผ่าน phpMyAdmin หรือ:
+```bash
+mysql -u <DB_USER> -p <DB_NAME> < /tmp/schema-hosting.sql
+```
+
+⚠️⚠️ **ไฟล์นี้เป็นคำสั่ง "ลบแล้วสร้างใหม่" — รันซ้ำตอนมีข้อมูลจริงแล้ว = ข้อมูลหายหมด**
+⚠️ **ห้ามนำเข้า `database/sample_data.sql`** — มีบัญชีทดสอบ `demo@example.com`
+พร้อมรหัสผ่านฝังอยู่ในไฟล์ ใครที่เคยเห็นซอร์สโค้ดก็เข้าได้
+
+### ขั้นที่ 6 — ตรวจ 2 คำสั่ง
+
+```bash
+php tools/check-deploy.php
+php tools/check-live.php https://โดเมนของคุณ
+```
+
+ตัวแรกต้องขึ้น **"พร้อมใช้งาน"** · ตัวที่สองต้องขึ้น **"ไม่มีไฟล์ลับหลุด"**
+
+⚠️ ตัวที่สองตรวจ `/.git/config` ให้ด้วย — clone แล้วโฟลเดอร์ `.git/` ขึ้นไปด้วย
+ถ้าไม่ถูกปิดจะดาวน์โหลดซอร์สโค้ดทั้งหมดย้อนหลังได้
+
+### ขั้นที่ 7 — ตั้งงานอัตโนมัติ (ไม่บังคับ)
+
+```
+0 3 * * *  php ~/public_html/cron/cleanup-password-reset-tokens.php
+0 4 * * 0  php ~/public_html/cron/cleanup-logs.php
+```
+
+### อัปเดตครั้งถัดไป
+
+```bash
+cd ~/public_html
+git pull
+composer install --no-dev --optimize-autoloader
+php tools/check-deploy.php
+```
+
+`.env` · `logs/` · `uploads/` ไม่ถูกแตะ (อยู่ใน `.gitignore`)
+
+---
+
 ## 1) ภาพรวม Deployment
 
 ### Deployment คืออะไร
