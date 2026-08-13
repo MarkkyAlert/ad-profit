@@ -296,7 +296,10 @@ AI จะโหลด **`CLAUDE.md`** เข้าไปเองอัตโน
 - [ ] เปิด `http://localhost/phpmyadmin`
 - [ ] สร้างฐานข้อมูลชื่อ `ad_profit`
 - [ ] Import ไฟล์ `database/schema.sql`
-- [ ] (ทางเลือก) Import `database/sample_data.sql` เพื่อได้บัญชี demo
+- [ ] (ทางเลือก · **เฉพาะเครื่องตัวเอง**) Import `database/sample_data.sql` เพื่อได้บัญชี demo
+      > ⚠️⚠️ **ห้ามนำเข้าไฟล์นี้บนเซิร์ฟเวอร์จริงเด็ดขาด** — ในไฟล์มีบัญชี
+      > `demo@example.com` / `team@example.com` พร้อมรหัสผ่านฝังอยู่
+      > ใครที่เคยเห็นซอร์สโค้ดก็เข้าระบบได้ · และไฟล์นี้ `DELETE` ข้อมูลเดิมทิ้งก่อนด้วย
   - บัญชี demo (ไว้ลองระบบ/เดโม):
     - `demo@example.com`
     - `team@example.com`
@@ -516,13 +519,18 @@ MAIL_FROM_NAME="Ad Profit"
 # 🔟 FAQ (คำถามที่มือใหม่ถามบ่อย)
 
 ### Q1: ใช้ PHP เวอร์ชันอะไร?
-- แนะนำ **PHP 8.1+**
+- **เว็บ: PHP 8.3 ขึ้นไป** — บังคับใน `composer.json` · ต่ำกว่านี้ `composer install`
+  ล้มตั้งแต่แรก = ไม่มี `vendor/` = เว็บเปิดไม่ขึ้นทั้งเว็บ
+- **ถ้าจะรันชุดทดสอบด้วย: PHP 8.4.1 ขึ้นไป** (PHPUnit 13 บังคับ)
+- ⚠️ **PHP ที่มากับ XAMPP (8.2.4) ใช้ไม่ได้ทั้งสองอย่าง** — ดู [docs/DEVELOP.md](docs/DEVELOP.md)
 
 ### Q2: ใช้ Shared Hosting ได้ไหม?
 - ได้ ถ้า hosting นั้นมี:
-  - PHP 8.1+
+  - **PHP 8.3 ขึ้นไป**
+  - **ส่วนเสริม `zip` และ `gd`** (ไฟล์ Excel บังคับ · บางแพ็กเกจปิดไว้)
   - MySQL/MariaDB
   - เปิด HTTPS ได้
+  - **อ่าน mod_rewrite และ `.htaccess`** — ตัวกันไม่ให้ `.env` ถูกดาวน์โหลด
 - และคุณต้อง:
   - ตั้ง `.env` ให้ถูก
   - ตั้ง `APP_ENV=production` และ `APP_URL=https://...`

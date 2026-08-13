@@ -10,7 +10,8 @@
 
 ## 0) เตรียมสภาพแวดล้อมก่อนทดสอบ (Pre‑flight)
 
-- [x] Import DB: `database/schema.sql` และ (ถ้าจะใช้) `database/sample_data.sql`
+- [x] Import DB: `database/schema.sql` และ (ถ้าจะใช้ · **เฉพาะเครื่องตัวเอง**) `database/sample_data.sql`
+  > ⚠️ `sample_data.sql` มีบัญชีทดสอบพร้อมรหัสผ่านฝังอยู่ — **ห้ามนำเข้าบนเซิร์ฟเวอร์จริง**
 - [x] ตั้งค่า `.env` (แนะนำสำหรับ local/demo: `APP_ENV=development`)
 - [x] เปิดหน้าเว็บได้ที่ `http://localhost/ad-profit/` และไม่ขึ้น 500/503
 - [x] ล้าง browser cache / เปิด Incognito อีก 1 หน้าต่าง (ใช้ทดสอบ concurrent + session_version)
