@@ -74,8 +74,18 @@ FROM shops
 WHERE name LIKE CONCAT('% #', id);
 
 -- ── ตรวจว่าสำเร็จจริง ─────────────────────────────────────────────────────
--- ต้องได้ utf8mb4_unicode_520_ci · ถ้ายังเป็น utf8mb4_unicode_ci แปลว่าขั้นที่ 2 ไม่ผ่าน
--- (แอปจะปฏิเสธการบูตด้วย Schema Guard และบอกว่า collation ไม่ถูกต้อง)
-SELECT COLUMN_NAME, COLLATION_NAME
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shops' AND COLUMN_NAME = 'name';
+-- ⚠️⚠️ **เคยมีคำสั่งอ่าน information_schema ตรงนี้ — ถอดออกแล้ว**
+--
+-- เจ้าของระบบรันไฟล์นี้ผ่าน phpMyAdmin บน MariaDB 11.8 แล้วได้
+--   #1109 - Unknown table 'shops' in information_schema
+-- ทั้งที่หัวจอยืนยันว่าเลือกฐานข้อมูลถูกแล้ว · ทำซ้ำบน MariaDB 10.4 ไม่ได้
+-- จึงไม่รู้สาเหตุแน่ชัด แต่รู้ว่า **มีคำสั่งเดียวในไฟล์นี้ที่แตะ information_schema**
+--
+-- คำสั่งนั้นเป็นแค่การ "ตรวจตัวเอง" ไม่ได้เปลี่ยนอะไร → ถอดออกดีกว่าเสี่ยงให้
+-- migration ทั้งไฟล์ล้มด้วยเหตุที่ไม่เกี่ยวกับงานที่มันต้องทำ
+--
+-- ตรวจผลด้วยวิธีที่ไม่แตะ information_schema แทน:
+--   · `php tools/check-schema.php`  (แนะนำ — ตรวจครบ 41 รายการ)
+--   · หรือใน phpMyAdmin: คลิกตาราง shops > Structure > ดูคอลัมน์ name
+--     ช่อง Collation ต้องเป็น utf8mb4_unicode_520_ci
+SHOW FULL COLUMNS FROM shops LIKE 'name';
