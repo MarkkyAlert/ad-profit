@@ -1,3 +1,16 @@
+-- ⚠️⚠️⚠️ ก่อนรัน — ต้องเลือก "ฐานข้อมูลของแอป" ไว้ก่อนเท่านั้น
+--
+-- ใน phpMyAdmin: คลิกชื่อฐานข้อมูลของคุณในแถบซ้าย (เช่น u272145840_ad_profit)
+-- **ให้ชื่อฐานข้อมูลขึ้นบนหัวจอ** แล้วค่อยกดแท็บ Import
+--
+-- ⚠️ ถ้าเผลอเลือก information_schema (หรือไม่ได้เลือกอะไรเลย) จะเจอ error พวกนี้:
+--     #1109 - Unknown table 'shops' in information_schema
+--     #1044 - Access denied ... to database 'information_schema'
+--   → **ข้อมูลของคุณไม่ถูกแตะเลย** (คำสั่งล้มก่อนถึงข้อมูล) เลือกใหม่แล้วรันซ้ำได้เลย
+--
+-- บรรทัดถัดไปจะแสดงชื่อฐานข้อมูลที่กำลังจะแก้ — **ดูให้ตรงกับของคุณก่อนเสมอ**
+SELECT DATABASE() AS `กำลังจะแก้ฐานข้อมูลนี้`;
+
 -- ลบตาราง idempotency_requests ออกจาก database ที่มีข้อมูลอยู่แล้ว
 --
 -- ทำไม: ตารางนี้ + IdempotencyRequestRepository + cron/cleanup-idempotency.php
