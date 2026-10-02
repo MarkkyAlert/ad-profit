@@ -1216,4 +1216,121 @@ final class BrowserScriptParityTest extends ControllerTestCase
         $this->assertStringContainsString('disabled', $body, 'ตัวล็อกไม่ได้ปิดช่องกรอก');
         $this->assertStringContainsString('tbody', $body, 'ตัวล็อกไม่ได้แตะแถวในตาราง');
     }
+
+    /**
+     * ⭐⭐⭐ **วันที่แบบไทยฝั่งเบราว์เซอร์ต้องตรงกับ `formatThaiDate()` ฝั่ง PHP ทุกวัน**
+     *
+     * ⚠️⚠️ แบนเนอร์ "ยังไม่ได้กรอกกี่วัน" เรนเดอร์จาก PHP ตอนเปิดหน้า แต่พอผู้ใช้
+     * เปลี่ยนเดือนด้านล่าง **สคริปต์เป็นคนเขียนทับ** → กลายเป็นตัวจัดรูปแบบวันที่
+     * ตัวที่สองของระบบทันที
+     *
+     * ถ้าสองตัวเพี้ยนกัน ผู้ใช้จะเห็นรายการวันคนละรูปแบบระหว่าง "ตอนเพิ่งเปิดหน้า"
+     * กับ "หลังเปลี่ยนเดือน" ทั้งที่เป็นข้อมูลชนิดเดียวกัน
+     *
+     * ⚠️ จุดที่พลาดง่ายที่สุดคือ **ศูนย์นำหน้าวัน** — PHP ใช้ `j` (1) ไม่ใช่ `d` (01)
+     * เลขเดือน/วันที่หลุดมาเป็น `01 ต.ค.` จะเห็นก็ต่อเมื่อเทียบของจริงเท่านั้น
+     */
+    public function testTheThaiDateLabelMatchesThePhpFormatter(): void
+    {
+        $declarations = $this->extractJs('THAI_MONTH_NAMES') . "\n" . $this->extractJs('thaiDateLabel');
+
+        // เดินวันจริงข้ามปี/ข้ามเดือนสั้น-ยาว รวมปีอธิกสุรทิน (2024) ด้วย
+        $dates = [];
+        $cursor = new \DateTimeImmutable('2024-01-01');
+        for ($step = 0; $step < 900; $step++) {
+            $dates[] = $cursor->format('Y-m-d');
+            $cursor = $cursor->modify('+1 day');
+        }
+
+        // ค่าที่ไม่ใช่วันที่ต้องไม่ทำให้พัง และต้องคืนค่าเหมือนกันทั้งสองฝั่ง
+        $dates[] = 'ไม่ใช่วันที่';
+        $dates[] = '2026-13-01';
+        $dates[] = '';
+
+        $fromJs = $this->runJs($declarations, 'thaiDateLabel(raw)', $dates);
+
+        $this->assertCount(count($dates), $fromJs, 'จำนวนผลลัพธ์จาก JS ไม่เท่ากับที่ส่งไป');
+
+        $mismatches = [];
+        foreach ($dates as $index => $date) {
+            $php = formatThaiDate($date);
+            if ($php !== $fromJs[$index]) {
+                $mismatches[] = sprintf('%s → PHP "%s" · JS "%s"', $date, $php, $fromJs[$index]);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $mismatches,
+            "วันที่แบบไทยฝั่งเบราว์เซอร์ไม่ตรงกับฝั่ง PHP\n" . implode("\n", array_slice($mismatches, 0, 10))
+        );
+    }
+
+    /**
+     * ⭐⭐ **แบนเนอร์ "ยังไม่ได้กรอกกี่วัน" ต้องเปลี่ยนตามเดือนที่ผู้ใช้เลือก**
+     *
+     * ⚠️⚠️ ของเดิมเรนเดอร์จาก **เดือนปัจจุบันครั้งเดียวตอนเปิดหน้า** แล้วไม่เคยอัปเดตอีก
+     * ผลที่เกิดกับผู้ใช้: เปลี่ยน "โหลดเดือน" ไปเดือนอื่น → แบนเนอร์ยังบอกจำนวนวัน
+     * ของเดือนปัจจุบัน และกด "เติมวันที่ขาดลงตาราง" ก็ได้ **วันของเดือนปัจจุบัน**
+     * ลงไปในตารางที่กำลังแก้เดือนอื่นอยู่ → บันทึกทับผิดเดือนทั้งชุด
+     *
+     * ⚠️ ต้องผูกตัวจัดการปุ่ม **เสมอ** ไม่ใช่เฉพาะตอนเปิดหน้าแล้วมีวันขาด
+     * ไม่งั้นหน้าที่เปิดมาตอนกรอกครบ ปุ่มจะไม่มีตัวจัดการทั้งอายุหน้า
+     * พอเปลี่ยนไปเดือนที่ยังขาด ปุ่มโผล่มาแต่กดแล้วเงียบ
+     */
+    public function testTheMissingDaysBannerFollowsTheSelectedMonth(): void
+    {
+        $source = (string)file_get_contents(self::PAGE);
+
+        // ช่องที่สคริปต์ต้องเขียนทับ ต้องมีอยู่ในมาร์กอัปจริง
+        foreach ([
+            'bulk-missing-banner',
+            'bulk-complete-banner',
+            'bulk-missing-label',
+            'bulk-missing-count',
+            'bulk-missing-preview',
+            'bulk-complete-label',
+        ] as $id) {
+            $this->assertStringContainsString(
+                'id="' . $id . '"',
+                $source,
+                'ไม่มี id="' . $id . '" ในหน้า — สคริปต์จะหาไม่เจอแล้วแบนเนอร์ค้างเป็นของเดือนเดิม'
+            );
+            $this->assertStringContainsString(
+                "getElementById('" . $id . "')",
+                $source,
+                'มี id="' . $id . '" แต่ไม่มีสคริปต์ตัวไหนอ่านเลย'
+            );
+        }
+
+        /* ⚠️ แบนเนอร์ทั้งสองต้องอยู่ในหน้าเสมอ (ซ่อนด้วย hidden) ไม่ใช่เรนเดอร์ตามเงื่อนไข
+           ถ้ากลับไปใช้ `<?php if (...): ?>` ครอบ สคริปต์จะสลับไม่ได้อีก */
+        $this->assertDoesNotMatchRegularExpression(
+            '/if \(\$missingCount > 0\): \?>\s*<div/u',
+            $source,
+            'แบนเนอร์ถูกเรนเดอร์ตามเงื่อนไขอีกแล้ว — สคริปต์จะสลับตามเดือนไม่ได้'
+        );
+
+        // ตัวโหลดเดือนต้องเรียกตัวเขียนแบนเนอร์ด้วยเดือนที่ **เซิร์ฟเวอร์ยืนยัน** และ days ชุดเดียวกัน
+        $this->assertStringContainsString(
+            'renderMissingBanner(resolvedMonth, days)',
+            $source,
+            'โหลดเดือนใหม่แล้วไม่ได้อัปเดตแบนเนอร์ — จะค้างเป็นจำนวนวันของเดือนเดิม'
+        );
+
+        // ปุ่มเติมต้องอ่านรายการที่เปลี่ยนตามเดือน ไม่ใช่ค่าตายตัวตอนเรนเดอร์หน้า
+        $this->assertStringContainsString(
+            'missingDates.slice(0, MAX_ROWS)',
+            $source,
+            'ปุ่มเติมยังอ่านรายการวันแบบตายตัว — จะเติมวันของเดือนเดิมลงตารางเดือนใหม่'
+        );
+        /* ⚠️ ต้องเจาะจงที่ **การประกาศ** ไม่ใช่หาคำว่า MISSING_DATES ลอย ๆ
+           — คอมเมนต์ที่อธิบายว่า "ของเดิมเขียนแบบนี้แล้วพัง" ก็มีคำนั้นอยู่
+           (เวอร์ชันแรกของเทสต์นี้แดงเพราะไปจับคอมเมนต์ของตัวเอง) */
+        $this->assertDoesNotMatchRegularExpression(
+            '/\b(?:const|let|var)\s+MISSING_DATES\b/',
+            $source,
+            'ยังประกาศรายการวันแบบตายตัว (MISSING_DATES) อยู่ — จะไม่เปลี่ยนตามเดือน'
+        );
+    }
 }

@@ -177,26 +177,38 @@ require __DIR__ . '/includes/header.php';
         ถ้ามีแถวใดกรอกผิด ระบบจะไม่บันทึกทั้งชุด
     </p>
 
-    <?php if ($missingCount > 0): ?>
-        <div class="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <p class="text-sm font-medium text-amber-200">
-                        เดือนนี้ยังไม่ได้กรอก <?= e((string)$missingCount) ?> วัน
-                    </p>
-                    <p class="mt-1 break-words text-xs text-amber-100/70"><?= e($missingPreviewText) ?></p>
-                </div>
-                <button type="button" id="bulk-fill-missing" class="btn-ghost shrink-0 px-4 py-2 text-sm">
-                    ↓ เติมวันที่ขาดลงตาราง
-                </button>
+    <?php /* ⚠️⚠️ แบนเนอร์ทั้งสองต้องอยู่ในหน้า **เสมอ** (ซ่อนด้วย `hidden`) ไม่ใช่เรนเดอร์
+             ตามเงื่อนไขแบบเดิม — เพราะสคริปต์ต้องสลับให้ตรงกับ "เดือนที่โหลดอยู่"
+             ทุกครั้งที่ผู้ใช้เปลี่ยนช่อง "โหลดเดือน" ด้านล่าง
+
+             ของเดิมเรนเดอร์จากเดือนปัจจุบันอย่างเดียว ผลคือเปลี่ยนไปเดือนอื่นแล้ว
+             แบนเนอร์ยังบอกจำนวนวันของเดือนปัจจุบัน และกดปุ่มเติมก็ได้วันของเดือน
+             ปัจจุบันลงตารางที่กำลังแก้เดือนอื่นอยู่ → บันทึกทับผิดเดือนทั้งชุด
+
+             ⚠️ ป้ายต้องบอก **ชื่อเดือน** ไม่ใช่คำว่า "เดือนนี้" — พอเปลี่ยนเดือนได้แล้ว
+             คำว่า "เดือนนี้" กำกวมทันที (หมายถึงเดือนปัจจุบัน หรือเดือนที่เลือกอยู่?) */ ?>
+    <div id="bulk-missing-banner"
+        class="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3<?= $missingCount > 0 ? '' : ' hidden' ?>">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-sm font-medium text-amber-200">
+                    <span id="bulk-missing-label"><?= e(formatThaiMonth($currentMonth)) ?></span>
+                    ยังไม่ได้กรอก <span id="bulk-missing-count"><?= e((string)$missingCount) ?></span> วัน
+                </p>
+                <p id="bulk-missing-preview" class="mt-1 break-words text-xs text-amber-100/70"><?= e($missingPreviewText) ?></p>
             </div>
-            <p role="status" aria-live="polite" id="bulk-fill-notice" class="mt-2 hidden text-xs text-amber-100/70"></p>
+            <button type="button" id="bulk-fill-missing" class="btn-ghost shrink-0 px-4 py-2 text-sm">
+                ↓ เติมวันที่ขาดลงตาราง
+            </button>
         </div>
-    <?php else: ?>
-        <div class="mb-4 rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3">
-            <p class="text-sm font-medium text-green-200">กรอกครบทุกวันแล้ว 🎉</p>
-        </div>
-    <?php endif; ?>
+        <p role="status" aria-live="polite" id="bulk-fill-notice" class="mt-2 hidden text-xs text-amber-100/70"></p>
+    </div>
+    <div id="bulk-complete-banner"
+        class="mb-4 rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3<?= $missingCount > 0 ? ' hidden' : '' ?>">
+        <p class="text-sm font-medium text-green-200">
+            <span id="bulk-complete-label"><?= e(formatThaiMonth($currentMonth)) ?></span> กรอกครบทุกวันแล้ว 🎉
+        </p>
+    </div>
 
     <form action="<?= e(app_url('/api/records.php')) ?>" method="post">
         <?= csrf_field() ?>
@@ -376,6 +388,23 @@ require __DIR__ . '/includes/header.php';
         const MAX_ROWS = <?= (int)RecordService::BULK_MAX_ROWS ?>;
         const INITIAL_ROWS = 5;
 
+        /* ── วันที่ยังไม่ได้กรอกของ "เดือนที่กำลังโหลดอยู่" ──────────────────
+           ⚠️⚠️ ต้องเป็น `let` ไม่ใช่ `const` — ค่านี้เปลี่ยนทุกครั้งที่ผู้ใช้เปลี่ยนเดือน
+           ของเดิมเป็นค่าตายตัวของเดือนปัจจุบัน ผูกไว้ตั้งแต่ตอนเรนเดอร์หน้า
+           → เปลี่ยนไปเดือนอื่นแล้วกด "เติมวันที่ขาด" ได้วันของเดือนปัจจุบันลงมา
+
+           ⚠️ ค่าตั้งต้นมาจาก `getUnfilledDatesForMonth()` ฝั่ง PHP · ค่าหลังจากนั้น
+           คำนวณจาก `days[].has_record` ที่ `api/month-grid.php` ส่งมา
+           **ทั้งสองทางใช้ช่วงวันเดียวกันเป๊ะ** (เดือนปัจจุบันตัดที่วันนี้ · เดือนอดีต
+           ถึงสิ้นเดือน · เดือนอนาคตว่าง) จึงไม่ได้เขียนกติกาซ้ำ แค่หยิบผลมาใช้ */
+        let missingDates = <?= json_encode(
+            $missingDates,
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
+        ) ?>;
+
+        // เพดานจำนวนวันที่แสดงในบรรทัดตัวอย่าง — ค่าเดียวกับฝั่ง PHP ไม่พิมพ์ซ้ำ
+        const MISSING_PREVIEW_LIMIT = <?= (int)$missingPreviewLimit ?>;
+
         const tbody = document.getElementById('bulk-rows');
         const template = document.getElementById('bulk-row-template');
         const addButton = document.getElementById('bulk-add-row');
@@ -463,23 +492,26 @@ require __DIR__ . '/includes/header.php';
         }
 
         // ── เติมวันที่ยังไม่ได้กรอกลงตาราง ──────────────────────────────
-        const MISSING_DATES = <?= json_encode(
-            $missingDates,
-            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
-        ) ?>;
-
         const fillButton = document.getElementById('bulk-fill-missing');
         const fillNotice = document.getElementById('bulk-fill-notice');
 
-        if (fillButton && MISSING_DATES.length > 0) {
+        /* ⚠️ ผูกตัวจัดการ **เสมอ** ห้ามผูกเฉพาะตอนที่มีวันขาดตั้งแต่โหลดหน้า
+           เดิมเขียน `if (fillButton && MISSING_DATES.length > 0)` → หน้าที่เปิดมา
+           ตอนเดือนปัจจุบันกรอกครบ ปุ่มจะไม่มีตัวจัดการเลยทั้งอายุหน้า
+           พอเปลี่ยนไปเดือนที่ยังขาด ปุ่มโผล่มาแต่ **กดแล้วไม่เกิดอะไรขึ้น** */
+        if (fillButton) {
             fillButton.addEventListener('click', () => {
+                if (missingDates.length === 0) {
+                    return;
+                }
+
                 // ถามก่อนล้าง เหมือนตอนโหลดเดือนใหม่ — เดิมลบสิ่งที่พิมพ์ค้างไว้ทันทีโดยไม่ถาม
                 if (tableHasInput()
                     && !window.confirm('เติมวันที่ขาดจะล้างตารางปัจจุบัน ข้อมูลที่ยังไม่บันทึกจะหาย?')) {
                     return;
                 }
 
-                const dates = MISSING_DATES.slice(0, MAX_ROWS);
+                const dates = missingDates.slice(0, MAX_ROWS);
 
                 tbody.innerHTML = '';
                 dates.forEach((date) => {
@@ -494,9 +526,9 @@ require __DIR__ . '/includes/header.php';
                 refresh();
 
                 if (fillNotice) {
-                    if (MISSING_DATES.length > MAX_ROWS) {
+                    if (missingDates.length > MAX_ROWS) {
                         fillNotice.textContent = 'เติมให้ ' + MAX_ROWS + ' วันแรก (ขาดทั้งหมด '
-                            + MISSING_DATES.length + ' วัน) — บันทึกชุดนี้ก่อนแล้วกดเติมอีกครั้ง';
+                            + missingDates.length + ' วัน) — บันทึกชุดนี้ก่อนแล้วกดเติมอีกครั้ง';
                         fillNotice.classList.remove('hidden');
                     } else {
                         fillNotice.classList.add('hidden');
@@ -1002,21 +1034,102 @@ require __DIR__ . '/includes/header.php';
             'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
         ];
 
+        // 'YYYY-MM' → 'ต.ค. 2569' · คืนค่าว่างถ้ารูปแบบไม่ถูก (ตรงกับ formatThaiMonth())
+        const thaiMonthLabel = (month) => {
+            const matched = /^(\d{4})-(\d{2})$/.exec(month || '');
+            if (!matched) {
+                return '';
+            }
+
+            const name = THAI_MONTH_NAMES[Number(matched[2]) - 1] || '';
+
+            return name === '' ? '' : name + ' ' + (Number(matched[1]) + 543);
+        };
+
+        /* 'YYYY-MM-DD' → '1 ต.ค. 2569' (ตรงกับ `formatThaiDate()` ฝั่ง PHP ทุกกรณี)
+           ⚠️ ต้องตัดศูนย์นำหน้าวันออก — PHP ใช้ `j` (1) ไม่ใช่ `d` (01)
+           ⚠️⚠️ **ค่าที่ไม่ใช่วันจริงต้องคืนกลับไปดิบ ๆ** เหมือน PHP ที่ตรวจย้อนกลับด้วย
+              `createFromFormat()` · เวอร์ชันแรกของฟังก์ชันนี้แปลง `2026-13-01`
+              เป็น `1 13 2569` ให้หน้าตาเหมือนวันที่จริง ทั้งที่เดือน 13 ไม่มีอยู่
+              (เทสต์เทียบกับ PHP จับได้ — ตาเปล่าไม่มีทางเห็น เพราะข้อมูลที่เซิร์ฟเวอร์
+              ส่งมาถูกต้องเสมอ จะโผล่ก็ต่อเมื่อวันหนึ่งมีอะไรส่งค่าเพี้ยนเข้ามา) */
+        const thaiDateLabel = (date) => {
+            const matched = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || '');
+            if (!matched) {
+                return date || '';
+            }
+
+            const year = Number(matched[1]);
+            const month = Number(matched[2]);
+            const day = Number(matched[3]);
+
+            // ⚠️ ใช้ UTC — `new Date(y, m, d)` อิงเขตเวลาเครื่อง ซึ่งเลื่อนวันได้
+            const probe = new Date(Date.UTC(year, month - 1, day));
+            if (probe.getUTCFullYear() !== year
+                || probe.getUTCMonth() !== month - 1
+                || probe.getUTCDate() !== day) {
+                return date;
+            }
+
+            return day + ' ' + THAI_MONTH_NAMES[month - 1] + ' ' + (year + 543);
+        };
+
         const showThaiMonth = (month) => {
             const target = document.getElementById('bulk-month-thai');
             if (!target) {
                 return;
             }
 
-            const matched = /^(\d{4})-(\d{2})$/.exec(month || '');
-            if (!matched) {
-                target.textContent = '';
+            target.textContent = thaiMonthLabel(month);
+        };
+
+        /* ── แบนเนอร์ "ยังไม่ได้กรอกกี่วัน" ของเดือนที่กำลังโหลดอยู่ ──────────
+           ⚠️ ข้อความตัวอย่างวันต้องใช้กติกาเดียวกับฝั่ง PHP: แสดงไม่เกิน
+           MISSING_PREVIEW_LIMIT วัน ที่เหลือสรุปเป็น "และอีก N วัน" */
+        const renderMissingBanner = (month, days) => {
+            /* ⚠️ คัดจาก `has_record` ที่เซิร์ฟเวอร์ส่งมา ไม่ได้คำนวณ "วันไหนควรกรอก" เอง
+               ช่วงวันถูกตัดมาแล้วจากฝั่ง PHP (เดือนปัจจุบันถึงวันนี้ · เดือนอดีตถึงสิ้นเดือน) */
+            const dates = days.filter((day) => !day.has_record).map((day) => day.date);
+
+            missingDates = dates;
+
+            const banner = document.getElementById('bulk-missing-banner');
+            const complete = document.getElementById('bulk-complete-banner');
+            const label = thaiMonthLabel(month);
+
+            /* ⚠️ เดือนที่ยังไม่ถึงกำหนดกรอก (ไม่มีวันให้กรอกเลย) ต้องเงียบทั้งคู่
+               ไม่ใช่ขึ้น "กรอกครบทุกวันแล้ว 🎉" ซึ่งเป็นคนละเรื่องกัน */
+            if (days.length === 0) {
+                if (banner) { banner.classList.add('hidden'); }
+                if (complete) { complete.classList.add('hidden'); }
                 return;
             }
 
-            const monthIndex = Number(matched[2]) - 1;
-            const name = THAI_MONTH_NAMES[monthIndex] || '';
-            target.textContent = name === '' ? '' : name + ' ' + (Number(matched[1]) + 543);
+            const missingLabel = document.getElementById('bulk-missing-label');
+            const missingCount = document.getElementById('bulk-missing-count');
+            const missingPreview = document.getElementById('bulk-missing-preview');
+            const completeLabel = document.getElementById('bulk-complete-label');
+
+            if (missingLabel) { missingLabel.textContent = label; }
+            if (completeLabel) { completeLabel.textContent = label; }
+            if (missingCount) { missingCount.textContent = String(dates.length); }
+
+            if (missingPreview) {
+                let preview = dates.slice(0, MISSING_PREVIEW_LIMIT).map(thaiDateLabel).join(', ');
+                if (dates.length > MISSING_PREVIEW_LIMIT) {
+                    preview += ' และอีก ' + (dates.length - MISSING_PREVIEW_LIMIT) + ' วัน';
+                }
+                missingPreview.textContent = preview;
+            }
+
+            // ข้อความของรอบก่อนต้องหายไปด้วย ไม่งั้นค้างบอกจำนวนวันของเดือนเก่า
+            if (fillNotice) {
+                fillNotice.textContent = '';
+                fillNotice.classList.add('hidden');
+            }
+
+            if (banner) { banner.classList.toggle('hidden', dates.length === 0); }
+            if (complete) { complete.classList.toggle('hidden', dates.length > 0); }
         };
 
         const showBulkNotice = (message) => {
@@ -1178,6 +1291,8 @@ require __DIR__ . '/includes/header.php';
                     loadedMonth = resolvedMonth;
                     monthInput.value = resolvedMonth;
                     showThaiMonth(resolvedMonth);
+                    // แบนเนอร์ "ยังไม่ได้กรอกกี่วัน" + ปุ่มเติม ต้องตามเดือนที่โหลดจริง
+                    renderMissingBanner(resolvedMonth, days);
 
                     if (resolvedMonth !== selectedMonth) {
                         showBulkNotice('ยังกรอกล่วงหน้าไม่ได้ — แสดงข้อมูลของเดือน ' + resolvedMonth + ' ให้แทน');
