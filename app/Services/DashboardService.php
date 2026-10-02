@@ -423,10 +423,11 @@ class DashboardService
             'previous_month' => $previousMonth,
             'compared_up_to_day' => $cutoffDay,
             'change' => [
-                'total_revenue' => change_percent($selectedRevenue, $previousRevenue),
-                'total_ad_cost' => change_percent($selectedAdCost, $previousAdCost),
-                'profit' => change_percent($selectedProfit, $previousProfit),
-                'roas' => change_percent($selectedRoasExact, $previousRoasExact),
+                // ไม่มีแถวในช่วงที่เทียบ ≠ กรอกแล้วเป็นศูนย์ (อย่างหลังยังเทียบได้ตามปกติ)
+                'total_revenue' => $selected['days_count'] > 0 ? change_percent($selectedRevenue, $previousRevenue) : null,
+                'total_ad_cost' => $selected['days_count'] > 0 ? change_percent($selectedAdCost, $previousAdCost) : null,
+                'profit' => $selected['days_count'] > 0 ? change_percent($selectedProfit, $previousProfit) : null,
+                'roas' => $selected['days_count'] > 0 ? change_percent($selectedRoasExact, $previousRoasExact) : null,
             ],
         ];
     }
@@ -815,13 +816,13 @@ class DashboardService
      * วันตัดที่เกินจำนวนวันของเดือนนั้นถูกหดลงให้พอดี — ตัดวันที่ 31 กับเดือน ก.พ.
      * ต้องได้ทั้งเดือน ไม่ใช่ช่วงว่าง
      *
-     * @return array{revenue: float, ad_cost: float}
+     * @return array{revenue: float, ad_cost: float, days_count: int}
      */
     private function sumMonthUpToDay(int $shopId, string $month, ?int $cutoffDay): array
     {
         $monthStart = DateTimeImmutable::createFromFormat('!Y-m-d', $month . '-01');
         if (!$monthStart) {
-            return ['revenue' => 0.0, 'ad_cost' => 0.0];
+            return ['revenue' => 0.0, 'ad_cost' => 0.0, 'days_count' => 0];
         }
 
         $lastDayOfMonth = (int)$monthStart->format('t');
@@ -840,7 +841,7 @@ class DashboardService
             $adCost += (float)($record['ad_cost'] ?? 0);
         }
 
-        return ['revenue' => $revenue, 'ad_cost' => $adCost];
+        return ['revenue' => $revenue, 'ad_cost' => $adCost, 'days_count' => count($records)];
     }
 
     private function isValidDate(string $date): bool

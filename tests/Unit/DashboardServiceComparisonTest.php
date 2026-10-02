@@ -19,6 +19,28 @@ use ShopRepository;
  */
 final class DashboardServiceComparisonTest extends TestCase
 {
+    public function testEmptySelectedPeriodIsNotReportedAsOneHundredPercentDecline(): void
+    {
+        $change = $this->changeOf([['2026-07', 200.0, 100.0]]);
+
+        foreach (['total_revenue', 'total_ad_cost', 'profit', 'roas'] as $metric) {
+            $this->assertNull($change[$metric], 'ยังไม่กรอก ไม่ใช่ผลงานตก 100%: ' . $metric);
+        }
+    }
+
+    public function testRecordedZeroStillReportsTheRealDecline(): void
+    {
+        $change = $this->changeOf([
+            ['2026-07', 200.0, 100.0],
+            ['2026-08', 0.0, 0.0],
+        ]);
+
+        foreach (['total_revenue', 'total_ad_cost', 'profit'] as $metric) {
+            $this->assertSame(-100.0, $change[$metric]);
+        }
+        $this->assertNull($change['roas']);
+    }
+
     /**
      * @param array<int,array{0:string,1:float,2:float}> $months [เดือน, รายได้, ค่าแอด]
      */

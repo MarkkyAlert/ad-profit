@@ -387,6 +387,7 @@ require __DIR__ . '/includes/header.php';
     (function() {
         const MAX_ROWS = <?= (int)RecordService::BULK_MAX_ROWS ?>;
         const INITIAL_ROWS = 5;
+        let bulkPending = false;
 
         /* ── วันที่ยังไม่ได้กรอกของ "เดือนที่กำลังโหลดอยู่" ──────────────────
            ⚠️⚠️ ต้องเป็น `let` ไม่ใช่ `const` — ค่านี้เปลี่ยนทุกครั้งที่ผู้ใช้เปลี่ยนเดือน
@@ -417,6 +418,10 @@ require __DIR__ . '/includes/header.php';
         const refresh = () => {
             const rows = tbody.querySelectorAll('tr');
             rows.forEach((row, index) => {
+                // แถวใหม่ที่ populateFromDays สร้างขณะโหลด ต้องรับสถานะล็อกด้วย
+                row.querySelectorAll('input, button').forEach((control) => {
+                    control.disabled = bulkPending;
+                });
                 const numberCell = row.querySelector('.bulk-row-number');
                 if (numberCell) {
                     numberCell.textContent = String(index + 1);
@@ -448,7 +453,7 @@ require __DIR__ . '/includes/header.php';
 
             // หมายเหตุ: ปุ่ม "เติมทั้งเดือน" ไม่ถูก disable ตาม MAX_ROWS
             // เพราะมันล้างตารางแล้วเติมใหม่เสมอ (ต่างจากปุ่มเพิ่มแถวที่ต่อท้าย)
-            addButton.disabled = rows.length >= MAX_ROWS;
+            addButton.disabled = bulkPending || rows.length >= MAX_ROWS;
             addButton.classList.toggle('opacity-50', addButton.disabled);
             addButton.classList.toggle('cursor-not-allowed', addButton.disabled);
         };
@@ -464,6 +469,9 @@ require __DIR__ . '/includes/header.php';
 
         // ลบแถว: เหลือแถวสุดท้ายให้ล้างค่าแทนการลบ (กันตารางว่างเปล่า)
         tbody.addEventListener('click', (event) => {
+            if (bulkPending) {
+                return;
+            }
             const button = event.target.closest('.bulk-remove-row');
             if (!button) {
                 return;
@@ -485,7 +493,11 @@ require __DIR__ . '/includes/header.php';
             refresh();
         });
 
-        addButton.addEventListener('click', addRow);
+        addButton.addEventListener('click', () => {
+            if (!bulkPending) {
+                addRow();
+            }
+        });
 
         for (let index = 0; index < INITIAL_ROWS; index++) {
             addRow();
@@ -501,7 +513,7 @@ require __DIR__ . '/includes/header.php';
            พอเปลี่ยนไปเดือนที่ยังขาด ปุ่มโผล่มาแต่ **กดแล้วไม่เกิดอะไรขึ้น** */
         if (fillButton) {
             fillButton.addEventListener('click', () => {
-                if (missingDates.length === 0) {
+                if (bulkPending || missingDates.length === 0) {
                     return;
                 }
 
@@ -1221,9 +1233,11 @@ require __DIR__ . '/includes/header.php';
            หลักเดียวกับฟอร์มวันเดียว (`setPending`) ต่างกันแค่ที่นี่ล็อกทั้งตาราง */
         const bulkSubmitButton = document.getElementById('bulk-submit');
         const setBulkPending = (isPending) => {
-            tbody.querySelectorAll('input').forEach((input) => {
-                input.disabled = isPending;
-            });
+            bulkPending = isPending;
+            refresh();
+            if (fillButton) {
+                fillButton.disabled = isPending;
+            }
 
             if (bulkSubmitButton) {
                 bulkSubmitButton.disabled = isPending;

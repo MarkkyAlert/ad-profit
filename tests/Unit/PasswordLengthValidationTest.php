@@ -14,6 +14,14 @@ use PHPUnit\Framework\TestCase;
  */
 final class PasswordLengthValidationTest extends TestCase
 {
+    public function testRejectsNullByteBeforeBcryptCanThrow(): void
+    {
+        $error = validate_password_length("GoodPass\0!2026", 'รหัสผ่านใหม่');
+
+        $this->assertIsString($error, 'NUL ผ่าน validation แล้ว bcrypt จะทำให้คำขอเป็น HTTP 500');
+        $this->assertStringStartsWith('รหัสผ่านใหม่', $error);
+    }
+
     public function testAcceptsPasswordAtExactlyTheMinimumLength(): void
     {
         $this->assertNull(validate_password_length(str_repeat('a', PASSWORD_MIN_LENGTH)));

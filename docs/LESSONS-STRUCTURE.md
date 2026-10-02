@@ -9,6 +9,12 @@
 
 ---
 
+## ข้อควรระวังจากการทดสอบ 3 ต.ค. 2569
+
+- **ล็อกชุดเทสต์ก่อนโหลด schema** — `schema.sql` มี DROP TABLE; การรับ `GET_LOCK` หลังโหลด schema ยังลบตารางของโปรเซสที่กำลังเทสต์ได้ (`IntegrationBootstrapOrderTest`).
+- **fixture วันอนาคตต้องยังอยู่ในอนาคตจริง** — HTTP ใช้นาฬิกาจริง ให้สร้างวันล่อเทียบกับวันนี้; service ที่รับ `$today` ให้ปักวันทดสอบและครอบวันที่ 1–3 / ข้ามปี / 29 ก.พ. อย่าคาดว่า 3 วันก่อนหน้าจะอยู่ในเดือน/ปีเดียวกันเสมอ. ประมาณการปี 2026 ต้องไม่ถูกบังคับให้มีหลังปีจบ.
+- **NUL ในรหัสผ่านทำให้ bcrypt throw** — validation กลางของการสมัคร/รีเซ็ต/เปลี่ยนรหัสต้องปฏิเสธ `\0` ก่อน `password_hash()` และคืนข้อความให้แก้ไข ไม่ใช่ HTTP 500; เทสต์ HTTP ตรวจว่ารหัสเดิม/session version/token ไม่ถูกเปลี่ยนเมื่อปฏิเสธ.
+
 ## โครงสร้างที่ต้องรู้ (gotchas)
 
 - **Response layer:** controller ตอบผ่าน `api_respond()` — เลือก JSON (`jsonResponse`, กรณี XHR/`wants_json`) หรือ redirect+flash (กรณี form) อัตโนมัติ + `infer_http_status_from_error()`. Service คืน result-array, controller เป็นคนแปลงเป็น response
@@ -165,4 +171,3 @@
   · **การ escape ค่าที่ผู้ใช้พิมพ์** → `PageRenderTest::testUserTypedTextIsEscapedBeforeItReachesThePage()` ยิง `<script>` ลงชื่อร้าน+โน้ต แล้วเปิด 4 หน้า
   · **แทรก header ผ่านชื่อไฟล์ดาวน์โหลด** → `ExportEndpointTest::testAShopNameCannotInjectAResponseHeader()` ⚠️⚠️ **มีตัวกัน 2 ชั้น ถอดชั้นเดียวเทสต์ยังเขียว ต้องถอดทั้งคู่ถึงแดง** (บันทึกไว้ในเทสต์แล้ว)
 - **Security extra:** CSV export กัน formula injection (เติม `'` หน้า cell ที่ขึ้นต้น `= + - @ \t \r`) — **guard นี้อยู่ใน controller `api/export.php` (closure `$sanitizeCsvCell`) ไม่ใช่ `ExportService` → unit-test ที่ระดับ service ไม่ได้ ต้องเทสต์ผ่าน integration ที่ยิง endpoint จริง**; ⚠️ **guard ทำเฉพาะคอลัมน์โน้ต** (ช่องเดียวที่ผู้ใช้พิมพ์ — ตำแหน่งมาจาก `note_column_index` ใน payload) เซลล์ที่ระบบสร้าง (วันที่ ISO/ตัวเลข/%) ออกดิบ เพื่อให้ Excel อ่านเป็นตัวเลข/วันที่ ไม่ใช่ข้อความ; reset token เก็บเป็น hash + TTL, security headers เซ็ตใน bootstrap
-

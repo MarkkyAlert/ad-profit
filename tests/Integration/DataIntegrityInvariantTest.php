@@ -299,11 +299,27 @@ final class DataIntegrityInvariantTest extends ControllerTestCase
      * ⚠️ ยอดของแถวล่อตั้งไว้สูงมาก (฿500,000) เทียบกับยอดจริง (฿9,000) —
      * ถ้ารั่วแม้แต่นิดเดียวตัวเลขจะผิดจนเห็นชัด ไม่ใช่ผิดแบบเดาไม่ออก
      */
-    public function testLegacyFutureRowsNeverReachTheTotals(): void
+    public static function cutoffBoundaryProvider(): array
+    {
+        // จำนวนของ 3 วันก่อนหน้า ที่อยู่ในเดือน/ปีเดียวกับวันตัดจริง
+        return [
+            'วันแรกของปี' => ['2026-01-01', 0, 0],
+            'วันที่สองของปี' => ['2026-01-02', 1, 1],
+            'วันแรกของเดือน' => ['2026-10-01', 0, 3],
+            'วันที่สองของเดือน' => ['2026-10-02', 1, 3],
+            'วันที่สามของเดือน' => ['2026-10-03', 2, 3],
+            'วันทั่วไป' => ['2026-10-10', 3, 3],
+            '29 กุมภาพันธ์' => ['2024-02-29', 3, 3],
+            'สิ้นปี' => ['2026-12-31', 3, 3],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('cutoffBoundaryProvider')]
+    public function testLegacyFutureRowsNeverReachTheTotals(string $date, int $monthDays, int $yearDays): void
     {
         $userId = $this->createUser('legacy@example.com', 'LegacyPass1234');
         $shopId = $this->createShop($userId, 'ร้านที่มีแถวเก่า');
-        $today = new \DateTimeImmutable('today');
+        $today = new \DateTimeImmutable($date);
 
         $insert = $this->pdo->prepare(
             'INSERT INTO daily_records (shop_id, record_date, revenue, ad_cost, note, created_at, updated_at)
@@ -329,7 +345,7 @@ final class DataIntegrityInvariantTest extends ControllerTestCase
         $dashboard = (new DashboardService($recordRepository, $shopRepository, $goalRepository))
             ->buildDashboard($userId, $shopId, 'month_this', null, null, null, $today->format('Y-m-d'));
         $this->assertSame(
-            9000.0,
+            $monthDays * 3000.0,
             round((float)($dashboard['data']['summary']['total_revenue'] ?? -1), 2),
             'แดชบอร์ดนับแถววันอนาคตเข้ายอดรวมของเดือนนี้'
         );
@@ -337,7 +353,7 @@ final class DataIntegrityInvariantTest extends ControllerTestCase
         $annual = (new AnnualService($recordRepository, $shopRepository, $goalRepository))
             ->buildYearlySummary($userId, $shopId, (int)$today->format('Y'), $today->format('Y-m-d'));
         $this->assertSame(
-            9000.0,
+            $yearDays * 3000.0,
             round((float)($annual['data']['summary']['total_revenue'] ?? -1), 2),
             'หน้ารายปีนับแถววันอนาคตเข้ายอดรวมทั้งปี'
         );
@@ -345,6 +361,6 @@ final class DataIntegrityInvariantTest extends ControllerTestCase
         /* ⚠️ ด้าน (ข) — แถวในอดีตต้องถูกนับครบ ไม่ใช่ถูกตัดทิ้งไปด้วย
            (ตัวตัดที่กว้างเกินจะทำให้ยอดหายทั้งเดือน ซึ่งแย่กว่าปัญหาเดิม) */
         $statistics = (array)($dashboard['data']['statistics'] ?? []);
-        $this->assertSame(3, (int)($statistics['days_count'] ?? -1), 'วันในอดีตถูกตัดทิ้งไปด้วย');
+        $this->assertSame($monthDays, (int)($statistics['days_count'] ?? -1), 'วันในเดือนที่เลือกถูกตัดทิ้งไปด้วย');
     }
 }

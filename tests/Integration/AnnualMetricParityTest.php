@@ -392,7 +392,15 @@ final class AnnualMetricParityTest extends ControllerTestCase
             }
         }
 
+        // HTTP ใช้นาฬิกาจริง แต่ fixture เป็นปี 2026: พอปีจบ ต้องไม่มีประมาณการทั้งสองฝั่ง
+        $today = date('Y-m-d');
+        if ($today >= '2026-12-31' || $today < '2026-02-14') {
+            $this->assertSame('', $projectionText, 'ปีจบแล้วหรือฐานยังไม่ครบสองเดือน ต้องไม่ประมาณการ');
+            $this->assertStringNotContainsString('ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)', $pageText);
+            return;
+        }
         $this->assertNotSame('', $projectionText, 'ไฟล์ไม่มีแถบประมาณการ — ข้อมูลตั้งต้นน่าจะไม่พอ');
+        $this->assertStringContainsString('ประมาณการสิ้นปี (ไม่ใช่ตัวเลขจริง)', $pageText);
 
         preg_match_all('/฿[0-9,\.]+/u', $projectionText, $matches);
         $this->assertCount(3, $matches[0], 'แถบประมาณการในไฟล์ควรมีสามตัวเลข (ต่ำ · สูง · กลาง)');

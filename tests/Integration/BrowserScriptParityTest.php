@@ -1190,6 +1190,58 @@ final class BrowserScriptParityTest extends ControllerTestCase
      * ⚠️ ต้องปลดล็อกทุกทางออก (สำเร็จ · payload ผิดพลาด · โยน error) ไม่งั้นตารางค้าง
      * แก้ไม่ได้ตลอดอายุหน้า
      */
+    public function testBulkLoadingLocksRowCreationAndNewRowsUntilTheResponseIsApplied(): void
+    {
+        // รันฟังก์ชันจากหน้าเว็บจริงกับ DOM double เล็ก ๆ — ไม่คัดลอกตรรกะ disabled มาเทสต์เอง
+        $dom = <<<'JS'
+let bulkPending = false;
+const MAX_ROWS = 31;
+const control = () => ({disabled: false, classList: {toggle() {}}});
+const makeRow = () => {
+    const input = control(), remove = control();
+    return {
+        input, remove,
+        querySelector() { return null; },
+        querySelectorAll(selector) {
+            if (selector === 'input') return [input];
+            if (selector === 'input, button') return [input, remove];
+            return [];
+        }
+    };
+};
+const rows = [makeRow()];
+const tbody = {
+    querySelectorAll(selector) {
+        return selector === 'tr' ? rows : rows.flatMap(row => row.querySelectorAll(selector));
+    },
+    appendChild(row) { rows.push(row); }
+};
+const template = {content: {cloneNode: makeRow}};
+const addButton = control(), fillButton = control(), bulkSubmitButton = control();
+const counter = {textContent: ''};
+JS;
+        $declarations = $dom . "\n" . $this->extractJs('refresh') . "\n"
+            . $this->extractJs('addRow') . "\n" . $this->extractJs('setBulkPending');
+        $result = $this->runJs($declarations, <<<'JS'
+(() => {
+    setBulkPending(true);
+    const locked = [addButton.disabled, fillButton.disabled, bulkSubmitButton.disabled,
+        rows[0].input.disabled, rows[0].remove.disabled];
+    addRow(); // populateFromDays สร้างแถวใหม่ขณะยัง pending — ต้องไม่เปิดช่องให้แก้
+    locked.push(rows[1].input.disabled, rows[1].remove.disabled);
+    setBulkPending(false);
+    const unlocked = [addButton.disabled, fillButton.disabled, bulkSubmitButton.disabled,
+        ...rows.flatMap(row => [row.input.disabled, row.remove.disabled])];
+    while (rows.length < MAX_ROWS) addRow();
+    return JSON.stringify({locked, unlocked, full: [addButton.disabled, fillButton.disabled]});
+})()
+JS, ['run']);
+        $actual = json_decode($result[0], true);
+        $this->assertSame(array_fill(0, 7, true), $actual['locked'], 'ยังเพิ่ม/ลบ/เติมแถวระหว่างโหลดได้');
+        $this->assertSame(array_fill(0, 7, false), $actual['unlocked'], 'โหลดจบแล้วช่องหรือปุ่มค้าง');
+        $this->assertSame([true, false], $actual['full'], 'ครบ 31 แถวยังต้องใช้ปุ่มเติมวันที่ขาดได้');
+    }
+
     public function testTheBulkTableIsLockedWhileAMonthIsLoading(): void
     {
         $page = (string)file_get_contents(dirname(__DIR__, 2) . '/add-record.php');
@@ -1208,13 +1260,8 @@ final class BrowserScriptParityTest extends ControllerTestCase
             'ปลดล็อกไม่ครบทุกทางออก (สำเร็จ · payload ผิดพลาด · โยน error) — ตารางจะค้าง'
         );
 
-        // ตัวล็อกต้องแตะทั้งช่องกรอกและปุ่มบันทึก ไม่ใช่แค่ปุ่ม
-        $lockAt = mb_strpos($source, 'const setBulkPending');
-        $this->assertNotFalse($lockAt, 'หานิยามของตัวล็อกไม่เจอ');
-
-        $body = mb_substr($source, (int)$lockAt, 600);
-        $this->assertStringContainsString('disabled', $body, 'ตัวล็อกไม่ได้ปิดช่องกรอก');
-        $this->assertStringContainsString('tbody', $body, 'ตัวล็อกไม่ได้แตะแถวในตาราง');
+        // ผลของตัวล็อก (รวมแถวที่สร้างทีหลัง) รัน JS พิสูจน์ในเทสต์ข้างบน
+        // ไม่ค้นคำว่า tbody ใน 600 ตัวอักษรแรก: refresh เป็นผู้รับผิดชอบแถวทั้งหมด
     }
 
     /**

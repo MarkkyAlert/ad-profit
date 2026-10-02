@@ -30,6 +30,18 @@ class GoalService
            · ฝั่งลบ: `floor()` ปัด **ออกจาก** ศูนย์ → ขาดทุน 1 สตางค์จากเป้า ฿100
              (ค่าจริง −0.01%) ถูกแสดงเป็น **−0.1%** คือขยายความติดลบ 10 เท่า
            · ปัดเข้าหาศูนย์ทำให้ทั้งสองฝั่ง "ไม่พูดเกินความจริงในทางที่ตัวเองได้เปรียบ" */
+        // เงินจริงมีสองตำแหน่ง: หารด้วยจำนวนสตางค์เต็มก่อนตัดเศษเปอร์เซ็นต์
+        // float 100.02 / 1000.20 * 1000 ต่ำกว่า 100 เล็กน้อย จึงเคยกลายเป็น 9.9%
+        // ห้ามเติม epsilon/round ค่าหาร เพราะยอดใหญ่ที่ต่ำกว่าขอบจริงจะถูกดันขึ้นแทน
+        $actualCents = round($actual * 100);
+        $targetCents = round($target * 100);
+        if ($actualCents / 100 === $actual && $targetCents / 100 === $target
+            && abs($actualCents) <= intdiv(PHP_INT_MAX, 1000)
+            && $targetCents >= 1 && $targetCents < PHP_INT_MAX) {
+            return intdiv((int)$actualCents * 1000, (int)$targetCents) / 10;
+        }
+
+        // คงพฤติกรรมเดิมสำหรับค่าละเอียดกว่าสตางค์ เช่น 99.996/100 ต้องได้ 99.9
         $scaled = ($actual / $target) * 1000;
         $truncated = $scaled < 0 ? ceil($scaled) : floor($scaled);
 

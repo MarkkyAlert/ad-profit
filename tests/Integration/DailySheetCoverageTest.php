@@ -57,20 +57,20 @@ final class DailySheetCoverageTest extends ControllerTestCase
         return [$shopId, $this->startSession($userId, $shopId)];
     }
 
-    private function addLegacyFutureRow(int $shopId): void
+    private function addLegacyFutureRow(int $shopId, string $date): void
     {
         /* ⚠️ สร้างผ่านหน้าเว็บไม่ได้แล้ว (กติกา "ห้ามบันทึกวันอนาคต") — แต่ข้อมูลเก่า
            ที่ลงไว้ก่อนกติกานี้ยังอยู่ในฐานข้อมูลได้ จึงต้อง INSERT ตรงเพื่อจำลอง */
         $this->pdo->prepare(
             'INSERT INTO daily_records (shop_id, record_date, revenue, ad_cost, note, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, NOW(), NOW())'
-        )->execute([$shopId, '2026-08-28', '5000.00', '1000.00', 'แถวเก่าวันอนาคต']);
+        )->execute([$shopId, $date, '5000.00', '1000.00', 'แถวเก่าวันอนาคต']);
     }
 
     /** วันที่ (ISO) ของทุกแถวในชีตรายวัน */
-    private function dailySheetDates(string $session): array
+    private function dailySheetDates(string $session, int $year = self::YEAR): array
     {
-        $response = $this->get('/api/export-xlsx.php?year=' . (self::YEAR + 543), $session);
+        $response = $this->get('/api/export-xlsx.php?year=' . ($year + 543), $session);
         $this->assertSame(200, $response['status'], 'ดาวน์โหลดไฟล์ Excel ไม่สำเร็จ');
 
         $path = tempnam(sys_get_temp_dir(), 'coverage') . '.xlsx';
@@ -96,17 +96,13 @@ final class DailySheetCoverageTest extends ControllerTestCase
     }
 
     /** วันที่ (ISO) ของทุกแถวบนหน้าประวัติ */
-    private function historyDates(string $session): array
+    private function historyDates(string $session, string $month = self::MONTH): array
     {
-        $body = (string)$this->get('/history.php?month=' . self::MONTH, $session)['body'];
-        preg_match_all('/(\d{1,2})\s+ส\.ค\.\s+2569/u', $body, $matched);
+        $response = $this->get('/history.php?month=' . $month, $session);
+        $this->assertSame(200, $response['status']);
+        preg_match_all('/data-record-date="(\d{4}-\d{2}-\d{2})"/', $response['body'], $matched);
 
-        $dates = [];
-        foreach ($matched[1] as $day) {
-            $dates[] = sprintf('2026-08-%02d', (int)$day);
-        }
-
-        return array_values(array_unique($dates));
+        return array_values(array_unique($matched[1]));
     }
 
     /**
@@ -141,24 +137,29 @@ final class DailySheetCoverageTest extends ControllerTestCase
     public function testTheFileExplainsItsOwnCutoffWhenItTrimsFutureRows(): void
     {
         [$shopId, $session] = $this->shopWithHistory('coverage-legacy@example.com');
-        $this->addLegacyFutureRow($shopId);
+        // HTTP ใช้นาฬิกาจริง: วันล่อต้องยังเป็นอนาคตทุกครั้ง ไม่ใช่วันที่คงที่ในปี 2026
+        $today = new \DateTimeImmutable('today');
+        $futureDate = $today->modify('+1 day')->format('Y-m-d');
+        $this->addLegacyFutureRow($shopId, $futureDate);
+        $this->createRecord($shopId, $today->format('Y-m-d'), 123.45, 23.45);
 
-        $screen = $this->historyDates($session);
-        $file = $this->dailySheetDates($session);
+        $screen = $this->historyDates($session, substr($futureDate, 0, 7));
+        $file = $this->dailySheetDates($session, (int)$today->format('Y'));
+        $this->assertContains($today->format('Y-m-d'), $file, 'ห้ามผ่านเพราะไฟล์ว่างทั้งใบ');
 
         $this->assertContains(
-            '2026-08-28',
+            $futureDate,
             $screen,
             'หน้าประวัติต้องยังแสดงแถวเก่าวันอนาคต ไม่งั้นผู้ใช้ลบมันไม่ได้อีกเลย'
         );
         $this->assertNotContains(
-            '2026-08-28',
+            $futureDate,
             $file,
             'ไฟล์รายงานต้องไม่นับวันที่ยังไม่เกิดขึ้น'
         );
 
         // ⚠️ หัวใจของการตัดสินใจ: ต่างกันได้ แต่ไฟล์ต้องอธิบายตัวเอง
-        $response = $this->get('/api/export-xlsx.php?year=' . (self::YEAR + 543), $session);
+        $response = $this->get('/api/export-xlsx.php?year=' . ((int)$today->format('Y') + 543), $session);
         $path = tempnam(sys_get_temp_dir(), 'coverage') . '.xlsx';
         file_put_contents($path, $response['body']);
 

@@ -17,6 +17,20 @@ require_once __DIR__ . '/ControllerTestCase.php';
  */
 final class GoalAndProfileEndpointTest extends ControllerTestCase
 {
+    public function testNullBytePasswordChangeReturnsValidationErrorAndKeepsCredentials(): void
+    {
+        $userId = $this->createUser('nul-profile@example.com', 'OldPass123');
+        $shopId = $this->createShop($userId);
+        $session = $this->startSession($userId, $shopId);
+        $before = $this->pdo->query("SELECT password_hash, session_version FROM users WHERE id = {$userId}")->fetch();
+        $response = $this->submit('/api/profile.php', $session, [
+            'action' => 'change_password', 'current_password' => 'OldPass123',
+            'password' => "GoodPass\0!2026", 'password_confirm' => "GoodPass\0!2026",
+        ]);
+        $this->assertSame(422, $response['status'], $response['body']);
+        $this->assertSame($before, $this->pdo->query("SELECT password_hash, session_version FROM users WHERE id = {$userId}")->fetch());
+    }
+
     /**
      * ⚠️⚠️ เซิร์ฟเวอร์ทดสอบต้อง "ตั้งค่าอีเมลครบแล้วแต่ส่งไม่ออก" ไม่ใช่ "ยังไม่ได้ตั้งค่า"
      *

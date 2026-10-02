@@ -21,6 +21,31 @@ use PasswordResetRepository;
  */
 final class AuthEndpointTest extends ControllerTestCase
 {
+    public function testNullBytePasswordIsRejectedByRegisterAndResetWithoutChangingData(): void
+    {
+        $guest = $this->startSession(0, 0);
+        $password = "GoodPass\0!2026";
+        $fields = [
+            'csrf_token' => $this->guestCsrf($guest),
+            'password' => $password, 'password_confirm' => $password,
+        ];
+        $register = $this->postJson('/api/auth.php', $fields + [
+            'action' => 'register', 'email' => 'nul@example.com',
+        ], $guest);
+        $this->assertSame(422, $register['status'], $register['body']);
+        $this->assertSame(0, $this->countRows('users'));
+
+        $userId = $this->createUser('nul@example.com', 'OldPass123');
+        $token = $this->issueResetToken($userId);
+        $before = $this->pdo->query("SELECT password_hash, session_version FROM users WHERE id = {$userId}")->fetch();
+        $reset = $this->postJson('/api/auth.php', $fields + [
+            'action' => 'reset_password', 'token' => $token,
+        ], $guest);
+        $this->assertSame(422, $reset['status'], $reset['body']);
+        $this->assertSame($before, $this->pdo->query("SELECT password_hash, session_version FROM users WHERE id = {$userId}")->fetch());
+        $this->assertSame(1, $this->countRows('password_reset_tokens'));
+    }
+
     private function issueResetToken(int $userId): string
     {
         $token = bin2hex(random_bytes(32));

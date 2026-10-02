@@ -1394,6 +1394,11 @@ function is_valid_email(string $email): bool
  */
 function validate_password_length(string $password, string $fieldLabel = 'รหัสผ่าน'): ?string
 {
+    // bcrypt ปฏิเสธ NUL ด้วย ValueError — ต้องคืน validation error ก่อนถึง password_hash
+    if (str_contains($password, "\0")) {
+        return $fieldLabel . 'มีอักขระที่ไม่รองรับ';
+    }
+
     // นับ "ตัวอักษร" ไม่ใช่ byte — strlen ทำให้รหัสผ่านไทย 3 ตัว (9 byte) ผ่านเกณฑ์ 8 ตัวอักษร
     $length = function_exists('mb_strlen') ? mb_strlen($password) : strlen($password);
 

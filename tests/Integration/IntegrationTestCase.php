@@ -71,13 +71,6 @@ abstract class IntegrationTestCase extends TestCase
             return;
         }
 
-        try {
-            self::loadSchema($pdo);
-        } catch (Throwable $exception) {
-            self::$skipReason = 'โหลด database/schema.sql เข้า test DB ไม่ได้: ' . $exception->getMessage();
-            return;
-        }
-
         // ⚠️ ทุกคลาสใช้ test DB ตัวเดียวกันและล้างด้วย TRUNCATE ต่อเทสต์ — ถ้ามี phpunit
         // อีกโปรเซสรันพร้อมกัน สองฝ่ายจะล้างข้อมูลของกันและกันกลางคัน แล้วได้ error
         // หลอก ๆ อย่าง "Duplicate entry" ที่ไม่เกี่ยวกับโค้ดเลย · ล็อกนี้บังคับให้เข้าคิว
@@ -95,6 +88,13 @@ abstract class IntegrationTestCase extends TestCase
             return;
         }
 
+        // schema มี DROP TABLE — ต้องได้ล็อกก่อน ไม่งั้นลบข้อมูลของโปรเซสที่กำลังเทสต์อยู่
+        try {
+            self::loadSchema($pdo);
+        } catch (Throwable $exception) {
+            self::$skipReason = 'โหลด database/schema.sql เข้า test DB ไม่ได้: ' . $exception->getMessage();
+            return;
+        }
 
         self::$connection = $pdo;
         self::$credentials = ['dsn' => $dsn, 'user' => $user, 'pass' => $pass];
